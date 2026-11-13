@@ -274,8 +274,8 @@ def main() -> int:
     scenario_title.setStyleSheet("font-size:18px; font-weight:650; color:#f1f2f4;")
     scenario_layout.addWidget(scenario_title)
     scenario_hint = QLabel(
-        "Связывай триггеры, условия и действия. Проверка выполняется до сохранения; "
-        "произвольный код не поддерживается."
+        "Связывай триггеры, условия и действия. Ctrl+Alt+H — пример запуска по горячей клавише. "
+        "Глобальный listener требует пакета windows; произвольный код не поддерживается."
     )
     scenario_hint.setStyleSheet("color:#aab0ba;")
     scenario_layout.addWidget(scenario_hint)
@@ -304,10 +304,12 @@ def main() -> int:
     scenario_layout.addWidget(scenario_id)
     scenario_buttons = QHBoxLayout()
     new_scenario_button = QPushButton("Новый")
+    new_hotkey_scenario_button = QPushButton("Пример hotkey")
     validate_scenario_button = QPushButton("Проверить граф")
     save_scenario_button = QPushButton("Сохранить")
     delete_scenario_button = QPushButton("Удалить")
     scenario_buttons.addWidget(new_scenario_button)
+    scenario_buttons.addWidget(new_hotkey_scenario_button)
     scenario_buttons.addWidget(validate_scenario_button)
     scenario_buttons.addWidget(save_scenario_button)
     scenario_buttons.addWidget(delete_scenario_button)
@@ -402,6 +404,29 @@ def main() -> int:
         except ValueError as exc:
             scenario_status.setText(str(exc))
 
+    def create_hotkey_scenario() -> None:
+        example = {
+            "name": "Горячая клавиша — громкость",
+            "nodes": [
+                {"id": "start", "type": "trigger.hotkey", "config": {"hotkey": "Ctrl+Alt+H"}},
+                {
+                    "id": "volume",
+                    "type": "action.tool",
+                    "config": {"name": "set_volume", "arguments": {"percent": 35}},
+                },
+            ],
+            "edges": [{"from": "start", "to": "volume"}],
+        }
+        scenario_id.setText("hotkey-volume")
+        graph_editor.setPlainText(json.dumps(example, ensure_ascii=False, indent=2))
+        try:
+            render_graph(WorkflowGraph.from_dict(example))
+            scenario_status.setText(
+                "Пример создан. Сохрани его; Ctrl+Alt+H будет запускать действие с подтверждением."
+            )
+        except ValueError as exc:
+            scenario_status.setText(str(exc))
+
     def validate_scenario() -> WorkflowGraph | None:
         try:
             graph = WorkflowGraph.from_dict(json.loads(graph_editor.toPlainText()))
@@ -425,6 +450,7 @@ def main() -> int:
         try:
             workflow_library.save(workflow_id, graph)
             refresh_scenario_list()
+            refresh_hotkey_service()
             scenario_status.setText(f"Сценарий «{graph.name}» сохранён локально.")
         except (OSError, ValueError) as exc:
             scenario_status.setText(f"Не удалось сохранить: {exc}")
@@ -442,9 +468,11 @@ def main() -> int:
         if answer == QMessageBox.StandardButton.Yes:
             workflow_library.delete(workflow_id)
             refresh_scenario_list()
+            refresh_hotkey_service()
             scenario_status.setText(f"Сценарий {workflow_id} удалён.")
 
     new_scenario_button.clicked.connect(create_scenario)
+    new_hotkey_scenario_button.clicked.connect(create_hotkey_scenario)
     validate_scenario_button.clicked.connect(validate_scenario)
     save_scenario_button.clicked.connect(save_scenario)
     delete_scenario_button.clicked.connect(delete_scenario)
@@ -707,43 +735,56 @@ def main() -> int:
     hotkey_dispatcher = HotkeyDispatcher(dispatch_hotkey)
     hotkey_bridge.activated.connect(hotkey_dispatcher.dispatch)
 
-    hotkey_bindings: dict[str, Any] = {}
-    normalized_hotkeys: set[str] = set()
-    for workflow_id, graph in workflow_library.list():
-        trigger_node = next(
-            node for node in graph.nodes if node.kind.startswith("trigger.")
-        )
-        if trigger_node.kind != "trigger.hotkey":
-            continue
-        combo = trigger_node.config["hotkey"]
-        normalized = combo.casefold()
-        if normalized in normalized_hotkeys:
-            logging.warning(
-                "Duplicate global hotkey %s in workflow %s; keeping first binding",
-                combo,
-                workflow_id,
-            )
-            continue
-        normalized_hotkeys.add(normalized)
-        hotkey_bindings[combo] = (
-            lambda combo=combo: hotkey_bridge.activated.emit(combo)
-        )
+    hotkey_service: GlobalHotkeyService | None = None
 
-    hotkey_service = GlobalHotkeyService(hotkey_bindings)
-    try:
-        hotkey_service.start()
-        if hotkey_bindings:
-            scenario_status.setText(
-                f"Глобальные горячие клавиши активны: {', '.join(hotkey_bindings)}"
-            )
-    except HotkeyUnavailableError as exc:
-        scenario_status.setText(str(exc))
-        logging.warning("Global hotkeys unavailable: %s", exc)
-    except Exception:
-        logging.exception("Global hotkey service failed to start")
-        scenario_status.setText("Не удалось включить глобальные горячие клавиши.")
+    def refresh_hotkey_service() -> None:
+        nonlocal hotkey_service
+        if hotkey_service is not None:
+            hotkey_service.stop()
 
-    app.aboutToQuit.connect(hotkey_service.stop)
+        hotkey_bindings: dict[str, Any] = {}
+        normalized_hotkeys: set[str] = set()
+        for workflow_id, graph in workflow_library.list():
+            trigger_node = next(
+                node for node in graph.nodes if node.kind.startswith("trigger.")
+            )
+            if trigger_node.kind != "trigger.hotkey":
+                continue
+            combo = trigger_node.config["hotkey"]
+            normalized = combo.casefold()
+            if normalized in normalized_hotkeys:
+                logging.warning(
+                    "Duplicate global hotkey %s in workflow %s; keeping first binding",
+                    combo,
+                    workflow_id,
+                )
+                continue
+            normalized_hotkeys.add(normalized)
+            hotkey_bindings[combo] = (
+                lambda combo=combo: hotkey_bridge.activated.emit(combo)
+            )
+
+        hotkey_service = GlobalHotkeyService(hotkey_bindings)
+        try:
+            hotkey_service.start()
+            if hotkey_bindings:
+                scenario_status.setText(
+                    f"Глобальные горячие клавиши активны: {', '.join(hotkey_bindings)}"
+                )
+            else:
+                scenario_status.setText("Сохранённых глобальных горячих клавиш нет.")
+        except HotkeyUnavailableError as exc:
+            scenario_status.setText(str(exc))
+            logging.warning("Global hotkeys unavailable: %s", exc)
+        except Exception:
+            logging.exception("Global hotkey service failed to start")
+            scenario_status.setText("Не удалось включить глобальные горячие клавиши.")
+
+    refresh_hotkey_service()
+
+    app.aboutToQuit.connect(
+        lambda: hotkey_service.stop() if hotkey_service is not None else None
+    )
 
     window.show()
     return app.exec()
