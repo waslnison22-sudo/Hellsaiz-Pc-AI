@@ -18,14 +18,16 @@ def record_microphone(
         import sounddevice as sd
     except ImportError as exc:
         raise AudioCaptureError(
-            "Microphone support is not installed. Run: pip install -e ".[voice]""
+            'Microphone support is not installed. Run: pip install -e ".[voice]"'
         ) from exc
 
     output_file.parent.mkdir(parents=True, exist_ok=True)
     try:
         audio = sd.rec(
-            int(duration_seconds * sample_rate), samplerate=sample_rate,
-            channels=1, dtype="int16",
+            int(duration_seconds * sample_rate),
+            samplerate=sample_rate,
+            channels=1,
+            dtype="int16",
         )
         sd.wait()
     except Exception as exc:
