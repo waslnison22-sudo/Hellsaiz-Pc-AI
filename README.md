@@ -4,7 +4,7 @@
 
 ## Что уже реализовано
 - Desktop chat на PySide6.
-- OpenAI-compatible adapter для локального сервера моделей (llama.cpp server и совместимые реализации).
+- OpenAI-compatible adapter для локального сервера моделей (LM Studio, llama.cpp server и совместимые реализации).
 - Tool calling через явный реестр инструментов.
 - Permission gate: действия с побочным эффектом запрашивают подтверждение.
 - Запуск приложений Windows только по alias из allowlist; нет произвольного shell/PowerShell.
@@ -23,7 +23,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 .\scripts\run.ps1
 ```
 
-Приложение ожидает локальный OpenAI-compatible server по адресу `http://127.0.0.1:8080/v1`. Запусти, например, `llama-server` с GGUF-моделью и chat template, поддерживающим tool calling. Адрес, модель и allowlist настраиваются в `%LOCALAPPDATA%\HellsaizPC_AI\config.toml`; пример — `config/default.toml`.
+По умолчанию ожидается локальный OpenAI-compatible server по адресу `http://127.0.0.1:1234/v1` (стандартный порт LM Studio). В LM Studio нужно загрузить GGUF-модель и включить Local Server. Также можно использовать `llama-server`; в этом случае поменяй `llm.base_url` в `%LOCALAPPDATA%\HellsaizPC_AI\config.toml`. Модель указывается через `llm.model`; конкретный идентификатор зависит от сервера. Для tool calling модель и её chat template должны поддерживать вызовы функций.
 
 Для ручной разработки: `pip install -e ".[dev]"`, затем `pytest` и `ruff check .`.
 
@@ -33,10 +33,9 @@ Set-ExecutionPolicy -Scope Process Bypass
 - Подтверждение требуется для любого инструмента с побочным эффектом.
 - Контент экрана, веба и файлов — недоверенные данные, не инструкции.
 - Аудио не записывается в историю. История чата хранится в профиле пользователя.
-- Модели и голоса имеют отдельные лицензии от кода runtime.
+- Модели и голоса имеют отдельные лицензии от лицензии runtime.
 
 ## Архитектура
-
 ```mermaid
 flowchart LR
  UI[PySide6] --> CORE[Orchestrator]

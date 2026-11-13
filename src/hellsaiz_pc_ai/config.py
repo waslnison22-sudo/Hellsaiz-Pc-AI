@@ -14,7 +14,7 @@ def user_data_dir() -> Path:
 
 @dataclass(frozen=True)
 class LLMSettings:
-    base_url: str = "http://127.0.0.1:8080/v1"
+    base_url: str = "http://127.0.0.1:1234/v1"
     model: str = "local-model"
     api_key: str = "not-needed"
     timeout_seconds: int = 120
