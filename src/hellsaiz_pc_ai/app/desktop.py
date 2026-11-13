@@ -96,6 +96,15 @@ def main() -> int:
     class HotkeyBridge(QObject):
         activated = Signal(str)
 
+    class HotkeyDispatcher(QObject):
+        def __init__(self, callback: Any) -> None:
+            super().__init__()
+            self.callback = callback
+
+        @Slot(str)
+        def dispatch(self, combo: str) -> None:
+            self.callback(combo)
+
         def __init__(self) -> None:
             super().__init__()
             self.request.connect(self._show)
@@ -167,20 +176,21 @@ def main() -> int:
                 except (OSError, ValueError, json.JSONDecodeError) as exc:
                     logging.warning("Workflow library could not be fully loaded: %s", exc)
 
-                if self.workflow_trigger is not None and answer is None:
+                if self.workflow_trigger is None:
+                    if answer is None:
+                        answer = router.route(prompt, confirm=self.broker.confirm)
+                    if answer is None and assistant is not None:
+                        answer = assistant.reply(prompt, confirm=self.broker.confirm)
+                    if answer is None:
+                        answer = (
+                            "Эта фраза пока не входит в список локальных команд. "
+                            "Введите «помощь», чтобы увидеть доступные команды. "
+                            "Генеративный ИИ выключен."
+                        )
+                elif answer is None:
                     answer = (
                         f"Для комбинации {self.workflow_trigger.value} не найден "
                         "сценарий с таким триггером."
-                    )
-                if self.workflow_trigger is None and answer is None:
-                    answer = router.route(prompt, confirm=self.broker.confirm)
-                if self.workflow_trigger is None and answer is None and assistant is not None:
-                    answer = assistant.reply(prompt, confirm=self.broker.confirm)
-                elif answer is None:
-                    answer = (
-                        "Эта фраза пока не входит в список локальных команд. "
-                        "Введите «помощь», чтобы увидеть доступные команды. "
-                        "Генеративный ИИ выключен."
                     )
 
                 if self.speak_reply:
@@ -650,6 +660,7 @@ def main() -> int:
             transcript.append(f"<p><b>Вы:</b> {escape(prompt)}</p>")
         send_button.setEnabled(False)
         voice_button.setEnabled(False)
+        input_box.setEnabled(False)
         worker = Worker(
             prompt,
             voice_input,
@@ -673,6 +684,7 @@ def main() -> int:
         )
         worker.finished.connect(lambda: send_button.setEnabled(True))
         worker.finished.connect(lambda: voice_button.setEnabled(True))
+        worker.finished.connect(lambda: input_box.setEnabled(True))
         worker.finished.connect(lambda: workers.remove(worker) if worker in workers else None)
         worker.start()
 
@@ -685,14 +697,18 @@ def main() -> int:
     input_box.returnPressed.connect(send)
     voice_button.clicked.connect(lambda: start_worker(voice_input=True))
 
+    def dispatch_hotkey(combo: str) -> None:
+        if workers:
+            logging.info("Ignoring %s because another action is running", combo)
+            return
+        start_worker(workflow_trigger=WorkflowTrigger("hotkey", combo))
+
     hotkey_bridge = HotkeyBridge()
-    hotkey_bridge.activated.connect(
-        lambda combo: start_worker(workflow_trigger=WorkflowTrigger("hotkey", combo))
-        if not workers
-        else logging.info("Ignoring %s because another action is running", combo)
-    )
+    hotkey_dispatcher = HotkeyDispatcher(dispatch_hotkey)
+    hotkey_bridge.activated.connect(hotkey_dispatcher.dispatch)
 
     hotkey_bindings: dict[str, Any] = {}
+    normalized_hotkeys: set[str] = set()
     for workflow_id, graph in workflow_library.list():
         trigger_node = next(
             node for node in graph.nodes if node.kind.startswith("trigger.")
@@ -700,13 +716,15 @@ def main() -> int:
         if trigger_node.kind != "trigger.hotkey":
             continue
         combo = trigger_node.config["hotkey"]
-        if combo in hotkey_bindings:
+        normalized = combo.casefold()
+        if normalized in normalized_hotkeys:
             logging.warning(
                 "Duplicate global hotkey %s in workflow %s; keeping first binding",
                 combo,
                 workflow_id,
             )
             continue
+        normalized_hotkeys.add(normalized)
         hotkey_bindings[combo] = (
             lambda combo=combo: hotkey_bridge.activated.emit(combo)
         )
