@@ -1,0 +1,25 @@
+from pathlib import Path
+
+from hellsaiz_pc_ai.config import load_settings
+
+
+def test_load_toml_config(tmp_path: Path):
+    path = tmp_path / "config.toml"
+    path.write_text(
+        '[llm]\nbase_url="http://127.0.0.1:9000/v1"\nmodel="test"\n'
+        '[windows.allowed_apps]\nnotepad=["notepad.exe"]\n',
+        encoding="utf-8",
+    )
+    settings = load_settings(path)
+    assert settings.llm.model == "test"
+    assert settings.allowed_apps["notepad"] == ("notepad.exe",)
+
+
+def test_invalid_allowlist_fails_closed(tmp_path: Path):
+    path = tmp_path / "config.toml"
+    path.write_text('[windows.allowed_apps]\nnotepad="notepad.exe"\n', encoding="utf-8")
+    try:
+        load_settings(path)
+    except ValueError:
+        return
+    raise AssertionError("Malformed allowlist was accepted")

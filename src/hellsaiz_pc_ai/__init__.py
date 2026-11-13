@@ -1,0 +1,2 @@
+"""Hellsaiz PC AI — local-first desktop assistant."""
+__version__ = "0.1.0"
