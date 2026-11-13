@@ -13,6 +13,7 @@ dependencies = ["PySide6>=6.7,<7"]
 
 [project.optional-dependencies]
 voice = ["sounddevice>=0.4.6", "numpy>=1.26", "pyttsx3>=2.90", "vosk>=0.3.45"]
+windows = ["psutil>=7.0", "pycaw>=20260921"]
 dev = ["pytest>=8.0", "ruff>=0.5"]
 
 [project.scripts]
