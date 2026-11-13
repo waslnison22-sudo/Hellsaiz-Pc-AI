@@ -12,6 +12,7 @@ from hellsaiz_pc_ai.config import Settings, load_settings
 from hellsaiz_pc_ai.core.commands import CommandRouter
 from hellsaiz_pc_ai.core.orchestrator import AssistantOrchestrator
 from hellsaiz_pc_ai.core.registry import ToolRegistry
+from hellsaiz_pc_ai.hotkeys import GlobalHotkeyService, HotkeyUnavailableError
 from hellsaiz_pc_ai.providers.openai_compatible import OpenAICompatibleProvider, ProviderError
 from hellsaiz_pc_ai.storage.sqlite_store import ChatStore
 from hellsaiz_pc_ai.tools.system import register_system_tools
@@ -92,6 +93,9 @@ def main() -> int:
     class ApprovalBroker(QObject):
         request = Signal(str, object, object)
 
+    class HotkeyBridge(QObject):
+        activated = Signal(str)
+
         def __init__(self) -> None:
             super().__init__()
             self.request.connect(self._show)
@@ -118,13 +122,19 @@ def main() -> int:
         failed = Signal(str)
 
         def __init__(
-            self, prompt: str, voice_input: bool, speak_reply: bool, broker: ApprovalBroker
+            self,
+            prompt: str,
+            voice_input: bool,
+            speak_reply: bool,
+            broker: ApprovalBroker,
+            workflow_trigger: WorkflowTrigger | None = None,
         ) -> None:
             super().__init__()
             self.prompt = prompt
             self.voice_input = voice_input
             self.speak_reply = speak_reply
             self.broker = broker
+            self.workflow_trigger = workflow_trigger
 
         def run(self) -> None:
             try:
@@ -136,31 +146,35 @@ def main() -> int:
                     audio_path = Path(tempfile.gettempdir()) / "hellsaiz-command.wav"
                     record_microphone(audio_path, duration_seconds=5.0)
                     prompt = VoskTranscriber(settings.speech.vosk_model_path).transcribe(audio_path)
-                if not prompt.strip():
+                if self.workflow_trigger is None and not prompt.strip():
                     self.failed.emit("Команда не распознана.")
                     return
 
                 answer = None
                 try:
+                    trigger = self.workflow_trigger or WorkflowTrigger("text", prompt)
                     for workflow_id, graph in workflow_library.list():
                         execution = workflow_runner.run(
-                            graph, WorkflowTrigger("text", prompt), confirm=self.broker.confirm
+                            graph, trigger, confirm=self.broker.confirm
                         )
                         if execution.started:
                             lines = [
                                 f"Сценарий «{graph.name}» ({workflow_id}): {execution.message}"
                             ]
-                            lines.extend(
-                                f"• {step.output}" for step in execution.steps
-                            )
+                            lines.extend(f"• {step.output}" for step in execution.steps)
                             answer = "\n".join(lines)
                             break
                 except (OSError, ValueError, json.JSONDecodeError) as exc:
                     logging.warning("Workflow library could not be fully loaded: %s", exc)
 
-                if answer is None:
+                if self.workflow_trigger is not None and answer is None:
+                    answer = (
+                        f"Для комбинации {self.workflow_trigger.value} не найден "
+                        "сценарий с таким триггером."
+                    )
+                if self.workflow_trigger is None and answer is None:
                     answer = router.route(prompt, confirm=self.broker.confirm)
-                if answer is None and assistant is not None:
+                if self.workflow_trigger is None and answer is None and assistant is not None:
                     answer = assistant.reply(prompt, confirm=self.broker.confirm)
                 elif answer is None:
                     answer = (
@@ -182,7 +196,12 @@ def main() -> int:
                         logging.warning("Speech output unavailable: %s", exc)
                         answer += "\n\n[Голос недоступен: установите RHVoice и пакет voice.]"
 
-                store.add_message("user", prompt)
+                stored_prompt = (
+                    prompt
+                    if prompt
+                    else f"[hotkey {self.workflow_trigger.value}]"
+                )
+                store.add_message("user", stored_prompt)
                 store.add_message("assistant", answer)
                 self.completed.emit(prompt, answer)
             except ProviderError as exc:
@@ -293,7 +312,6 @@ def main() -> int:
             node.id: ((index % 3) * 290, (index // 3) * 150)
             for index, node in enumerate(graph.nodes)
         }
-        by_id = {node.id: node for node in graph.nodes}
         for edge in graph.edges:
             x1, y1 = positions[edge.source]
             x2, y2 = positions[edge.target]
@@ -611,8 +629,12 @@ def main() -> int:
     broker = ApprovalBroker()
     workers: list[Worker] = []
 
-    def start_worker(prompt: str = "", voice_input: bool = False) -> None:
-        if not voice_input and not prompt.strip():
+    def start_worker(
+        prompt: str = "",
+        voice_input: bool = False,
+        workflow_trigger: WorkflowTrigger | None = None,
+    ) -> None:
+        if workflow_trigger is None and not voice_input and not prompt.strip():
             return
         if voice_input and not settings.speech.vosk_model_path.is_dir():
             transcript.append(
@@ -620,11 +642,21 @@ def main() -> int:
                 "Vosk и укажите speech.vosk_model_path в config.toml.</p>"
             )
             return
-        if prompt:
+        if workflow_trigger is not None:
+            transcript.append(
+                f"<p><b>Горячая клавиша:</b> {escape(workflow_trigger.value)}</p>"
+            )
+        elif prompt:
             transcript.append(f"<p><b>Вы:</b> {escape(prompt)}</p>")
         send_button.setEnabled(False)
         voice_button.setEnabled(False)
-        worker = Worker(prompt, voice_input, speak_toggle.isChecked(), broker)
+        worker = Worker(
+            prompt,
+            voice_input,
+            speak_toggle.isChecked(),
+            broker,
+            workflow_trigger,
+        )
         workers.append(worker)
 
         def show_result(recognized: str, answer: str) -> None:
@@ -652,6 +684,48 @@ def main() -> int:
     send_button.clicked.connect(send)
     input_box.returnPressed.connect(send)
     voice_button.clicked.connect(lambda: start_worker(voice_input=True))
+
+    hotkey_bridge = HotkeyBridge()
+    hotkey_bridge.activated.connect(
+        lambda combo: start_worker(workflow_trigger=WorkflowTrigger("hotkey", combo))
+        if not workers
+        else logging.info("Ignoring %s because another action is running", combo)
+    )
+
+    hotkey_bindings: dict[str, Any] = {}
+    for workflow_id, graph in workflow_library.list():
+        trigger_node = next(
+            node for node in graph.nodes if node.kind.startswith("trigger.")
+        )
+        if trigger_node.kind != "trigger.hotkey":
+            continue
+        combo = trigger_node.config["hotkey"]
+        if combo in hotkey_bindings:
+            logging.warning(
+                "Duplicate global hotkey %s in workflow %s; keeping first binding",
+                combo,
+                workflow_id,
+            )
+            continue
+        hotkey_bindings[combo] = (
+            lambda combo=combo: hotkey_bridge.activated.emit(combo)
+        )
+
+    hotkey_service = GlobalHotkeyService(hotkey_bindings)
+    try:
+        hotkey_service.start()
+        if hotkey_bindings:
+            scenario_status.setText(
+                f"Глобальные горячие клавиши активны: {', '.join(hotkey_bindings)}"
+            )
+    except HotkeyUnavailableError as exc:
+        scenario_status.setText(str(exc))
+        logging.warning("Global hotkeys unavailable: %s", exc)
+    except Exception:
+        logging.exception("Global hotkey service failed to start")
+        scenario_status.setText("Не удалось включить глобальные горячие клавиши.")
+
+    app.aboutToQuit.connect(hotkey_service.stop)
 
     window.show()
     return app.exec()
