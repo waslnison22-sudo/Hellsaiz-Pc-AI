@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from pathlib import Path
 
@@ -38,7 +39,11 @@ class WorkflowLibrary:
     def list(self) -> list[tuple[str, WorkflowGraph]]:
         entries: list[tuple[str, WorkflowGraph]] = []
         for path in sorted(self.directory.glob("*.json")):
-            graph = WorkflowGraph.from_dict(json.loads(path.read_text(encoding="utf-8")))
+            try:
+                graph = WorkflowGraph.from_dict(json.loads(path.read_text(encoding="utf-8")))
+            except (OSError, ValueError, json.JSONDecodeError) as exc:
+                logging.warning("Skipping invalid workflow %s: %s", path.name, exc)
+                continue
             entries.append((path.stem, graph))
         return entries
 
