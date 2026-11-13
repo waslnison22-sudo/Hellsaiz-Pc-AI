@@ -20,18 +20,19 @@ class VoskTranscriber:
             raise FileNotFoundError(f"Vosk model directory not found: {self.model_dir}")
         if not audio_file.is_file():
             raise FileNotFoundError(f"Audio file not found: {audio_file}")
-        try:
-            from vosk import KaldiRecognizer, Model
-        except ImportError as exc:
-            raise VoskRecognitionError(
-                'Vosk is not installed. Run: pip install -e ".[voice]"'
-            ) from exc
 
         try:
             with wave.open(str(audio_file), "rb") as audio:
                 if audio.getnchannels() != 1 or audio.getsampwidth() != 2:
                     raise VoskRecognitionError("Audio must be mono PCM16 WAV.")
                 sample_rate = audio.getframerate()
+                try:
+                    from vosk import KaldiRecognizer, Model
+                except ImportError as exc:
+                    raise VoskRecognitionError(
+                        'Vosk is not installed. Run: pip install -e ".[voice]"'
+                    ) from exc
+
                 model = Model(str(self.model_dir))
                 recognizer = KaldiRecognizer(model, sample_rate)
                 chunks: list[str] = []
