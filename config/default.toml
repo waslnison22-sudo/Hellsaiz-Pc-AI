@@ -29,3 +29,6 @@ vosk_model_path = ""
 notepad = ["notepad.exe"]
 calculator = ["calc.exe"]
 explorer = ["explorer.exe"]
+
+[windows.allowed_processes]
+discord = "Discord.exe"
