@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -32,7 +32,7 @@ class ChatStore:
         with self._connect() as db:
             db.execute(
                 "INSERT INTO messages(created_at, role, content) VALUES (?, ?, ?)",
-                (datetime.now(timezone.utc).isoformat(), role, content),
+                (datetime.now(UTC).isoformat(), role, content),
             )
 
     def recent_messages(self, limit: int = 30) -> list[dict[str, str]]:
