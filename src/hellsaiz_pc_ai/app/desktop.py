@@ -93,6 +93,27 @@ def main() -> int:
     class ApprovalBroker(QObject):
         request = Signal(str, object, object)
 
+        def __init__(self) -> None:
+            super().__init__()
+            self.request.connect(self._show)
+
+        @Slot(str, object, object)
+        def _show(self, name: str, arguments: object, response: object) -> None:
+            result = QMessageBox.question(
+                window,
+                "Подтверждение действия",
+                f"Разрешить инструменту {name} выполнить действие?\\nАргументы: {arguments}",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            response["approved"] = result == QMessageBox.StandardButton.Yes
+            response["event"].set()
+
+        def confirm(self, spec: Any, arguments: dict[str, Any]) -> bool:
+            response: dict[str, Any] = {"event": threading.Event(), "approved": False}
+            self.request.emit(spec.name, arguments, response)
+            return response["event"].wait(timeout=120) and bool(response["approved"])
+
     class HotkeyBridge(QObject):
         activated = Signal(str)
 
@@ -104,27 +125,6 @@ def main() -> int:
         @Slot(str)
         def dispatch(self, combo: str) -> None:
             self.callback(combo)
-
-        def __init__(self) -> None:
-            super().__init__()
-            self.request.connect(self._show)
-
-        @Slot(str, object, object)
-        def _show(self, name: str, arguments: object, response: object) -> None:
-            result = QMessageBox.question(
-                window,
-                "Подтверждение действия",
-                f"Разрешить инструменту {name} выполнить действие?\nАргументы: {arguments}",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
-            )
-            response["approved"] = result == QMessageBox.StandardButton.Yes
-            response["event"].set()
-
-        def confirm(self, spec: Any, arguments: dict[str, Any]) -> bool:
-            response: dict[str, Any] = {"event": threading.Event(), "approved": False}
-            self.request.emit(spec.name, arguments, response)
-            return response["event"].wait(timeout=120) and bool(response["approved"])
 
     class Worker(QThread):
         completed = Signal(str, str)
