@@ -10,9 +10,10 @@ from hellsaiz_pc_ai.core.registry import ConfirmCallback, ToolRegistry
 HELP_TEXT = (
     "Доступные команды без ИИ:\n"
     "• «открой блокнот», «запусти калькулятор», «открой проводник»\n"
+    "• «закрой дискорд» (только разрешённые процессы)\n"
+    "• «установи громкость на 30 процентов»\n"
     "• «открой сайт example.com»\n"
-    "• «который час», «какая дата»\n"
-    "• «информация о системе»\n"
+    "• «который час», «какая дата», «информация о системе»\n"
     "• «заблокируй компьютер»\n"
     "• «помощь» или «список команд»\n\n"
     "Команды выполняются локально по заранее заданным правилам. "
@@ -32,11 +33,25 @@ class CommandRouter:
         "файловый менеджер": "explorer",
         "explorer": "explorer",
     }
+    PROCESS_SYNONYMS = {
+        "дискорд": "discord",
+        "discord": "discord",
+        "spotify": "spotify",
+        "спотифай": "spotify",
+    }
     OPEN_PREFIXES = ("открой ", "открыть ", "запусти ", "запустить ", "open ", "launch ")
 
-    def __init__(self, registry: ToolRegistry, allowed_apps: dict[str, tuple[str, ...]]) -> None:
+    def __init__(
+        self,
+        registry: ToolRegistry,
+        allowed_apps: dict[str, tuple[str, ...]],
+        allowed_processes: dict[str, str] | None = None,
+    ) -> None:
         self.registry = registry
         self.allowed_apps = {name.casefold(): command for name, command in allowed_apps.items()}
+        self.allowed_processes = {
+            name.casefold(): executable for name, executable in (allowed_processes or {}).items()
+        }
 
     @staticmethod
     def normalize(text: str) -> str:
@@ -66,6 +81,25 @@ class CommandRouter:
         if command in {"заблокируй компьютер", "заблокировать компьютер", "заблокируй пк"}:
             return self._execute("lock_pc", {}, confirm)
 
+        volume_match = re.search(
+            r"(?:установи|сделай|поставь)?\s*(?:системную\s+)?громкость(?:\s+на|\s+до)?\s+(\d{1,3})\s*(?:%|процентов?)?$",
+            command,
+        )
+        if volume_match:
+            percent = int(volume_match.group(1))
+            if not 0 <= percent <= 100:
+                return "Громкость должна быть от 0 до 100 процентов."
+            return self._execute("set_volume", {"percent": percent}, confirm)
+
+        for prefix in ("закрой ", "заверши "):
+            if command.startswith(prefix):
+                target = command[len(prefix):].strip()
+                alias = self.PROCESS_SYNONYMS.get(target, target)
+                if alias not in self.allowed_processes:
+                    options = ", ".join(sorted(self.allowed_processes)) or "список пуст"
+                    return f"Процесс «{target}» не добавлен в allowlist. Доступно: {options}."
+                return self._execute("close_process", {"process": alias}, confirm)
+
         for prefix in self.OPEN_PREFIXES:
             if command.startswith(prefix):
                 target = command[len(prefix):].strip()
@@ -75,6 +109,8 @@ class CommandRouter:
                     return self._execute("open_url", {"url": target[5:].strip()}, confirm)
                 if target.startswith("ссылку "):
                     return self._execute("open_url", {"url": target[7:].strip()}, confirm)
+                if target in {"youtube", "ютуб"}:
+                    return self._execute("open_url", {"url": "https://www.youtube.com"}, confirm)
                 alias = self.APP_SYNONYMS.get(target, target)
                 if alias not in self.allowed_apps:
                     options = ", ".join(sorted(self.allowed_apps)) or "нет разрешённых приложений"

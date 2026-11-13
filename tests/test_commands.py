@@ -20,7 +20,21 @@ def make_router():
         {"type": "object", "properties": {"app": {"type": "string"}}, "required": ["app"]},
         RiskLevel.CONFIRM, lambda args: ToolResult(True, f"opened {args['app']}"),
     ))
-    return CommandRouter(registry, {"notepad": ("notepad.exe",), "calculator": ("calc.exe",)})
+    registry.register(ToolSpec(
+        "set_volume", "volume",
+        {"type": "object", "properties": {"percent": {"type": "integer"}}, "required": ["percent"]},
+        RiskLevel.CONFIRM, lambda args: ToolResult(True, f"volume {args['percent']}"),
+    ))
+    registry.register(ToolSpec(
+        "close_process", "close",
+        {"type": "object", "properties": {"process": {"type": "string"}}, "required": ["process"]},
+        RiskLevel.CONFIRM, lambda args: ToolResult(True, f"closed {args['process']}"),
+    ))
+    return CommandRouter(
+        registry,
+        {"notepad": ("notepad.exe",), "calculator": ("calc.exe",)},
+        {"discord": "Discord.exe"},
+    )
 
 
 def approve(*_):
@@ -51,3 +65,15 @@ def test_unlisted_app_does_not_execute():
 
 def test_unknown_text_is_not_guessed():
     assert make_router().route("поговори со мной") is None
+
+
+def test_volume_command_is_deterministic_and_range_checked():
+    router = make_router()
+    assert router.route("установи громкость на 30 процентов", approve) == "Готово. volume 30"
+    assert "от 0 до 100" in router.route("установи громкость на 150").casefold()
+
+
+def test_close_process_uses_allowlist_and_confirmation():
+    router = make_router()
+    assert "закрыт" in router.route("закрой дискорд", approve).casefold()
+    assert "не добавлен" in router.route("закрой powershell").casefold()
