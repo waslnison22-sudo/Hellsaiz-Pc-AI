@@ -19,7 +19,7 @@ class Workflow:
     steps: tuple[WorkflowStep, ...]
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "Workflow":
+    def from_dict(cls, data: dict[str, Any]) -> Workflow:
         if set(data) - {"name", "steps"}:
             raise ValueError("Unsupported workflow field")
         name, raw_steps = data.get("name"), data.get("steps")
