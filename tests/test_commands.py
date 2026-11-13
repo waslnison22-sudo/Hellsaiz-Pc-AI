@@ -75,5 +75,5 @@ def test_volume_command_is_deterministic_and_range_checked():
 
 def test_close_process_uses_allowlist_and_confirmation():
     router = make_router()
-    assert "закрыт" in router.route("закрой дискорд", approve).casefold()
+    assert "closed discord" in router.route("закрой дискорд", approve).casefold()
     assert "не добавлен" in router.route("закрой powershell").casefold()
