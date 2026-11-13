@@ -1,6 +1,5 @@
 import wave
 from pathlib import Path
-from unittest.mock import Mock
 
 import pytest
 
