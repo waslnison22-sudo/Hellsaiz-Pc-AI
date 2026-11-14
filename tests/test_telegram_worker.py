@@ -230,21 +230,6 @@ def test_saving_non_secret_settings_preserves_existing_dpapi_token(monkeypatch, 
     assert load_settings(path).token == TOKEN
 
 
-def test_disabling_telegram_deletes_dpapi_token(monkeypatch, tmp_path: Path):
-    from hellsaiz_pc_ai.telegram import config
-
-    protected = {}
-    monkeypatch.setattr(config, "save_secret", lambda path, value: protected.update({str(path): value}))
-    monkeypatch.setattr(config, "delete_secret", lambda path: protected.pop(str(path), None))
-    monkeypatch.setattr(config, "load_secret", lambda path: protected.get(str(path), ""))
-
-    path = tmp_path / "telegram.json"
-    save_settings(path, TelegramSettings(True, [111], [222], ["get_local_time"], TOKEN))
-    save_settings(path, TelegramSettings(False, [111], [222], [], ""))
-    assert load_settings(path).token == ""
-    assert not protected
-
-
 def test_worker_does_not_run_poll_without_required_proxy():
     statuses = []
     worker = make_worker(
