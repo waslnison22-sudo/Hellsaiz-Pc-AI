@@ -8,6 +8,19 @@ from pathlib import Path
 from typing import Any
 
 
+DEFAULT_WAKE_ALIASES = (
+    "Хеллсайз",
+    "Хелсайз",
+    "Хелл",
+    "Hellsaiz",
+    "Hell",
+)
+
+
+def _normalize_alias(value: str) -> str:
+    return re.sub(r"\s+", " ", value.casefold()).strip()
+
+
 def user_data_dir() -> Path:
     base = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA")
     return (Path(base) / "HellsaizPC_AI") if base else (Path.home() / ".hellsaiz_pc_ai")
@@ -46,6 +59,8 @@ class Settings:
     llm: LLMSettings = field(default_factory=LLMSettings)
     speech: SpeechSettings = field(default_factory=SpeechSettings)
     allow_remote_llm: bool = False
+    wake_aliases: tuple[str, ...] = DEFAULT_WAKE_ALIASES
+    app_aliases: dict[str, tuple[str, ...]] = field(default_factory=dict)
     allowed_apps: dict[str, tuple[str, ...]] = field(default_factory=dict)
     allowed_processes: dict[str, str] = field(default_factory=dict)
     database_path: Path = field(default_factory=lambda: user_data_dir() / "history.sqlite3")
@@ -67,6 +82,7 @@ def load_settings(path: Path | None = None) -> Settings:
             data = tomllib.load(stream)
 
     app = _table(data, "app")
+    assistant_data = _table(data, "assistant")
     llm_data = _table(data, "llm")
     security = _table(data, "security")
     storage = _table(data, "storage")
@@ -88,7 +104,47 @@ def load_settings(path: Path | None = None) -> Settings:
             raise ValueError("Each allowed app must map an alias to a non-empty command array")
         if not all(isinstance(part, str) and part for part in command):
             raise ValueError(f"Invalid command for allowed app '{alias}'")
-        apps[alias.lower()] = tuple(command)
+        apps[alias.casefold()] = tuple(command)
+
+    raw_wake_aliases = assistant_data.get("wake_aliases", list(DEFAULT_WAKE_ALIASES))
+    if (
+        not isinstance(raw_wake_aliases, list)
+        or not raw_wake_aliases
+        or len(raw_wake_aliases) > 32
+        or any(
+            not isinstance(alias, str) or not alias.strip() or len(alias) > 48
+            for alias in raw_wake_aliases
+        )
+    ):
+        raise ValueError("[assistant.wake_aliases] must contain 1..32 short text aliases")
+    wake_aliases = tuple(dict.fromkeys(alias.strip() for alias in raw_wake_aliases))
+
+    raw_app_aliases = windows.get("app_aliases", {})
+    if not isinstance(raw_app_aliases, dict):
+        raise ValueError("[windows.app_aliases] must be a table")
+    app_aliases: dict[str, tuple[str, ...]] = {}
+    alias_owner: dict[str, str] = {}
+    for canonical, aliases in raw_app_aliases.items():
+        if not isinstance(canonical, str) or canonical.casefold() not in apps:
+            raise ValueError(
+                f"Application aliases must reference an installed allowlist key: {canonical}"
+            )
+        if (
+            not isinstance(aliases, list)
+            or len(aliases) > 64
+            or any(not isinstance(alias, str) or not alias.strip() or len(alias) > 64 for alias in aliases)
+        ):
+            raise ValueError(f"Aliases for application '{canonical}' must be a list of short strings")
+        canonical_key = canonical.casefold()
+        app_aliases[canonical_key] = tuple(dict.fromkeys(alias.strip() for alias in aliases))
+        for alias in (canonical_key, *app_aliases[canonical_key]):
+            normalized = _normalize_alias(alias)
+            owner = alias_owner.get(normalized)
+            if owner is not None and owner != canonical_key:
+                raise ValueError(
+                    f"Application alias '{alias}' is ambiguous between '{owner}' and '{canonical_key}'"
+                )
+            alias_owner[normalized] = canonical_key
 
     process_data = windows.get("allowed_processes", {})
     if not isinstance(process_data, dict):
@@ -141,6 +197,8 @@ def load_settings(path: Path | None = None) -> Settings:
             vosk_model_path=model_path,
         ),
         allow_remote_llm=bool(security.get("allow_remote_llm", False)),
+        wake_aliases=wake_aliases,
+        app_aliases=app_aliases,
         allowed_apps=apps,
         allowed_processes=processes,
         database_path=db_path,
