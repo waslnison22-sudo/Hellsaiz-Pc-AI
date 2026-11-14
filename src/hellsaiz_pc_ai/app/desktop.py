@@ -27,6 +27,7 @@ from hellsaiz_pc_ai.update_client import (
 )
 from hellsaiz_pc_ai.install_layout import installed_app_root, installed_version
 from hellsaiz_pc_ai import startup_task
+from hellsaiz_pc_ai.network import v2raytun
 from hellsaiz_pc_ai.version import APP_VERSION
 from hellsaiz_pc_ai.core.orchestrator import AssistantOrchestrator
 from hellsaiz_pc_ai.core.registry import ToolRegistry
@@ -276,6 +277,19 @@ def main() -> int:
     ) = build_runtime(settings)
     file_access_path = settings.workflows_path.parent / "file_access.json"
     active_voice = {"name": str(profile_data.get("voice_name") or settings.speech.tts_voice_name)}
+    network_settings_path = settings.workflows_path.parent / "network.json"
+    try:
+        network_settings = v2raytun.load_network_settings(network_settings_path)
+    except ValueError as exc:
+        logging.warning("Network settings are invalid; using safe defaults: %s", exc)
+        network_settings = {
+            "schema_version": 1,
+            "executable_path": "",
+            "proxy_url": "",
+            "health_url": v2raytun.DEFAULT_HEALTH_URL,
+            "require_proxy_for_telegram": True,
+            "launch_on_start": False,
+        }
     raw_tts_rate = profile_data.get("tts_rate", settings.speech.tts_rate)
     tts_rate = (
         int(raw_tts_rate)
@@ -2696,6 +2710,161 @@ def main() -> int:
     remove_file_root_button.clicked.connect(remove_file_access_root)
     allow_file_writes_check.toggled.connect(toggle_file_write_permission)
 
+    network_title = QLabel("СЕТЬ И v2RAYTUN")
+    network_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
+    settings_layout.addWidget(network_title)
+    network_help = QLabel(
+        "Выбери официальный клиент вручную и укажи локальный HTTP-порт прокси из его настроек. "
+        "Программа не меняет системные маршруты, DNS или прокси Windows; подключение к туннелю "
+        "выполняется в самом v2RayTun."
+    )
+    network_help.setWordWrap(True)
+    network_help.setStyleSheet("color:#929aa6;")
+    settings_layout.addWidget(network_help)
+
+    v2raytun_exe_row = QHBoxLayout()
+    v2raytun_exe_edit = QLineEdit(str(network_settings.get("executable_path") or ""))
+    v2raytun_exe_edit.setPlaceholderText("Путь к v2RayTun.exe")
+    choose_v2raytun_button = QPushButton("Выбрать EXE")
+    v2raytun_exe_row.addWidget(v2raytun_exe_edit, 1)
+    v2raytun_exe_row.addWidget(choose_v2raytun_button)
+    settings_layout.addLayout(v2raytun_exe_row)
+
+    network_proxy_row = QHBoxLayout()
+    network_proxy_edit = QLineEdit(str(network_settings.get("proxy_url") or ""))
+    network_proxy_edit.setPlaceholderText("Локальный HTTP-прокси, например http://127.0.0.1:10809")
+    network_proxy_row.addWidget(network_proxy_edit, 1)
+    settings_layout.addLayout(network_proxy_row)
+
+    network_health_row = QHBoxLayout()
+    network_health_edit = QLineEdit(str(network_settings.get("health_url") or v2raytun.DEFAULT_HEALTH_URL))
+    network_health_edit.setPlaceholderText("HTTPS endpoint для проверки")
+    network_health_row.addWidget(network_health_edit, 1)
+    settings_layout.addLayout(network_health_row)
+
+    require_proxy_check = QCheckBox("Требовать рабочий прокси перед запуском Telegram")
+    require_proxy_check.setChecked(bool(network_settings.get("require_proxy_for_telegram", True)))
+    launch_v2raytun_check = QCheckBox("Запускать клиент v2RayTun при старте помощника")
+    launch_v2raytun_check.setChecked(bool(network_settings.get("launch_on_start", False)))
+    settings_layout.addWidget(require_proxy_check)
+    settings_layout.addWidget(launch_v2raytun_check)
+
+    network_buttons = QHBoxLayout()
+    launch_v2raytun_button = QPushButton("Запустить клиент")
+    check_network_button = QPushButton("Проверить прокси")
+    save_network_button = QPushButton("Сохранить сеть")
+    network_buttons.addWidget(launch_v2raytun_button)
+    network_buttons.addWidget(check_network_button)
+    network_buttons.addWidget(save_network_button)
+    settings_layout.addLayout(network_buttons)
+
+    network_status = QLabel("Прокси ещё не проверен.")
+    network_status.setWordWrap(True)
+    network_status.setStyleSheet("color:#929aa6;")
+    settings_layout.addWidget(network_status)
+
+    def persist_network_settings() -> bool:
+        network_settings.update({
+            "executable_path": v2raytun_exe_edit.text().strip(),
+            "proxy_url": network_proxy_edit.text().strip(),
+            "health_url": network_health_edit.text().strip() or v2raytun.DEFAULT_HEALTH_URL,
+            "require_proxy_for_telegram": require_proxy_check.isChecked(),
+            "launch_on_start": launch_v2raytun_check.isChecked(),
+        })
+        try:
+            v2raytun.save_network_settings(network_settings_path, network_settings)
+            network_status.setText("Сетевые настройки сохранены локально.")
+            return True
+        except (OSError, ValueError) as exc:
+            network_status.setText(f"Не удалось сохранить сетевые настройки: {exc}")
+            return False
+
+    def choose_v2raytun_executable() -> None:
+        selected, _filter = QFileDialog.getOpenFileName(
+            window,
+            "Выбрать v2RayTun",
+            str(Path.home()),
+            "Windows executable (*.exe)",
+        )
+        if selected:
+            v2raytun_exe_edit.setText(selected)
+            persist_network_settings()
+
+    def launch_v2raytun_client() -> None:
+        if not persist_network_settings():
+            return
+        executable = v2raytun_exe_edit.text().strip()
+        if not executable:
+            network_status.setText("Сначала выбери v2RayTun.exe.")
+            return
+        try:
+            if v2raytun.detect_v2raytun_running():
+                network_status.setText(
+                    "v2RayTun уже запущен. Подключи туннель в самом клиенте и проверь прокси."
+                )
+                return
+            v2raytun.launch_v2raytun(executable)
+            network_status.setText(
+                "Клиент запущен. Подключи туннель в окне v2RayTun, затем нажми «Проверить прокси»."
+            )
+        except (ValueError, v2raytun.NetworkDependencyError) as exc:
+            network_status.setText(f"Не удалось запустить v2RayTun: {exc}")
+
+    network_workers: list[QThread] = []
+
+    class NetworkProbeWorker(QThread):
+        completed = Signal(object)
+        failed = Signal(str)
+
+        def __init__(self, config: dict[str, Any]) -> None:
+            super().__init__()
+            self.config = dict(config)
+
+        def run(self) -> None:
+            try:
+                result = v2raytun.build_network_status(
+                    self.config["executable_path"],
+                    self.config["proxy_url"],
+                    self.config["health_url"],
+                    require_proxy=self.config["require_proxy_for_telegram"],
+                )
+                self.completed.emit(result)
+            except Exception as exc:
+                self.failed.emit(f"{type(exc).__name__}: {exc}")
+
+    def check_v2raytun_health() -> None:
+        if not persist_network_settings():
+            return
+        if any(worker.isRunning() for worker in network_workers):
+            return
+        check_network_button.setEnabled(False)
+        network_status.setText("Проверяю процесс клиента и HTTPS доступ через прокси…")
+        worker = NetworkProbeWorker(network_settings)
+        network_workers.append(worker)
+
+        def on_network_completed(status: Any) -> None:
+            check_network_button.setEnabled(True)
+            prefix = "Доступ разрешён." if status.telegram_ready else "Доступ ограничен."
+            network_status.setText(prefix + " " + status.detail)
+
+        def on_network_failed(message: str) -> None:
+            check_network_button.setEnabled(True)
+            network_status.setText("Проверка сети завершилась ошибкой: " + message)
+
+        worker.completed.connect(on_network_completed)
+        worker.failed.connect(on_network_failed)
+        worker.finished.connect(
+            lambda: network_workers.remove(worker) if worker in network_workers else None
+        )
+        worker.start()
+
+    choose_v2raytun_button.clicked.connect(choose_v2raytun_executable)
+    launch_v2raytun_button.clicked.connect(launch_v2raytun_client)
+    check_network_button.clicked.connect(check_v2raytun_health)
+    save_network_button.clicked.connect(persist_network_settings)
+    require_proxy_check.toggled.connect(lambda _checked: persist_network_settings())
+    launch_v2raytun_check.toggled.connect(lambda _checked: persist_network_settings())
+
     startup_title = QLabel("АВТОЗАПУСК WINDOWS")
     startup_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
     settings_layout.addWidget(startup_title)
@@ -3285,6 +3454,7 @@ def main() -> int:
             update_workers,
             provider_health_workers,
             startup_workers,
+            network_workers,
             voice_download_workers,
             vosk_model_download_workers,
             _BACKGROUND_VOICE_WORKERS["tests"],
@@ -3393,6 +3563,17 @@ def main() -> int:
 
     # Restore overdue reminders and startup workflows after the main window enters the event loop.
     window.show()
+    if network_settings.get("launch_on_start") and network_settings.get("executable_path"):
+        def start_network_client_on_launch() -> None:
+            try:
+                if not v2raytun.detect_v2raytun_running():
+                    v2raytun.launch_v2raytun(network_settings["executable_path"])
+                    network_status.setText(
+                        "v2RayTun запущен автоматически. Подключи туннель в клиенте и проверь прокси."
+                    )
+            except Exception as exc:
+                network_status.setText(f"Автозапуск v2RayTun не выполнен: {exc}")
+        QTimer.singleShot(1200, start_network_client_on_launch)
     if install_root is not None:
         try:
             marker = install_root / "health" / f"{current_app_version}.ok"
