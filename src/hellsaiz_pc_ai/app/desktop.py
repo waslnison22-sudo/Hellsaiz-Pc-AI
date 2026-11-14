@@ -334,12 +334,20 @@ def main() -> int:
             voice_input: bool,
             speak_reply: bool,
             workflow_trigger: WorkflowTrigger | None = None,
+            stt_profile: dict[str, Any] | None = None,
+            microphone_device: str = "",
+            assistant_profile: dict[str, Any] | None = None,
+            voice_name: str = "Aleksandr",
         ) -> None:
             super().__init__()
             self.prompt = prompt
             self.voice_input = voice_input
             self.speak_reply = speak_reply
             self.workflow_trigger = workflow_trigger
+            self.stt_profile = dict(stt_profile or active_stt)
+            self.microphone_device = microphone_device
+            self.assistant_profile = dict(assistant_profile or profile_data)
+            self.voice_name = voice_name
 
         def run(self) -> None:
             try:
@@ -355,20 +363,20 @@ def main() -> int:
                     try:
                         record_microphone(
                             audio_path,
-                            duration_seconds=active_stt["recording_seconds"],
-                            device=active_microphone["name"] or None,
+                            duration_seconds=self.stt_profile["recording_seconds"],
+                            device=self.microphone_device or None,
                         )
                         speech_router = build_speech_router(
-                            primary=active_stt["primary"],
-                            fallback=active_stt["fallback"],
-                            vosk_model_path=Path(active_stt["vosk_model_path"]),
+                            primary=self.stt_profile["primary"],
+                            fallback=self.stt_profile["fallback"],
+                            vosk_model_path=Path(self.stt_profile["vosk_model_path"]),
                             whisper_executable=(
-                                Path(active_stt["whisper_cpp_executable"])
-                                if active_stt["whisper_cpp_executable"] else None
+                                Path(self.stt_profile["whisper_cpp_executable"])
+                                if self.stt_profile["whisper_cpp_executable"] else None
                             ),
                             whisper_model=(
-                                Path(active_stt["whisper_cpp_model"])
-                                if active_stt["whisper_cpp_model"] else None
+                                Path(self.stt_profile["whisper_cpp_model"])
+                                if self.stt_profile["whisper_cpp_model"] else None
                             ),
                         )
                         transcription = speech_router.transcribe(audio_path)
@@ -439,12 +447,12 @@ def main() -> int:
 
                         speakers = {
                             "sapi5": Sapi5Synthesizer(
-                                active_voice["name"],
+                                self.voice_name,
                                 settings.speech.tts_rate,
                                 settings.speech.tts_volume,
                             )
                         }
-                        voice_id = str(profile_data.get("piper_voice_id") or "")
+                        voice_id = str(self.assistant_profile.get("piper_voice_id") or "")
                         voice_models = list_installed_voices(
                             settings.workflows_path.parent / "voices"
                         )
@@ -454,7 +462,7 @@ def main() -> int:
                         )
                         if selected_model is not None:
                             speakers["piper"] = PiperSynthesizer(selected_model.model_path)
-                        preferred_tts = str(profile_data.get("tts_engine") or "sapi5").casefold()
+                        preferred_tts = str(self.assistant_profile.get("tts_engine") or "sapi5").casefold()
                         if preferred_tts not in {"sapi5", "piper"}:
                             preferred_tts = "sapi5"
                         fallback_tts = "sapi5" if preferred_tts == "piper" else "piper"
@@ -2431,6 +2439,10 @@ def main() -> int:
             voice_input,
             speak_toggle.isChecked(),
             workflow_trigger,
+            stt_profile=active_stt,
+            microphone_device=active_microphone["name"],
+            assistant_profile=profile_data,
+            voice_name=active_voice["name"],
         )
         workers.append(worker)
 
