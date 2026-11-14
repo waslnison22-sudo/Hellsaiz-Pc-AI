@@ -4026,13 +4026,21 @@ def main() -> int:
             telegram_enable_check.blockSignals(True)
             telegram_enable_check.setChecked(False)
             telegram_enable_check.blockSignals(False)
-    if install_root is not None:
+    def write_update_health_marker() -> None:
+        if install_root is None:
+            return
         try:
             marker = install_root / "health" / f"{current_app_version}.ok"
             marker.parent.mkdir(parents=True, exist_ok=True)
             marker.write_text("ok", encoding="ascii")
+            logging.info("Application startup health marker written for %s.", current_app_version)
         except OSError:
             logging.exception("Could not write update health marker")
+
+    if install_root is not None:
+        # Let Qt enter its event loop and process the first UI callbacks before
+        # the updater considers this version healthy.
+        QTimer.singleShot(1800, write_update_health_marker)
     QTimer.singleShot(0, poll_workflow_automations)
     QTimer.singleShot(0, poll_due_reminders)
     if auto_update_check.isChecked():
