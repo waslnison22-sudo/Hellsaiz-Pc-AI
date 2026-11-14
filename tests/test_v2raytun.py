@@ -3,7 +3,7 @@ from __future__ import annotations
 import io
 import json
 from pathlib import Path
-from urllib.error import HTTPError, URLError
+from urllib.error import HTTPError
 
 import pytest
 
