@@ -23,6 +23,7 @@ HELP_TEXT = (
     "• «покажи открытые окна», «переключись на Блокнот»\n"
     "• «покажи элементы окна Настройки», «нажми Сохранить в окне Блокнот»\n"
     "• «введи текст ... в поле Поиск окна Проводник»\n"
+    "• «нажми сочетание Ctrl+L в окне Браузер», «нажми F5 в окне Проводник»\n"
     "• «покажи файлы в папке Документы», «найди файл план в папке Документы»\n"
     "• «прочитай файл ...», «открой папку ...»\n"
     "• Создание папок и новых текстовых файлов — только при включённом разрешении на запись.\n"
@@ -264,6 +265,21 @@ class CommandRouter:
             )
 
         raw_command = self.strip_wake_name(text).strip()
+        shortcut_match = re.fullmatch(
+            r"(?:нажми сочетание|отправь сочетание|нажми клавиши) (.+?) в окне (.+)",
+            raw_command,
+            flags=re.IGNORECASE,
+        )
+        if shortcut_match:
+            return self._execute(
+                "send_keyboard_shortcut",
+                {
+                    "shortcut": shortcut_match.group(1).strip().upper(),
+                    "window_title": shortcut_match.group(2).strip(),
+                },
+                confirm,
+            )
+
         type_match = re.fullmatch(
             r"введи (.+?) в поле (.+?) окна (.+)",
             raw_command,
