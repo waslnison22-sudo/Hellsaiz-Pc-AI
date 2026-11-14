@@ -1746,7 +1746,7 @@ def main() -> int:
         refresh_system_voices_button.setEnabled(False)
         voices_status.setText("Получаю список установленных голосов Windows SAPI5…")
         worker = SapiVoiceListWorker()
-        sapi_inventory_workers.append(worker)
+        _BACKGROUND_VOICE_WORKERS["sapi_inventory"].append(worker)
 
         def loaded(voices: Any) -> None:
             system_voice_combo.clear()
@@ -1775,8 +1775,8 @@ def main() -> int:
         worker.failed.connect(failed)
         worker.finished.connect(lambda: refresh_system_voices_button.setEnabled(True))
         worker.finished.connect(
-            lambda: sapi_inventory_workers.remove(worker)
-            if worker in sapi_inventory_workers else None
+            lambda: _BACKGROUND_VOICE_WORKERS["sapi_inventory"].remove(worker)
+            if worker in _BACKGROUND_VOICE_WORKERS["sapi_inventory"] else None
         )
         worker.start()
 
@@ -1805,7 +1805,7 @@ def main() -> int:
             active_tts["rate"],
             active_tts["volume"],
         )
-        voice_test_workers.append(worker)
+        _BACKGROUND_VOICE_WORKERS["tests"].append(worker)
         test_piper_voice_button.setEnabled(False)
         test_system_voice_button.setEnabled(False)
         voices_status.setText(f"Проверяю голосовой движок {engine}…")
@@ -1819,8 +1819,8 @@ def main() -> int:
         def test_finished() -> None:
             test_piper_voice_button.setEnabled(True)
             test_system_voice_button.setEnabled(True)
-            if worker in voice_test_workers:
-                voice_test_workers.remove(worker)
+            if worker in _BACKGROUND_VOICE_WORKERS["tests"]:
+                _BACKGROUND_VOICE_WORKERS["tests"].remove(worker)
 
         worker.finished.connect(test_finished)
         worker.start()
