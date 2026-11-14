@@ -23,8 +23,13 @@ class FakeSoundDevice:
             {"name": "Laptop Mic", "max_input_channels": 2, "hostapi": 1, "default_samplerate": 44100},
         ]
 
-    def query_devices(self):
-        return self.input_devices
+    def query_devices(self, device=None, kind=None):
+        if device is None:
+            return self.input_devices
+        return self.input_devices[int(device)]
+
+    def check_input_settings(self, **kwargs):
+        return None
 
     def query_hostapis(self):
         return [{"name": "WASAPI"}, {"name": "MME"}]
