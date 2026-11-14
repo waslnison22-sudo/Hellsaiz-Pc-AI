@@ -213,17 +213,18 @@ def _validate_manifest(manifest: Any, expected_version: str | None = None) -> di
 
 def verify_signed_manifest(manifest_bytes: bytes, signature_text: str) -> dict[str, Any]:
     try:
-        signature = base64.b64decode(signature_text.strip(), validate=True)
         from cryptography.exceptions import InvalidSignature
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
         from hellsaiz_pc_ai.update_trust import UPDATE_PUBLIC_KEY_B64
+    except ImportError as exc:
+        raise UpdateCheckError("Не найден модуль криптографической проверки обновлений.") from exc
 
+    try:
+        signature = base64.b64decode(signature_text.strip(), validate=True)
         public_key = Ed25519PublicKey.from_public_bytes(base64.b64decode(UPDATE_PUBLIC_KEY_B64))
         public_key.verify(signature, manifest_bytes)
     except (ValueError, InvalidSignature) as exc:
         raise UpdateCheckError("Подпись манифеста обновления недействительна.") from exc
-    except ImportError as exc:
-        raise UpdateCheckError("Не найден модуль криптографической проверки обновлений.") from exc
 
     try:
         manifest = json.loads(manifest_bytes.decode("utf-8"))

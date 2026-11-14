@@ -84,7 +84,7 @@ jobs:
             "--launcher", "dist/tools/HellsaizLauncher.exe",
             "--updater", "dist/tools/HellsaizUpdater.exe"
           )
-          if (" ${{ steps.previous.outputs.manifest }}" -ne "") {
+          if ("${{ steps.previous.outputs.manifest }}" -ne "") {
             $arguments += @(
               "--previous-manifest", "${{ steps.previous.outputs.manifest }}",
               "--previous-signature", "${{ steps.previous.outputs.signature }}"
