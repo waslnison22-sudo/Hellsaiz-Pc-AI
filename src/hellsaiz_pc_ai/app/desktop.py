@@ -2792,10 +2792,12 @@ def main() -> int:
                     )
         try:
             from hellsaiz_pc_ai.speech.vosk import VoskTranscriber
+            from hellsaiz_pc_ai.speech.piper import PiperSynthesizer
 
             VoskTranscriber.clear_model_cache()
+            PiperSynthesizer.clear_voice_cache()
         except Exception:
-            logging.exception("Could not release cached Vosk models during shutdown")
+            logging.exception("Could not release cached speech models during shutdown")
         instance_lock.release()
 
     app.aboutToQuit.connect(release_speech_runtime)
