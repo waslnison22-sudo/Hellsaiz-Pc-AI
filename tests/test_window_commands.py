@@ -33,6 +33,35 @@ def make_router():
         RiskLevel.CONFIRM,
         lambda args: called.append(("focus_window", args)) or ToolResult(True, args["target"]),
     ))
+    for name, properties, required in (
+        ("inspect_window_controls", {"window_title": {"type": "string"}}, ["window_title"]),
+        (
+            "click_window_control",
+            {"window_title": {"type": "string"}, "control_name": {"type": "string"}},
+            ["window_title", "control_name"],
+        ),
+        (
+            "type_into_window_control",
+            {
+                "window_title": {"type": "string"},
+                "control_name": {"type": "string"},
+                "text": {"type": "string"},
+            },
+            ["window_title", "control_name", "text"],
+        ),
+    ):
+        registry.register(ToolSpec(
+            name,
+            name,
+            {
+                "type": "object",
+                "properties": properties,
+                "required": required,
+                "additionalProperties": False,
+            },
+            RiskLevel.CONFIRM,
+            lambda args, name=name: called.append((name, args)) or ToolResult(True, str(args)),
+        ))
     router = CommandRouter(registry, {}, {}, {})
     return router, called
 
@@ -72,3 +101,21 @@ def test_unknown_window_command_is_not_guessed():
 
     assert router.route("сверни все окна и выключи компьютер") is None
     assert called == []
+
+
+
+def test_ui_automation_phrases_route_to_scoped_tools():
+    router, called = make_router()
+
+    router.route("покажи элементы окна Настройки")
+    router.route("нажми Сохранить в окне Блокнот")
+    router.route('Хеллсайз, введи "hello, world!" в поле Поиск окна Проводник')
+
+    assert called[-3:] == [
+        ("inspect_window_controls", {"window_title": "настройки"}),
+        ("click_window_control", {"control_name": "сохранить", "window_title": "блокнот"}),
+        (
+            "type_into_window_control",
+            {"text": "hello, world!", "control_name": "Поиск", "window_title": "Проводник"},
+        ),
+    ]
