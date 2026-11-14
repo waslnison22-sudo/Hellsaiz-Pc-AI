@@ -1,73 +1,97 @@
-# Optional Desktop Companion — architecture proposal
+# Optional Desktop Companion — architecture and implementation research
 
-Status: **foundation only**. The companion is deliberately disabled by default and is not required to start, speak, route commands, use reminders, or update the app.
+Status: FOUNDATION ONLY. The current desktop application does not show an avatar and does not load a renderer. The companion remains optional and must not become the assistant's core.
 
-## Product behavior
+## Desired UX
 
-- The companion is an optional transparent character overlay, not a separate chat page and not a second assistant process.
-- The existing chat remains the control panel. In the eventual desktop mode the character is drawn directly over the desktop/main application surface without a title bar, frame, background panel, or separate navigation page.
-- A small transparent hit region should allow dragging the character. A context menu may expose hide/show, lock position, size, opacity, and model selection.
-- The companion must be possible to disable completely. Disabling it must release renderer resources and must not change the assistant's normal operation.
+- One local assistant process; no companion service or second executable.
+- A transparent, frameless desktop surface containing only the character: no title bar, page, navigation, chat panel or opaque card.
+- The existing Hellsaiz PC AI window remains the settings/chat surface. The character is a visual companion, not a separate conversation client.
+- Dragging, position lock, size, opacity, hide/show and model selection are context actions, not a separate UI page.
+- Renderer failure hides the character and must not affect voice, commands, reminders, workflows or the main application.
+- No webcam or emotion recognition. Expressions come only from assistant events and TTS output.
 
-A desktop overlay is still implemented through a native window/widget surface. On Windows, Qt documents transparent painting via `WA_TranslucentBackground`; top-level transparent widgets also need `FramelessWindowHint`. The attribute should be set before the surface is shown, not toggled later.
+A desktop overlay is a native widget surface, but it does not need to look like a conventional window. Qt's Windows documentation requires WA_TranslucentBackground and FramelessWindowHint for a translucent top-level widget. Set the attribute before showing the widget. See [Qt QWidget — Creating Translucent Windows](https://doc.qt.io/qt-6/qwidget.html).
 
 ## Separation of concerns
 
-1. **Assistant core** emits semantic state changes: idle, listening, thinking, speaking, error.
-2. **Emotion mapper** maps optional response metadata and speech events to a renderer-neutral emotion.
-3. **Speech synchronizer** maps audio timing or phoneme/viseme events to mouth poses. The first version should support amplitude-based mouth opening; a better renderer adapter can use explicit A/I/U/E/O visemes when its TTS engine supplies alignment.
-4. **Renderer adapter** loads and draws a model and applies a normalized snapshot. It must not call the LLM, execute tools, capture microphone input, or access secrets.
-5. **Overlay host** owns the transparent surface and lifetime. It may be parented to the main application window initially; a desktop-pinned mode can use an owned, borderless top-level surface while remaining in the same process and UI system.
+1. Assistant core emits semantic events: idle, listening, thinking, speaking, error.
+2. Emotion mapper maps explicit response metadata to neutral, happy, sad, surprised, angry, confused or curious.
+3. Speech synchronizer maps TTS output to a mouth-open envelope or A/I/U/E/O visemes. It consumes output audio, not the microphone recording.
+4. Renderer adapter loads a supported model and applies a normalized snapshot. It cannot call the LLM, execute tools, capture audio or read secrets.
+5. Overlay host owns the transparent surface and lifetime in the existing process/event loop.
+6. Model package manager validates a manifest, referenced assets and relative paths. It never imports or executes scripts from a model folder.
 
-The Python contracts in `hellsaiz_pc_ai.companion` establish the normalized states, thread-safe event bridge, renderer protocol, and validated model manifest. No third-party model code is imported dynamically. Future renderers must be explicitly registered by the application.
+The current Python package hellsaiz_pc_ai.companion provides normalized modes, emotions, visemes and snapshot validation; a thread-safe snapshot controller; a renderer protocol; and model manifest validation with path-traversal checks. These are contracts only. There is no renderer, avatar file or animation in 0.1.4.
 
-## Model formats
+## Supported model families
 
-| Format | Use | Animation support | Role |
+| Format | Purpose | Animation data | Status |
 |---|---|---|---|
-| Live2D Cubism | 2D illustrated/anime character | Parameters, motions, expressions, physics and mouth/eye control from authored model data | Best first candidate for a polished 2D companion |
-| VRM 1.0 | 3D humanoid avatar | Standard expressions, blink, gaze, vowel mouth shapes and spring bones | Optional 3D adapter |
-| Sprite/PNG sequence | Lightweight 2D fallback | Pre-rendered idle/listening/thinking/speaking/emotion states | Lowest setup cost and safest starter |
-| Custom adapter | User-provided future formats | Adapter-defined | Extension path without changing assistant core |
+| Live2D Cubism | Illustrated 2D character | Rig parameters, motions, expressions, physics, lip-sync | Recommended first production renderer |
+| VRM 1.0 | 3D humanoid character | Standard emotions, vowel mouth shapes, blink, gaze | Future adapter |
+| Sprite/PNG sequence | Lightweight 2D prototype | Pre-rendered idle/listening/thinking/speaking states | Best overlay prototype |
+| Custom adapter | Other user-owned formats | Adapter-defined | Extension point |
 
-“Any model” means any supported format with a renderer adapter, not any arbitrary file. The app should validate a model package and its referenced assets; it must not execute scripts shipped inside untrusted model folders.
+“Any model” means any format with a supported renderer adapter. A model file by itself cannot animate; it needs compatible art/geometry, textures, rig/parameters and motion data. Arbitrary model files and their scripts must never be executed.
 
-## Renderer recommendation
+## Recommended renderer: Live2D Cubism
 
-For the requested illustrated companion, start with **Live2D Cubism** as the first production renderer. The official Web SDK is written for WebGL and has a reusable framework; the Native SDK supports Windows graphics APIs including DirectX 11 and OpenGL. The actual model is exported from Cubism Editor (for example `.moc3` plus `.model3.json` and texture assets). The Cubism Core binary is distributed within the official SDK package and is not an ordinary open-source GitHub dependency.
+For the requested illustrated desktop character, Live2D Cubism is the strongest first production candidate.
 
-For later 3D support, use **VRM 1.0** through a renderer such as Three.js + three-vrm. VRM standardizes facial expressions including emotions, blink and A/I/U/E/O mouth shapes, plus gaze controls. This is a clean match for the normalized emotion/viseme contract already prepared here.
+- The official platform support matrix, updated 2026-09-29, lists Windows Native support for OpenGL, DirectX 11 and Vulkan. This does not require CUDA or an NVIDIA GPU.
+- Live2D's official Native SDK is implemented in C++; it is distributed separately from this repository.
+- Cubism lip-sync uses model parameters. MotionSync can map audio to viseme-style mouth movement, subject to the SDK package and MotionSync Core.
+- The SDK and Core are not regular open-source Python dependencies. Do not bundle proprietary SDK files or download them silently.
 
-A sprite renderer is a useful first visible prototype if Live2D SDK integration or model licensing delays the 2D renderer. It can share the same companion state bridge.
+References:
+- [Live2D SDK platform support](https://docs.live2d.com/en/cubism-sdk-manual/platform/)
+- [Live2D Cubism SDK overview and Native SDK](https://www.live2d.com/en/sdk/about/)
+- [Live2D lip-sync parameter mapping](https://docs.live2d.com/en/cubism-sdk-manual/lipsync/)
+- [Live2D MotionSync Plugin](https://www.live2d.com/en/sdk/download/motionsync/)
 
-## Animation and speech synchronization
+### Recommended integration route
 
-- Listening: attentive expression, subtle eye/gaze motion.
-- Thinking: neutral/curious expression, optional small idle motion.
-- Speaking: mouth-open envelope driven by the outgoing audio; use explicit visemes when phoneme timing is available.
-- Completed response: restore idle expression, optionally add a short happy/neutral response.
-- Error: brief confused expression, then return to idle.
+1. Prototype the overlay with a small sprite renderer and transparent Qt widget. This validates transparency, hit testing, DPI, multi-monitor placement and lifecycle without a proprietary SDK.
+2. Implement Live2D Cubism Native as a renderer adapter in the same application process, using DirectX 11 or OpenGL. Keep the model and SDK in an optional component.
+3. Add mouth motion from Piper PCM first; add explicit visemes/MotionSync when SDK licensing and model parameters are confirmed.
+4. Add VRM as a separate renderer adapter, not as a rewrite of the companion controller.
 
-The avatar must never infer facial emotion from private webcam input by default. All expressions are driven by explicit app events and the selected TTS output only.
+A Qt WebEngine/Three.js renderer is technically possible, but adds a sizeable WebEngine runtime and another rendering layer to the Windows package. Prefer native Live2D for the first production renderer.
 
-## Windows/Qt overlay constraints
+Before any redistribution, verify the current Live2D SDK terms and each model creator's license. Keep user-owned models and proprietary SDK components outside the core update package.
 
-- Set `WA_TranslucentBackground` before showing the widget; use a frameless window flag for top-level transparent mode.
-- Use an owned Qt surface and lifecycle tied to the main application. Do not launch a separate companion executable.
-- Keep rendering and animation off the assistant's command/voice worker. A renderer failure should hide the character and log the issue without taking down the application.
-- Test multi-monitor coordinates, DPI scaling, display changes, sleep/resume, focus behavior and hit testing.
-- Make desktop click-through optional. A fully click-through surface cannot also be dragged; use a user-toggle or a narrow draggable area.
+## VRM 1.0
 
-## Licensing and packaging
+VRM 1.0 specifies preset emotion expressions (happy, angry, sad, relaxed, surprised), vowel mouth expressions (aa, ih, ou, ee, oh), blink and gaze. This maps cleanly to the neutral companion contract.
 
-Live2D's SDK download is governed by its SDK agreements. Live2D states that publication licensing applies when content using its SDK is released; individual/small-scale exemptions and special Expandable Application cases are defined on its license page. Before redistributing the application or any model, re-check the current terms and the model creator's license. The private local prototype should keep SDK binaries and character model assets in an optional user-selected component rather than silently bundling or downloading them.
+References:
+- [VRM 1.0 expressions](https://github.com/vrm-c/vrm-specification/blob/master/specification/VRMC_vrm-1.0/expressions.md)
+- [VRM 1.0 specification](https://github.com/vrm-c/vrm-specification/tree/master/specification/VRMC_vrm-1.0)
 
-VRM model packages also retain their creator's own license and attribution requirements. The application should show the model's metadata/license information before enabling an imported model when available.
+## Speech and expression state mapping
 
-## Planned implementation stages
+- Listening: attentive pose and subtle gaze motion.
+- Thinking: neutral/curious pose.
+- Speaking: mouth envelope from outgoing TTS audio; use explicit viseme events if available.
+- Finished response: return to idle.
+- Error: brief confused state, then idle.
 
-1. Build a sprite renderer and transparent overlay host for one local model.
-2. Add the Live2D adapter after confirming SDK version, model export and licensing path.
-3. Add audio-envelope mouth movement; later map phoneme/viseme events.
-4. Add VRM adapter as an independent renderer.
-5. Add model library/import UI only after the rendering, validation and user-data lifecycle are stable.
+For a Live2D model, map visemes/envelope to that model's actual mouth parameter IDs. For VRM, map to aa/ih/ou/ee/oh. Do not assume every imported model has every parameter. The adapter must advertise supported features.
+
+## Reliability and privacy
+
+- Companion disabled: no renderer initialization, model loading, screen capture, microphone capture or GPU initialization.
+- Renderer crash: hide it, log a safe diagnostic and keep the assistant alive.
+- No webcam, screen capture or remote API for emotion detection.
+- Use the same in-process event bridge as the assistant; no separate LLM or bot.
+- Test AMD graphics, DPI, monitor changes, sleep/resume, focus, drag and click-through behavior.
+- A fully click-through window cannot also be dragged; use a small drag region or user-toggle.
+
+## Implementation stages
+
+1. Sprite renderer and transparent overlay host.
+2. Audio-envelope mouth animation using Piper PCM.
+3. Live2D Native adapter once SDK package/license path is confirmed.
+4. VRM adapter.
+5. Model import/library UI, metadata/license display and lifecycle cleanup.
