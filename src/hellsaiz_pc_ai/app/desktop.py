@@ -1767,13 +1767,14 @@ def main() -> int:
             for device in devices:
                 microphone_combo.addItem(
                     f"{device.display_name} · {device.max_input_channels} вход.",
-                    device.name,
+                    device.display_name,
                 )
             saved_index = microphone_combo.findData(saved_name)
             if saved_name and saved_index < 0:
+                active_microphone["name"] = ""
                 microphone_status.setText(
                     f"Сохранённый микрофон «{saved_name}» не найден. "
-                    "Выбери доступное устройство или системный микрофон."
+                    "Временно выбрано системное устройство по умолчанию."
                 )
                 microphone_combo.setCurrentIndex(0)
             else:
