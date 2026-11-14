@@ -26,7 +26,7 @@ def resolve_active_target(install_root: Path) -> Path:
         or version in {".", ".."}
         or Path(version).name != version
         or "/" in version
-        or "\\\\" in version
+        or "\\" in version
     ):
         raise ValueError("В active.json указана недопустимая версия.")
     versions_root = (install_root / "versions").resolve()
