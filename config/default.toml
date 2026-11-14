@@ -37,11 +37,17 @@ recording_seconds = 5
 notepad = ["notepad.exe"]
 calculator = ["calc.exe"]
 explorer = ["explorer.exe"]
+task_manager = ["taskmgr.exe"]
+settings = ["__shell_link__", "ms-settings:"]
+control_panel = ["control.exe"]
 
 [windows.app_aliases]
 notepad = ["блокнот", "notepad"]
 calculator = ["калькулятор", "calculator"]
 explorer = ["проводник", "файловый менеджер", "explorer"]
+task_manager = ["диспетчер задач", "диспетчер", "task manager"]
+settings = ["настройки", "параметры", "windows settings"]
+control_panel = ["панель управления", "control panel"]
 
 # Add Steam and games to windows.allowed_apps before adding their phrase aliases.
 # Example: steam = ["стим", "steam client", "игровой клиент"]
