@@ -1,12 +1,22 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import zipfile
 from pathlib import Path
 
 import pytest
 
-from scripts.package_release import make_portable_zip, validate_portable_zip
+
+_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "package_release.py"
+_SPEC = importlib.util.spec_from_file_location("hellsaiz_package_release", _SCRIPT_PATH)
+if _SPEC is None or _SPEC.loader is None:
+    raise RuntimeError("Could not load scripts/package_release.py for tests.")
+_PACKAGE_RELEASE = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(_PACKAGE_RELEASE)
+
+make_portable_zip = _PACKAGE_RELEASE.make_portable_zip
+validate_portable_zip = _PACKAGE_RELEASE.validate_portable_zip
 
 
 def _install_tree(root: Path) -> tuple[str, list[str]]:
