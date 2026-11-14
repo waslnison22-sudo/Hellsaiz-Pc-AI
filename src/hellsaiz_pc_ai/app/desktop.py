@@ -614,15 +614,6 @@ def main() -> int:
             reminder_status.setText("Выбери напоминание для отмены.")
             return
         reminder_id = int(item.data(Qt.ItemDataRole.UserRole))
-        answer = QMessageBox.question(
-            window,
-            "Отменить напоминание",
-            f"Отменить напоминание #{reminder_id}?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        if answer != QMessageBox.StandardButton.Yes:
-            return
         if reminder_store.dismiss(reminder_id):
             reminder_status.setText(f"Напоминание #{reminder_id} отменено.")
         else:
@@ -1061,16 +1052,10 @@ def main() -> int:
         if item is None:
             return
         workflow_id = item.data(Qt.ItemDataRole.UserRole)
-        answer = QMessageBox.question(
-            window, "Удалить сценарий", f"Удалить сценарий {workflow_id}?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        if answer == QMessageBox.StandardButton.Yes:
-            workflow_library.delete(workflow_id)
-            refresh_scenario_list()
-            refresh_hotkey_service()
-            scenario_status.setText(f"Сценарий {workflow_id} удалён.")
+        workflow_library.delete(workflow_id)
+        refresh_scenario_list()
+        refresh_hotkey_service()
+        scenario_status.setText(f"Сценарий {workflow_id} удалён.")
 
     def run_selected_scenario() -> None:
         workflow_id = scenario_id.text().strip()
