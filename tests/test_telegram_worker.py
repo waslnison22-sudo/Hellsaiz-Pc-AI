@@ -164,3 +164,53 @@ def test_worker_does_not_run_poll_without_required_proxy():
     worker.stop()
     worker.run()
     assert any("ожидает" in item for item in statuses)
+
+
+
+def test_worker_run_polls_and_replies_only_to_an_authorized_safe_command():
+    calls = []
+    worker_holder = {}
+
+    def api_call(method, payload):
+        calls.append((method, payload))
+        if method == "getMe":
+            return {"ok": True, "result": {"id": 1, "username": "hellsaiz_test_bot"}}
+        if method == "getUpdates":
+            worker_holder["worker"].stop()
+            return {
+                "ok": True,
+                "result": [
+                    {
+                        "update_id": 10,
+                        "message": {
+                            "from": {"id": 111},
+                            "chat": {"id": 222},
+                            "text": "/time",
+                        },
+                    },
+                    {
+                        "update_id": 11,
+                        "message": {
+                            "from": {"id": 999},
+                            "chat": {"id": 222},
+                            "text": "/time",
+                        },
+                    },
+                ],
+            }
+        if method == "sendMessage":
+            return {"ok": True, "result": {"message_id": 2}}
+        raise AssertionError(method)
+
+    worker = make_worker(api_call=api_call, require_proxy=False)
+    worker_holder["worker"] = worker
+    worker.run()
+
+    assert [method for method, _payload in calls] == ["getMe", "getUpdates", "sendMessage"]
+    assert calls[-1][1] == {"chat_id": 222, "text": "12:34"}
+
+
+def test_worker_rejects_unsafe_or_unknown_registry_tools():
+    worker = make_worker(allowed_tools={"get_local_time", "unsafe_action"})
+    assert "безопасности" in worker._execute_safe_tool("unsafe_action").casefold()
+    assert "отключена" in worker._execute_safe_tool("get_system_info").casefold()
