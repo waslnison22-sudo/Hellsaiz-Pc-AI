@@ -31,23 +31,17 @@ def test_registered_read_tool_reads_only_when_called(monkeypatch):
     assert values["count"] == 1
 
 
-def test_write_tool_keeps_confirmation_gate_and_exact_text(monkeypatch):
+def test_write_tool_executes_explicit_write_without_confirmation(monkeypatch):
     captured = []
     monkeypatch.setattr(clipboard, "write_clipboard_text", captured.append)
     registry = ToolRegistry()
     clipboard.register_clipboard_tools(registry)
     text = "Привет, Мир!\nВторая строка"
 
-    denied = registry.execute(
+    result = registry.execute(
         "write_clipboard", {"text": text}, confirm=lambda *_: False
     )
-    assert not denied.ok
-    assert captured == []
-
-    allowed = registry.execute(
-        "write_clipboard", {"text": text}, confirm=lambda *_: True
-    )
-    assert allowed.ok
+    assert result.ok
     assert captured == [text]
 
 
@@ -67,7 +61,7 @@ def test_clipboard_write_rejects_empty_or_oversized_text(monkeypatch):
     assert not oversized.ok
 
 
-def test_clipboard_read_tool_is_safe_and_write_tool_requires_confirmation():
+def test_clipboard_read_and_write_tools_are_registered():
     registry = ToolRegistry()
     clipboard.register_clipboard_tools(registry)
     tools = {tool["function"]["name"]: tool for tool in registry.openai_schemas()}
