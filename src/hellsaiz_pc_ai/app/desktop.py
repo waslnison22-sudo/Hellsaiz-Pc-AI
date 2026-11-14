@@ -1703,6 +1703,7 @@ def main() -> int:
         active_stt.update({
             "primary": primary,
             "fallback": fallback,
+            "recording_seconds": float(recording_duration_combo.currentData()),
             "vosk_model_path": vosk_model_edit.text().strip(),
             "whisper_cpp_executable": whisper_executable_edit.text().strip(),
             "whisper_cpp_model": whisper_model_edit.text().strip(),
@@ -1764,6 +1765,17 @@ def main() -> int:
             always_listen_check.setChecked(False)
             always_listen_check.blockSignals(False)
             profile_data["always_listen"] = False
+            try:
+                profile_path = settings.workflows_path.parent / "ai_profile.json"
+                profile_path.parent.mkdir(parents=True, exist_ok=True)
+                temporary = profile_path.with_suffix(".json.tmp")
+                temporary.write_text(
+                    json.dumps(profile_data, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+                temporary.replace(profile_path)
+            except OSError as exc:
+                logging.warning("Could not persist disabled wake listener: %s", exc)
             return
 
         worker = WakeListenerWorker(model_dir, settings.wake_aliases)
@@ -1784,6 +1796,17 @@ def main() -> int:
             always_listen_check.setChecked(False)
             always_listen_check.blockSignals(False)
             profile_data["always_listen"] = False
+            try:
+                profile_path = settings.workflows_path.parent / "ai_profile.json"
+                profile_path.parent.mkdir(parents=True, exist_ok=True)
+                temporary = profile_path.with_suffix(".json.tmp")
+                temporary.write_text(
+                    json.dumps(profile_data, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+                temporary.replace(profile_path)
+            except OSError as exc:
+                logging.warning("Could not persist wake listener failure: %s", exc)
 
         worker.command.connect(on_wake_command)
         worker.status.connect(wake_listener_status.setText)
