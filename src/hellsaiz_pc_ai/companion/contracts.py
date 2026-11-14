@@ -26,11 +26,11 @@ class CompanionEmotion(StrEnum):
 
 class CompanionViseme(StrEnum):
     SILENCE = "sil"
-    A = "A"
-    I = "I"
-    U = "U"
-    E = "E"
-    O = "O"
+    VOWEL_A = "A"
+    VOWEL_I = "I"
+    VOWEL_U = "U"
+    VOWEL_E = "E"
+    VOWEL_O = "O"
 
 
 @dataclass(frozen=True)
