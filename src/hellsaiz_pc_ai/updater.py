@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import time
 import uuid
 import zipfile
@@ -26,6 +27,20 @@ from hellsaiz_pc_ai.update_client import (
 
 class ApplyUpdateError(RuntimeError):
     pass
+
+
+def run_package_self_test() -> int:
+    """Exercise the cryptographic primitive required by signed update manifests."""
+    try:
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+        message = b"Hellsaiz PC AI updater self-test"
+        private_key = Ed25519PrivateKey.generate()
+        signature = private_key.sign(message)
+        private_key.public_key().verify(signature, message)
+        return 0
+    except Exception:
+        return 2
 
 
 def _write_json_atomic(path: Path, data: dict[str, Any]) -> None:
@@ -342,6 +357,9 @@ def _show_error(message: str) -> None:
 
 
 def main() -> int:
+    if sys.argv[1:] == ["--self-test"]:
+        return run_package_self_test()
+
     parser = argparse.ArgumentParser(description="Hellsaiz PC AI update helper")
     parser.add_argument("--install", action="store_true")
     parser.add_argument("--install-root", type=Path, required=True)
