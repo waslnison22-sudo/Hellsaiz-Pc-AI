@@ -10,8 +10,6 @@ from hellsaiz_pc_ai.telegram.config import (
     save_settings,
     validate_bot_token,
 )
-from hellsaiz_pc_ai import telegram
-
 from hellsaiz_pc_ai.telegram.worker import TelegramBotWorker
 
 
@@ -154,6 +152,77 @@ def test_telegram_settings_reject_unknown_and_write_tools(tmp_path: Path):
     )
     with pytest.raises(ValueError):
         load_settings(path)
+
+
+
+def test_telegram_token_is_persisted_outside_json_and_reloaded(monkeypatch, tmp_path: Path):
+    from hellsaiz_pc_ai.telegram import config
+
+    protected = {}
+
+    def fake_save(path, value):
+        protected[str(path)] = "dpapi:" + value
+
+    def fake_load(path):
+        return protected.get(str(path), "").removeprefix("dpapi:")
+
+    def fake_delete(path):
+        protected.pop(str(path), None)
+
+    monkeypatch.setattr(config, "save_secret", fake_save)
+    monkeypatch.setattr(config, "load_secret", fake_load)
+    monkeypatch.setattr(config, "delete_secret", fake_delete)
+
+    settings_path = tmp_path / "telegram.json"
+    settings = TelegramSettings(
+        enabled=True,
+        allowed_user_ids=[111],
+        allowed_chat_ids=[222],
+        allowed_tools=["get_local_time"],
+        token=TOKEN,
+    )
+    save_settings(settings_path, settings)
+    raw = settings_path.read_text(encoding="utf-8")
+    assert TOKEN not in raw
+    assert "token" not in raw
+    assert protected[str(settings_path.with_name("telegram_token.dpapi"))] == "dpapi:" + TOKEN
+    assert load_settings(settings_path).token == TOKEN
+
+
+def test_dpapi_failure_does_not_write_enabled_telegram_config(monkeypatch, tmp_path: Path):
+    from hellsaiz_pc_ai.telegram import config
+
+    settings_path = tmp_path / "telegram.json"
+
+    def fail_save(_path, _value):
+        raise config.SecureStoreError("DPAPI unavailable")
+
+    monkeypatch.setattr(config, "save_secret", fail_save)
+    settings = TelegramSettings(
+        enabled=True,
+        allowed_user_ids=[111],
+        allowed_chat_ids=[222],
+        allowed_tools=["get_local_time"],
+        token=TOKEN,
+    )
+    with pytest.raises(config.SecureStoreError):
+        save_settings(settings_path, settings)
+    assert not settings_path.exists()
+
+
+def test_disabling_telegram_deletes_dpapi_token(monkeypatch, tmp_path: Path):
+    from hellsaiz_pc_ai.telegram import config
+
+    protected = {}
+    monkeypatch.setattr(config, "save_secret", lambda path, value: protected.update({str(path): value}))
+    monkeypatch.setattr(config, "delete_secret", lambda path: protected.pop(str(path), None))
+    monkeypatch.setattr(config, "load_secret", lambda path: protected.get(str(path), ""))
+
+    path = tmp_path / "telegram.json"
+    save_settings(path, TelegramSettings(True, [111], [222], ["get_local_time"], TOKEN))
+    save_settings(path, TelegramSettings(False, [111], [222], [], ""))
+    assert load_settings(path).token == ""
+    assert not protected
 
 
 def test_worker_does_not_run_poll_without_required_proxy():
