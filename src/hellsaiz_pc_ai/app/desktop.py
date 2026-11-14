@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import logging
 import tempfile
-import threading
 from html import escape
 from pathlib import Path
 from typing import Any
@@ -38,6 +37,7 @@ from hellsaiz_pc_ai.tools.reminders import register_reminder_tools
 from hellsaiz_pc_ai.tools.system import register_system_tools
 from hellsaiz_pc_ai.tools.public_info import register_public_info_tools
 from hellsaiz_pc_ai.app.wallpaper import WallpaperError, WallpaperStore
+from hellsaiz_pc_ai.app.shortcuts import ensure_desktop_shortcut
 from hellsaiz_pc_ai.speech.voice_library import (
     VoiceLibraryError, download_voice, list_installed_voices,
 )
@@ -175,6 +175,8 @@ def main() -> int:
     active_voice = {"name": str(profile_data.get("voice_name") or settings.speech.tts_voice_name)}
     install_root = installed_app_root()
     current_app_version = installed_version(install_root, APP_VERSION)
+    if install_root is not None:
+        ensure_desktop_shortcut(install_root / "HellsaizLauncher.exe")
 
     app = QApplication.instance() or QApplication([])
     window = QMainWindow()
@@ -184,30 +186,6 @@ def main() -> int:
     wallpaper_store = WallpaperStore(settings.workflows_path.parent)
     wallpaper_movie = None
     wallpaper_layer = None
-
-    class ApprovalBroker(QObject):
-        request = Signal(str, object, object)
-
-        def __init__(self) -> None:
-            super().__init__()
-            self.request.connect(self._show)
-
-        @Slot(str, object, object)
-        def _show(self, name: str, arguments: object, response: object) -> None:
-            result = QMessageBox.question(
-                window,
-                "Подтверждение действия",
-                f"Разрешить инструменту {name} выполнить действие?\\nАргументы: {arguments}",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
-            )
-            response["approved"] = result == QMessageBox.StandardButton.Yes
-            response["event"].set()
-
-        def confirm(self, spec: Any, arguments: dict[str, Any]) -> bool:
-            response: dict[str, Any] = {"event": threading.Event(), "approved": False}
-            self.request.emit(spec.name, arguments, response)
-            return response["event"].wait(timeout=120) and bool(response["approved"])
 
     class HotkeyBridge(QObject):
         activated = Signal(str, str)
@@ -230,14 +208,12 @@ def main() -> int:
             prompt: str,
             voice_input: bool,
             speak_reply: bool,
-            broker: ApprovalBroker,
             workflow_trigger: WorkflowTrigger | None = None,
         ) -> None:
             super().__init__()
             self.prompt = prompt
             self.voice_input = voice_input
             self.speak_reply = speak_reply
-            self.broker = broker
             self.workflow_trigger = workflow_trigger
 
         def run(self) -> None:
@@ -260,9 +236,7 @@ def main() -> int:
                     for workflow_id, graph in workflow_library.list():
                         if trigger.workflow_id is not None and workflow_id != trigger.workflow_id:
                             continue
-                        execution = workflow_runner.run(
-                            graph, trigger, confirm=self.broker.confirm
-                        )
+                        execution = workflow_runner.run(graph, trigger)
                         if execution.started:
                             lines = [
                                 f"Сценарий «{graph.name}» ({workflow_id}): {execution.message}"
@@ -275,9 +249,9 @@ def main() -> int:
 
                 if self.workflow_trigger is None:
                     if answer is None:
-                        answer = router.route(prompt, confirm=self.broker.confirm)
+                        answer = router.route(prompt)
                     if answer is None and assistant is not None:
-                        answer = assistant.reply(prompt, confirm=self.broker.confirm)
+                        answer = assistant.reply(prompt)
                     if answer is None:
                         answer = (
                             "Эта фраза пока не входит в список локальных команд. "
@@ -935,7 +909,7 @@ def main() -> int:
             render_graph(example_graph)
             refresh_builder_sources(example_graph)
             scenario_status.setText(
-                "Пример создан. Сохрани его; Ctrl+Alt+H будет запускать действие с подтверждением."
+                "Пример создан. Сохрани его; Ctrl+Alt+H будет запускать действие автоматически."
             )
         except ValueError as exc:
             scenario_status.setText(str(exc))
@@ -1117,16 +1091,6 @@ def main() -> int:
             scenario_status.setText(f"Не удалось подготовить сценарий: {exc}")
             return
 
-        answer = QMessageBox.question(
-            window,
-            "Запустить сценарий",
-            f"Выполнить сценарий «{graph.name}» сейчас?\n"
-            "Опасные действия по-прежнему запросят отдельное подтверждение.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        if answer != QMessageBox.StandardButton.Yes:
-            return
         start_worker(
             workflow_trigger=WorkflowTrigger(trigger_kind, trigger_value, workflow_id)
         )
@@ -1895,7 +1859,6 @@ def main() -> int:
         "QSplitter::handle { background:rgba(190,207,229,70); }"
     )
 
-    broker = ApprovalBroker()
     workers: list[Worker] = []
 
     def start_worker(
@@ -1932,7 +1895,6 @@ def main() -> int:
             prompt,
             voice_input,
             speak_toggle.isChecked(),
-            broker,
             workflow_trigger,
         )
         workers.append(worker)
