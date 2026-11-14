@@ -22,6 +22,30 @@ jobs:
           python-version: "3.12"
           cache: pip
 
+      - name: Install validation and build dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed." }
+          python -m pip install -e ".[dev,build,windows,voice,vision]"
+          if ($LASTEXITCODE -ne 0) { throw "Validation/build dependencies could not be installed." }
+
+      - name: Run Ruff and Windows test suite
+        shell: pwsh
+        run: |
+          ruff check .
+          if ($LASTEXITCODE -ne 0) { throw "Ruff found issues." }
+          python -m pytest -q --junitxml=dist-release-pytest.xml
+          if ($LASTEXITCODE -ne 0) { throw "Windows test suite failed." }
+
+      - name: Validate workflow YAML
+        shell: pwsh
+        run: |
+          python -m pip install pyyaml
+          if ($LASTEXITCODE -ne 0) { throw "Could not install YAML validation dependency." }
+          python scripts/validate_workflow_yaml.py .github/workflows/ci.yml .github/workflows/release-windows.yml
+          if ($LASTEXITCODE -ne 0) { throw "Workflow YAML validation failed." }
+
       - name: Build Windows application
         shell: pwsh
         env:
@@ -30,10 +54,6 @@ jobs:
           $version = $env:GITHUB_REF_NAME.TrimStart("v")
           python scripts/set_version.py $version
           if ($LASTEXITCODE -ne 0) { throw "Version setup failed." }
-
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[build,windows,voice,vision]"
-          if ($LASTEXITCODE -ne 0) { throw "Dependency installation failed." }
 
           pyinstaller --noconfirm --clean --onedir --windowed --uac-admin --name HellsaizPC_AI --distpath dist/app --workpath build/app --collect-all vosk --collect-all sounddevice --collect-all pycaw --collect-all pynput --collect-all pywinauto --collect-all comtypes --collect-all piper --collect-all onnxruntime --collect-all rapidocr --collect-all mss --collect-all cv2 src/hellsaiz_pc_ai/__main__.py
           if ($LASTEXITCODE -ne 0) { throw "Desktop build failed." }
@@ -62,6 +82,7 @@ jobs:
             gh release download $previous.tagName --pattern "HellsaizPC_AI-update-manifest.json" --pattern "HellsaizPC_AI-update-manifest.sig" --pattern "HellsaizPC_AI-windows-x64-portable.zip" --dir $directory
             if ($LASTEXITCODE -eq 0) {
               "tag=$($previous.tagName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+              "version=$($previous.tagName.TrimStart('v'))" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
               "manifest=$directory\HellsaizPC_AI-update-manifest.json" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
               "signature=$directory\HellsaizPC_AI-update-manifest.sig" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
               "portable=$directory\HellsaizPC_AI-windows-x64-portable.zip" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
@@ -147,6 +168,43 @@ jobs:
           if ((Get-Item $setup).Length -le 0) { throw "Windows setup installer is empty." }
           Copy-Item $setup "dist/release-assets/HellsaizPC_AI_Setup.exe" -Force
 
+      - name: Smoke-test Windows setup installation and removal
+        shell: pwsh
+        run: |
+          $smokeRoot = Join-Path $env:RUNNER_TEMP "HellsaizPC_AI-Setup-Smoke"
+          Remove-Item -Recurse -Force $smokeRoot -ErrorAction SilentlyContinue
+          $setupProcess = Start-Process -FilePath (Resolve-Path "dist/HellsaizPC_AI_Setup.exe") -ArgumentList @(
+            "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=$smokeRoot"
+          ) -PassThru -Wait
+          if ($setupProcess.ExitCode -ne 0) {
+            throw "Silent installer smoke test failed with exit code $($setupProcess.ExitCode)."
+          }
+
+          $activePath = Join-Path $smokeRoot "active.json"
+          if (-not (Test-Path $activePath -PathType Leaf)) { throw "Installer did not create active.json." }
+          $installed = Get-Content $activePath -Raw | ConvertFrom-Json
+          if ($installed.active_version -ne $env:GITHUB_REF_NAME.TrimStart("v")) {
+            throw "Installer selected an unexpected application version."
+          }
+          foreach ($required in @("HellsaizLauncher.exe", "HellsaizUpdater.exe")) {
+            if (-not (Test-Path (Join-Path $smokeRoot $required) -PathType Leaf)) {
+              throw "Installer did not install $required."
+            }
+          }
+
+          $uninstaller = Join-Path $smokeRoot "unins000.exe"
+          if (-not (Test-Path $uninstaller -PathType Leaf)) { throw "Installer did not register an uninstaller." }
+          $uninstallProcess = Start-Process -FilePath $uninstaller -ArgumentList @(
+            "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"
+          ) -PassThru -Wait
+          if ($uninstallProcess.ExitCode -ne 0) {
+            throw "Silent uninstaller smoke test failed with exit code $($uninstallProcess.ExitCode)."
+          }
+          if (Test-Path $smokeRoot) {
+            throw "Uninstaller left the smoke installation directory behind."
+          }
+          Write-Host "Windows installer install/uninstall smoke test passed."
+
       - name: Test in-place update from previous stable release
         if: steps.previous.outputs.portable != ''
         shell: pwsh
@@ -158,8 +216,10 @@ jobs:
 
           $activePath = Join-Path $stage "active.json"
           $active = Get-Content $activePath -Raw | ConvertFrom-Json
-          if ($active.active_version -ne "0.1.3") {
-            throw "Previous portable package is not the expected 0.1.3 baseline: $($active.active_version)"
+          $previousVersion = "${{ steps.previous.outputs.version }}"
+          $version = $env:GITHUB_REF_NAME.TrimStart("v")
+          if ($active.active_version -ne $previousVersion) {
+            throw "Previous portable package version mismatch. Expected $previousVersion, found $($active.active_version)."
           }
 
           # Isolate the test user's profile; the updater must leave it untouched.
@@ -167,9 +227,10 @@ jobs:
           $userData = Join-Path $env:LOCALAPPDATA "HellsaizPC_AI"
           New-Item -ItemType Directory -Force -Path $userData | Out-Null
           $sentinel = Join-Path $userData "update-smoke-user-data.txt"
-          [System.IO.File]::WriteAllText($sentinel, "user-data-survives-0.1.3-to-0.1.4", [System.Text.UTF8Encoding]::new($false))
+          $sentinelContent = "user-data-survives-$previousVersion-to-$version"
+          [System.IO.File]::WriteAllText($sentinel, $sentinelContent, [System.Text.UTF8Encoding]::new($false))
 
-          $updateDir = Join-Path $stage "updates/0.1.4"
+          $updateDir = Join-Path $stage "updates/$version"
           New-Item -ItemType Directory -Force -Path $updateDir | Out-Null
           $archive = Join-Path $updateDir "HellsaizPC_AI-windows-x64-full.zip"
           $manifest = Join-Path $updateDir "HellsaizPC_AI-update-manifest.json"
@@ -199,32 +260,33 @@ jobs:
           }
 
           $updated = Get-Content $activePath -Raw | ConvertFrom-Json
-          if ($updated.active_version -ne "0.1.4") {
-            throw "The updater did not switch active.json to 0.1.4."
+          if ($updated.active_version -ne $version) {
+            throw "The updater did not switch active.json to $version."
           }
-          $healthMarker = Join-Path $stage "health/0.1.4.ok"
+          $healthMarker = Join-Path $stage "health/$version.ok"
           if (-not (Test-Path $healthMarker -PathType Leaf)) {
             throw "The new application did not write its 0.1.4 health marker."
           }
-          if (-not (Test-Path (Join-Path $stage "versions/0.1.3/HellsaizPC_AI.exe") -PathType Leaf)) {
-            throw "The previous 0.1.3 application was not retained for rollback."
+          if (-not (Test-Path (Join-Path $stage "versions/$previousVersion/HellsaizPC_AI.exe") -PathType Leaf)) {
+            throw "The previous $previousVersion application was not retained for rollback."
           }
           if (-not (Test-Path $sentinel -PathType Leaf)) {
             throw "User data was lost during the update."
           }
-          if ((Get-Content $sentinel -Raw) -ne "user-data-survives-0.1.3-to-0.1.4") {
+          if ((Get-Content $sentinel -Raw) -ne $sentinelContent) {
             throw "User data changed during the update."
           }
 
           # The new app is expected to remain open after writing the marker.
+          $newVersionDirectory = Join-Path $stage "versions/$version"
           Get-CimInstance Win32_Process |
             Where-Object {
               $_.Name -eq "HellsaizPC_AI.exe" -and
-              $_.ExecutablePath -like "$(Join-Path $stage 'versions/0.1.4')*"
+              $_.ExecutablePath -like "$newVersionDirectory*"
             } |
             ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 
-          Write-Host "Real 0.1.3 -> 0.1.4 update passed: active version, health marker, rollback copy and user data verified."
+          Write-Host "Real $previousVersion -> $version update passed: active version, health marker, rollback copy and user data verified."
 
       - name: Upload release assets
         shell: pwsh
