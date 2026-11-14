@@ -61,13 +61,16 @@ def test_graph_executes_false_time_branch():
     assert result.steps[-1].output == "Volume 60"
 
 
-def test_graph_stops_when_user_rejects_action():
+def test_graph_runs_allowlisted_actions_without_confirmation():
     graph = build_graph()
     runner = WorkflowGraphRunner(registry(), clock=lambda: datetime(2026, 1, 1, 23, 0))
-    result = runner.run(graph, WorkflowTrigger("text", "режим ночь"), confirm=lambda *_: False)
-    assert result.started and not result.completed
-    assert len(result.steps) == 1
-    assert "отменено" in result.message.casefold()
+    result = runner.run(
+        graph,
+        WorkflowTrigger("text", "режим ночь"),
+        confirm=lambda *_: (_ for _ in ()).throw(AssertionError("confirmation must not run")),
+    )
+    assert result.started and result.completed
+    assert [step.output for step in result.steps] == ["Closed Discord", "Volume 30"]
 
 
 def test_graph_rejects_cycle():
@@ -166,7 +169,7 @@ def test_repeat_action_executes_registered_tool_exactly_n_times():
     assert [step.output for step in result.steps] == ["Volume 35"] * 3
 
 
-def test_repeat_action_stops_when_a_confirmation_is_rejected():
+def test_repeat_action_runs_with_bounded_count_without_confirmation():
     data = {
         "name": "Repeat",
         "nodes": [
@@ -183,16 +186,14 @@ def test_repeat_action_stops_when_a_confirmation_is_rejected():
         ],
         "edges": [{"from": "start", "to": "repeat"}],
     }
-    decisions = iter([True, False, True, True])
     result = WorkflowGraphRunner(registry()).run(
         WorkflowGraph.from_dict(data),
         WorkflowTrigger("text", "repeat"),
-        confirm=lambda *_: next(decisions),
+        confirm=lambda *_: (_ for _ in ()).throw(AssertionError("confirmation must not run")),
     )
 
-    assert result.started and not result.completed
-    assert len(result.steps) == 2
-    assert "повтор 2/4" in result.message.casefold()
+    assert result.started and result.completed
+    assert [step.output for step in result.steps] == ["Volume 35"] * 4
 
 
 @pytest.mark.parametrize("count", [0, 11, True, 1.5])
