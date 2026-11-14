@@ -37,6 +37,36 @@ def make_router():
         RiskLevel.SAFE, lambda _: ToolResult(True, "clipboard text"),
     ))
     registry.register(ToolSpec(
+        "create_reminder", "create reminder",
+        {
+            "type": "object",
+            "properties": {
+                "seconds": {"type": "integer", "minimum": 10, "maximum": 2592000},
+                "message": {"type": "string", "minLength": 1, "maxLength": 300},
+            },
+            "required": ["seconds", "message"],
+            "additionalProperties": False,
+        },
+        RiskLevel.CONFIRM, lambda args: ToolResult(
+            True, f"reminder {args['seconds']}: {args['message']}"
+        ),
+    ))
+    registry.register(ToolSpec(
+        "list_reminders", "list reminders",
+        {"type": "object", "properties": {}, "additionalProperties": False},
+        RiskLevel.SAFE, lambda _: ToolResult(True, "no reminders"),
+    ))
+    registry.register(ToolSpec(
+        "dismiss_reminder", "dismiss reminder",
+        {
+            "type": "object",
+            "properties": {"reminder_id": {"type": "integer", "minimum": 1}},
+            "required": ["reminder_id"],
+            "additionalProperties": False,
+        },
+        RiskLevel.CONFIRM, lambda args: ToolResult(True, f"dismissed {args['reminder_id']}"),
+    ))
+    registry.register(ToolSpec(
         "write_clipboard", "write clipboard",
         {
             "type": "object",
@@ -123,3 +153,30 @@ def test_write_clipboard_accepts_multiline_payload():
     result = router.route("скопируй Первая строка\nВторая строка", approve)
 
     assert result == "Готово. clipboard updated"
+
+
+def test_reminder_command_parses_seconds_minutes_and_hours():
+    router = make_router()
+    assert router.route("напомни через 30 секунд проверить") == (
+        "Не выполнено. Действие отменено: подтверждение не получено."
+    )
+    assert router.route("Хеллсайз, напомни мне через 5 минут Проверить чайник", approve) == (
+        "Готово. reminder 300: Проверить чайник"
+    )
+    assert router.route("напомни через 2 часа сделать перерыв", approve) == (
+        "Готово. reminder 7200: сделать перерыв"
+    )
+
+
+def test_reminder_command_validates_delay_and_requires_confirmation():
+    router = make_router()
+    assert "отменено" in router.route("напомни через 5 минут позвонить", deny).casefold()
+    assert "от 10 секунд" in router.route("напомни через 3 секунды позвонить").casefold()
+    assert "формат" in router.route("напомни завтра позвонить").casefold()
+
+
+def test_list_and_dismiss_reminders_are_explicit():
+    router = make_router()
+    assert router.route("мои напоминания") == "Готово. no reminders"
+    assert router.route("удали напоминание 12", deny).startswith("Не выполнено.")
+    assert router.route("удали напоминание 12", approve) == "Готово. dismissed 12"

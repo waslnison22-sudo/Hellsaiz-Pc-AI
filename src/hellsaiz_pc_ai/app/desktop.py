@@ -14,8 +14,10 @@ from hellsaiz_pc_ai.core.orchestrator import AssistantOrchestrator
 from hellsaiz_pc_ai.core.registry import ToolRegistry
 from hellsaiz_pc_ai.hotkeys import GlobalHotkeyService, HotkeyUnavailableError
 from hellsaiz_pc_ai.providers.openai_compatible import OpenAICompatibleProvider, ProviderError
+from hellsaiz_pc_ai.storage.reminders import ReminderStore
 from hellsaiz_pc_ai.storage.sqlite_store import ChatStore
 from hellsaiz_pc_ai.tools.clipboard import register_clipboard_tools
+from hellsaiz_pc_ai.tools.reminders import register_reminder_tools
 from hellsaiz_pc_ai.tools.system import register_system_tools
 from hellsaiz_pc_ai.tools.windows import register_windows_tools
 from hellsaiz_pc_ai.workflows.builder import append_hour_condition, append_repeat_action, append_tool_action, append_wait_action, append_weekday_condition, terminal_nodes
@@ -29,6 +31,8 @@ def build_runtime(settings: Settings):
     register_system_tools(registry)
     register_windows_tools(registry, settings.allowed_apps, settings.allowed_processes)
     register_clipboard_tools(registry)
+    reminder_store = ReminderStore(settings.database_path)
+    register_reminder_tools(registry, reminder_store)
     router = CommandRouter(registry, settings.allowed_apps, settings.allowed_processes)
 
     assistant = None
@@ -49,7 +53,7 @@ def build_runtime(settings: Settings):
         assistant.history = store.recent_messages()
     workflow_library = WorkflowLibrary(settings.workflows_path)
     workflow_runner = WorkflowGraphRunner(registry)
-    return router, assistant, store, workflow_library, workflow_runner, registry
+    return router, assistant, store, workflow_library, workflow_runner, registry, reminder_store
 
 
 def main() -> int:
@@ -65,11 +69,14 @@ def main() -> int:
             QLabel,
             QLineEdit,
             QListWidget,
+            QListWidgetItem,
             QMainWindow,
             QMessageBox,
             QPlainTextEdit,
             QPushButton,
             QSplitter,
+            QStyle,
+            QSystemTrayIcon,
             QTabWidget,
             QTextEdit,
             QVBoxLayout,
@@ -85,7 +92,7 @@ def main() -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     settings = load_settings()
-    router, assistant, store, workflow_library, workflow_runner, registry = build_runtime(settings)
+    router, assistant, store, workflow_library, workflow_runner, registry, reminder_store = build_runtime(settings)
 
     app = QApplication.instance() or QApplication([])
     window = QMainWindow()
@@ -284,6 +291,72 @@ def main() -> int:
     home_layout.addLayout(controls)
     home_layout.addWidget(speak_toggle)
     tabs.addTab(home_page, "Главная")
+
+    reminder_page = QWidget()
+    reminder_layout = QVBoxLayout(reminder_page)
+    reminder_title = QLabel("НАПОМИНАНИЯ / ЛОКАЛЬНОЕ ХРАНИЛИЩЕ")
+    reminder_title.setStyleSheet("font-size:18px; font-weight:650; color:#f1f2f4;")
+    reminder_layout.addWidget(reminder_title)
+    reminder_description = QLabel(
+        "Записи хранятся локально. Они срабатывают, пока Hellsaiz PC AI запущен; "
+        "просроченные напоминания будут показаны после следующего запуска."
+    )
+    reminder_description.setWordWrap(True)
+    reminder_description.setStyleSheet("color:#aab0ba;")
+    reminder_layout.addWidget(reminder_description)
+    reminder_list = QListWidget()
+    reminder_layout.addWidget(reminder_list, 1)
+    reminder_buttons = QHBoxLayout()
+    refresh_reminders_button = QPushButton("Обновить")
+    dismiss_reminder_button = QPushButton("Отменить выбранное")
+    reminder_buttons.addWidget(refresh_reminders_button)
+    reminder_buttons.addWidget(dismiss_reminder_button)
+    reminder_buttons.addStretch(1)
+    reminder_layout.addLayout(reminder_buttons)
+    reminder_status = QLabel("Напоминания сохраняются в локальной базе SQLite.")
+    reminder_status.setStyleSheet("color:#aab0ba;")
+    reminder_layout.addWidget(reminder_status)
+
+    def refresh_reminder_list() -> None:
+        reminder_list.clear()
+        try:
+            entries = reminder_store.list_pending()
+        except (OSError, ValueError):
+            logging.exception("Could not load reminders")
+            reminder_status.setText("Не удалось загрузить напоминания.")
+            return
+        for reminder in entries:
+            due_label = reminder.due_at.astimezone().strftime("%d.%m.%Y %H:%M:%S")
+            item = QListWidgetItem(f"#{reminder.id}  ·  {due_label}  ·  {reminder.message}")
+            item.setData(Qt.ItemDataRole.UserRole, reminder.id)
+            reminder_list.addItem(item)
+        reminder_status.setText(f"Активных напоминаний: {len(entries)}")
+
+    def dismiss_selected_reminder() -> None:
+        item = reminder_list.currentItem()
+        if item is None:
+            reminder_status.setText("Выбери напоминание для отмены.")
+            return
+        reminder_id = int(item.data(Qt.ItemDataRole.UserRole))
+        answer = QMessageBox.question(
+            window,
+            "Отменить напоминание",
+            f"Отменить напоминание #{reminder_id}?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        if reminder_store.dismiss(reminder_id):
+            reminder_status.setText(f"Напоминание #{reminder_id} отменено.")
+        else:
+            reminder_status.setText("Напоминание уже не активно.")
+        refresh_reminder_list()
+
+    refresh_reminders_button.clicked.connect(refresh_reminder_list)
+    dismiss_reminder_button.clicked.connect(dismiss_selected_reminder)
+    refresh_reminder_list()
+    tabs.addTab(reminder_page, "Напоминания")
 
     # Scenario workspace: validated JSON graph + a live monochrome node-map preview.
     scenario_page = QWidget()
@@ -1002,6 +1075,7 @@ def main() -> int:
             transcript.append(f"<p><b>Hellsaiz:</b> {safe_answer}</p>")
 
         worker.completed.connect(show_result)
+        worker.completed.connect(lambda *_: refresh_reminder_list())
         worker.failed.connect(
             lambda message: transcript.append(
                 f"<p style='color:#c5c9d0;'><b>Ошибка:</b> {escape(message)}</p>"
@@ -1116,8 +1190,48 @@ def main() -> int:
     workflow_timer.setInterval(1000)
     workflow_timer.timeout.connect(poll_workflow_automations)
 
-    # Trigger startup workflows only after the main window enters the Qt event loop.
+    tray_icon = QSystemTrayIcon(
+        app.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon),
+        window,
+    )
+    tray_available = QSystemTrayIcon.isSystemTrayAvailable()
+    if tray_available:
+        tray_icon.show()
+
+    def poll_due_reminders() -> None:
+        try:
+            due_reminders = reminder_store.take_due()
+            for reminder in due_reminders:
+                transcript.append(
+                    f"<p><b>Напоминание #{reminder.id}:</b> {escape(reminder.message)}</p>"
+                )
+                if tray_icon.isVisible():
+                    tray_icon.showMessage(
+                        "Hellsaiz PC AI",
+                        reminder.message,
+                        QSystemTrayIcon.MessageIcon.Information,
+                        10000,
+                    )
+                else:
+                    QMessageBox.information(
+                        window,
+                        "Напоминание",
+                        reminder.message,
+                        QMessageBox.StandardButton.Ok,
+                    )
+            if due_reminders:
+                refresh_reminder_list()
+        except (OSError, ValueError):
+            logging.exception("Reminder polling failed")
+
+    reminder_timer = QTimer(window)
+    reminder_timer.setInterval(1000)
+    reminder_timer.timeout.connect(poll_due_reminders)
+
+    # Restore overdue reminders and startup workflows after the main window enters the event loop.
     window.show()
     QTimer.singleShot(0, poll_workflow_automations)
+    QTimer.singleShot(0, poll_due_reminders)
     workflow_timer.start()
+    reminder_timer.start()
     return app.exec()

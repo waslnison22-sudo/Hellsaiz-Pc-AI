@@ -13,6 +13,7 @@ HELP_TEXT = (
     "• «закрой дискорд» (только разрешённые процессы)\n"
     "• «установи громкость на 30 процентов»\n"
     "• «прочитай буфер обмена», «скопируй текст»\n"
+    "• «напомни через 5 минут…», «мои напоминания»\n"
     "• «открой сайт example.com»\n"
     "• «который час», «какая дата», «информация о системе»\n"
     "• «заблокируй компьютер»\n"
@@ -69,6 +70,38 @@ class CommandRouter:
 
         if command in {"помощь", "команды", "список команд", "что умеешь", "help", "/help"}:
             return HELP_TEXT
+
+        if command in {"мои напоминания", "напоминания", "покажи напоминания", "список напоминаний"}:
+            return self._execute("list_reminders", {}, confirm)
+
+        dismiss_match = re.fullmatch(r"(?:удали|отмени) напоминание (\d+)", command)
+        if dismiss_match:
+            return self._execute(
+                "dismiss_reminder", {"reminder_id": int(dismiss_match.group(1))}, confirm
+            )
+
+        reminder_match = re.match(
+            r"^\s*(?:(?:хеллсайз|hellsaiz|хелсайз)\b[\s,.:;!?-]*)?"
+            r"напомни(?: мне)?\s+через\s+(\d{1,5})\s+"
+            r"(секунд(?:у|ы|а)?|сек|минут(?:у|ы|а)?|мин|час(?:а|ов)?|ч)\s+(.+?)\s*$",
+            text,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        if reminder_match:
+            amount = int(reminder_match.group(1))
+            unit = reminder_match.group(2).casefold()
+            factor = 1 if unit.startswith("сек") else 60 if unit.startswith("мин") else 3600
+            seconds = amount * factor
+            if not 10 <= seconds <= 2_592_000:
+                return "Время напоминания должно быть от 10 секунд до 30 дней."
+            message = reminder_match.group(3).strip()
+            if not message:
+                return "Добавь текст напоминания после времени."
+            return self._execute(
+                "create_reminder", {"seconds": seconds, "message": message}, confirm
+            )
+        if command.startswith("напомни"):
+            return "Формат: «напомни через 5 минут проверить чайник». Допустимо от 10 секунд до 30 дней."
 
         if command in {
             "прочитай буфер обмена",
