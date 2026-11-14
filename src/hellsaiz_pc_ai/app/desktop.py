@@ -3202,6 +3202,9 @@ def main() -> int:
                     save_telegram_settings(telegram_config_path, telegram_settings)
                 except (OSError, ValueError, SecureStoreError):
                     logging.exception("Could not persist stopped Telegram worker state.")
+                telegram_status.setText(
+                    "Telegram worker завершился. Проверь статус сети и токен бота."
+                )
 
     def start_telegram_worker() -> bool:
         existing = telegram_worker_state["worker"]
@@ -3297,11 +3300,6 @@ def main() -> int:
     telegram_enable_check.toggled.connect(toggle_telegram_worker)
     telegram_poll_timer.timeout.connect(reap_telegram_worker)
     telegram_poll_timer.start()
-    if telegram_settings.enabled:
-        # Restore an explicitly enabled worker after the UI has initialized.
-        # A failed network/DPAPI check keeps the local assistant fully usable.
-        QTimer.singleShot(1200, lambda: toggle_telegram_worker(True))
-
     startup_title = QLabel("АВТОЗАПУСК WINDOWS")
     startup_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
     settings_layout.addWidget(startup_title)
