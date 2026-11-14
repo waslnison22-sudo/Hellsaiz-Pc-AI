@@ -4087,6 +4087,7 @@ def main() -> int:
             logging.exception("Could not release cached speech models during shutdown")
         instance_lock.release()
 
+    app.aboutToQuit.connect(stop_telegram_worker)
     app.aboutToQuit.connect(release_speech_runtime)
 
     scheduler = WorkflowScheduler(
