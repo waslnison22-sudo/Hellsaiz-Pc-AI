@@ -23,12 +23,21 @@ PACKAGED_RUNTIME_MODULES = (
 
 def check_packaged_runtime(
     importer: Callable[[str], object] = importlib.import_module,
+    progress: Callable[[str], None] | None = None,
 ) -> list[tuple[str, str]]:
     """Import critical packaged modules without touching audio devices or user data."""
     failures: list[tuple[str, str]] = []
     for module_name in PACKAGED_RUNTIME_MODULES:
+        if progress is not None:
+            progress(f"Checking {module_name}")
         try:
             importer(module_name)
         except Exception as exc:
-            failures.append((module_name, f"{type(exc).__name__}: {exc}"))
+            detail = f"{type(exc).__name__}: {exc}"
+            failures.append((module_name, detail))
+            if progress is not None:
+                progress(f"FAILED {module_name}: {detail}")
+        else:
+            if progress is not None:
+                progress(f"OK {module_name}")
     return failures
