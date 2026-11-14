@@ -183,7 +183,6 @@ def main() -> int:
         )
         return 0
     atexit.register(instance_lock.release)
-    app.aboutToQuit.connect(instance_lock.release)
 
     (
         router, assistant, store, workflow_library, workflow_runner, registry,
@@ -2550,6 +2549,7 @@ def main() -> int:
             VoskTranscriber.clear_model_cache()
         except Exception:
             logging.exception("Could not release cached Vosk models during shutdown")
+        instance_lock.release()
 
     app.aboutToQuit.connect(release_speech_runtime)
 
