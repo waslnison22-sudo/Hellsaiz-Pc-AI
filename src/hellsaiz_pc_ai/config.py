@@ -123,7 +123,10 @@ def load_settings(path: Path | None = None) -> Settings:
     if not isinstance(raw_app_aliases, dict):
         raise ValueError("[windows.app_aliases] must be a table")
     app_aliases: dict[str, tuple[str, ...]] = {}
-    alias_owner: dict[str, str] = {}
+    alias_owner: dict[str, str] = {
+        _normalize_alias(canonical): canonical
+        for canonical in apps
+    }
     for canonical, aliases in raw_app_aliases.items():
         if not isinstance(canonical, str) or canonical.casefold() not in apps:
             raise ValueError(
