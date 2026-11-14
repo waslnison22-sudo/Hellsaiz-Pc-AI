@@ -19,7 +19,8 @@ class InputDevice:
 
     @property
     def display_name(self) -> str:
-        return f"{self.name} · {self.host_api}" if self.host_api else self.name
+        prefix = f"{self.name} · {self.host_api}" if self.host_api else self.name
+        return f"{prefix} · #{self.index}"
 
 
 def _sounddevice():
@@ -69,6 +70,38 @@ def resolve_input_device(device_name: str | None) -> int | None:
     )
 
 
+def resolve_input_sample_rate(
+    device: str | int | None = None, preferred_rate: int = 16000
+) -> int:
+    """Prefer the STT rate when supported, otherwise use the device's native rate."""
+    if not 8000 <= preferred_rate <= 48000:
+        raise ValueError("Preferred sample rate must be between 8000 and 48000 Hz.")
+    sd = _sounddevice()
+    selected_device = resolve_input_device(device) if isinstance(device, str) else device
+    try:
+        info = sd.query_devices(selected_device, "input")
+        native_rate = int(float(info.get("default_samplerate") or preferred_rate))
+    except Exception:
+        native_rate = preferred_rate
+    candidates = [preferred_rate]
+    if 8000 <= native_rate <= 48000 and native_rate != preferred_rate:
+        candidates.append(native_rate)
+    for candidate in candidates:
+        try:
+            sd.check_input_settings(
+                device=selected_device,
+                channels=1,
+                dtype="int16",
+                samplerate=candidate,
+            )
+            return candidate
+        except Exception:
+            continue
+    raise AudioCaptureError(
+        "Микрофон не поддерживает ни 16 кГц, ни собственную частоту дискретизации."
+    )
+
+
 def record_microphone(
     output_file: Path,
     duration_seconds: float = 5.0,
@@ -82,12 +115,13 @@ def record_microphone(
         raise ValueError("Sample rate must be between 8000 and 48000 Hz.")
     sd = _sounddevice()
     selected_device = resolve_input_device(device) if isinstance(device, str) else device
+    effective_rate = resolve_input_sample_rate(selected_device, sample_rate)
 
     output_file.parent.mkdir(parents=True, exist_ok=True)
     try:
         audio = sd.rec(
-            int(duration_seconds * sample_rate),
-            samplerate=sample_rate,
+            int(duration_seconds * effective_rate),
+            samplerate=effective_rate,
             channels=1,
             dtype="int16",
             device=selected_device,
@@ -101,7 +135,7 @@ def record_microphone(
         with wave.open(str(output_file), "wb") as wav:
             wav.setnchannels(1)
             wav.setsampwidth(2)
-            wav.setframerate(sample_rate)
+            wav.setframerate(effective_rate)
             wav.writeframes(audio.tobytes())
     except (wave.Error, OSError) as exc:
         output_file.unlink(missing_ok=True)
