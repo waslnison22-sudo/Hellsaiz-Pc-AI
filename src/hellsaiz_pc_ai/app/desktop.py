@@ -288,7 +288,31 @@ def main() -> int:
             if self.listener is not None:
                 self.listener.stop()
 
-    wake_listener_state: dict[str, Any] = {"worker": None}
+    class WakeListenerDispatcher(QObject):
+        def __init__(
+            self,
+            on_command: Any,
+            on_status: Any,
+            on_failed: Any,
+        ) -> None:
+            super().__init__()
+            self.on_command = on_command
+            self.on_status = on_status
+            self.on_failed = on_failed
+
+        @Slot(str)
+        def dispatch_command(self, prompt: str) -> None:
+            self.on_command(prompt)
+
+        @Slot(str)
+        def dispatch_status(self, message: str) -> None:
+            self.on_status(message)
+
+        @Slot(str)
+        def dispatch_failed(self, message: str) -> None:
+            self.on_failed(message)
+
+    wake_listener_state: dict[str, Any] = {"worker": None, "dispatcher": None}
 
     class Worker(QThread):
         completed = Signal(str, str)
@@ -1916,13 +1940,22 @@ def main() -> int:
             except OSError as exc:
                 logging.warning("Could not persist wake listener failure: %s", exc)
 
-        worker.command.connect(on_wake_command)
-        worker.status.connect(wake_listener_status.setText)
-        worker.failed.connect(on_listener_failed)
+        dispatcher = WakeListenerDispatcher(
+            on_wake_command,
+            wake_listener_status.setText,
+            on_listener_failed,
+        )
+        wake_listener_state["dispatcher"] = dispatcher
+        worker.dispatcher = dispatcher
+        worker.command.connect(dispatcher.dispatch_command)
+        worker.status.connect(dispatcher.dispatch_status)
+        worker.failed.connect(dispatcher.dispatch_failed)
 
         def listener_finished() -> None:
             if wake_listener_state["worker"] is worker:
                 wake_listener_state["worker"] = None
+            if wake_listener_state["dispatcher"] is dispatcher:
+                wake_listener_state["dispatcher"] = None
 
         worker.finished.connect(listener_finished)
         worker.start()
