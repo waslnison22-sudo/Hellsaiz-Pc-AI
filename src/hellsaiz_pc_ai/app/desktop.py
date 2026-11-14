@@ -1284,16 +1284,25 @@ def main() -> int:
     settings_layout.addWidget(update_status)
     update_buttons = QHBoxLayout()
     check_update_button = QPushButton("Проверить обновления")
+    install_update_button = QPushButton("Скачать и установить")
+    install_update_button.setEnabled(False)
     open_release_button = QPushButton("Открыть релиз")
     open_release_button.setEnabled(False)
     update_buttons.addWidget(check_update_button)
+    update_buttons.addWidget(install_update_button)
     update_buttons.addWidget(open_release_button)
     settings_layout.addLayout(update_buttons)
+    if install_root is None:
+        update_status.setText(
+            f"Текущая версия: {current_app_version}. Автообновление доступно только "
+            "в установленной Windows-сборке."
+        )
     settings_layout.addStretch(1)
     tabs.addTab(settings_page, "Настройки")
 
     update_workers: list[QThread] = []
     latest_release_url = ""
+    latest_update_info: UpdateInfo | None = None
 
     class UpdateWorker(QThread):
         checked = Signal(object)
