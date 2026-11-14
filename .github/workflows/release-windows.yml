@@ -273,10 +273,10 @@ jobs:
           $process = Start-Process -FilePath $updater -ArgumentList $arguments -WorkingDirectory $stage -PassThru
           if (-not $process.WaitForExit(180000)) {
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-            throw "The real 0.1.3-to-0.1.4 updater smoke test timed out."
+            throw "The real $previousVersion -> $version updater smoke test timed out."
           }
           if ($process.ExitCode -ne 0) {
-            throw "The real 0.1.3-to-0.1.4 updater smoke test failed with exit code $($process.ExitCode)."
+            throw "The real $previousVersion -> $version updater smoke test failed with exit code $($process.ExitCode)."
           }
 
           $updated = Get-Content $activePath -Raw | ConvertFrom-Json
@@ -285,7 +285,7 @@ jobs:
           }
           $healthMarker = Join-Path $stage "health/$version.ok"
           if (-not (Test-Path $healthMarker -PathType Leaf)) {
-            throw "The new application did not write its 0.1.4 health marker."
+            throw "The new application did not write its $version health marker."
           }
           if (-not (Test-Path (Join-Path $stage "versions/$previousVersion/HellsaizPC_AI.exe") -PathType Leaf)) {
             throw "The previous $previousVersion application was not retained for rollback."
