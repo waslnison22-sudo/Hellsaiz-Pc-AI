@@ -12,7 +12,14 @@ from typing import Any
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from hellsaiz_pc_ai.update_client import APP_ID, PLATFORM, UpdateCheckError, verify_signed_manifest
+from hellsaiz_pc_ai.update_client import (
+    APP_ID,
+    PLATFORM,
+    UpdateCheckError,
+    _safe_manifest_path,
+    _version_parts,
+    verify_signed_manifest,
+)
 
 
 def sha256_file(path: Path) -> str:
@@ -47,6 +54,101 @@ def make_zip(app_dir: Path, destination: Path, relative_files: list[str]) -> Non
             source = app_dir.joinpath(*PurePosixPath(relative).parts)
             archive.write(source, arcname=relative)
     temporary.replace(destination)
+
+
+def portable_file_list(install_root: Path) -> list[str]:
+    """Return the validated root-relative files for a first-install portable bundle."""
+    root = install_root.resolve()
+    if install_root.is_symlink() or not root.is_dir():
+        raise ValueError("Portable install root is missing or is a symbolic link.")
+
+    active_path = root / "active.json"
+    launcher_path = root / "HellsaizLauncher.exe"
+    updater_path = root / "HellsaizUpdater.exe"
+    for required in (active_path, launcher_path, updater_path):
+        if required.is_symlink() or not required.is_file():
+            raise ValueError(f"Portable bundle is missing a required file: {required.name}")
+
+    try:
+        active = json.loads(active_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError("Portable bundle active.json is invalid.") from exc
+    if not isinstance(active, dict) or active.get("schema_version") != 1:
+        raise ValueError("Portable bundle active.json has an unsupported schema.")
+    version = active.get("active_version")
+    if not isinstance(version, str):
+        raise ValueError("Portable bundle active.json has no active version.")
+    _version_parts(version)
+
+    versions_root = root / "versions"
+    version_dir = versions_root / version
+    if versions_root.is_symlink() or version_dir.is_symlink() or not version_dir.is_dir():
+        raise ValueError("Portable bundle active version directory is missing or unsafe.")
+    if not (version_dir / "HellsaizPC_AI.exe").is_file():
+        raise ValueError("Portable bundle active version has no HellsaizPC_AI.exe.")
+
+    files: list[str] = []
+    seen: set[str] = set()
+    for path in sorted(root.rglob("*")):
+        if path.is_symlink():
+            raise ValueError(f"Symbolic links are not allowed in the portable bundle: {path}")
+        if not path.is_file():
+            continue
+        relative = path.relative_to(root).as_posix()
+        _safe_manifest_path(relative)
+        folded = relative.casefold()
+        if folded in seen:
+            raise ValueError(f"Portable bundle contains duplicate paths: {relative}")
+        seen.add(folded)
+        files.append(relative)
+
+    required_paths = {
+        "active.json",
+        "HellsaizLauncher.exe",
+        "HellsaizUpdater.exe",
+        f"versions/{version}/HellsaizPC_AI.exe",
+    }
+    if not required_paths.issubset(seen):
+        raise ValueError("Portable bundle does not contain all required launcher files.")
+    return files
+
+
+def validate_portable_zip(archive_path: Path) -> None:
+    """Validate that a portable ZIP can bootstrap the launcher and updater."""
+    try:
+        with zipfile.ZipFile(archive_path, "r") as archive:
+            names = [info.filename for info in archive.infolist() if not info.is_dir()]
+            if not names:
+                raise ValueError("Portable ZIP is empty.")
+            folded: set[str] = set()
+            for name in names:
+                _safe_manifest_path(name)
+                if name.casefold() in folded:
+                    raise ValueError(f"Portable ZIP contains duplicate paths: {name}")
+                folded.add(name.casefold())
+
+            required = {"active.json", "HellsaizLauncher.exe", "HellsaizUpdater.exe"}
+            if not required.issubset(folded):
+                raise ValueError("Portable ZIP is missing active.json, Launcher or Updater.")
+
+            active = json.loads(archive.read("active.json").decode("utf-8"))
+            if not isinstance(active, dict) or active.get("schema_version") != 1:
+                raise ValueError("Portable ZIP active.json has an unsupported schema.")
+            version = active.get("active_version")
+            if not isinstance(version, str):
+                raise ValueError("Portable ZIP active.json has no active version.")
+            _version_parts(version)
+            entrypoint = f"versions/{version}/HellsaizPC_AI.exe".casefold()
+            if entrypoint not in folded:
+                raise ValueError("Portable ZIP does not contain the active application entrypoint.")
+    except (OSError, zipfile.BadZipFile, UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Portable ZIP is invalid: {exc}") from exc
+
+
+def make_portable_zip(install_root: Path, destination: Path) -> None:
+    files = portable_file_list(install_root)
+    make_zip(install_root, destination, files)
+    validate_portable_zip(destination)
 
 
 def load_previous_manifest(manifest_path: Path, signature_path: Path) -> dict[str, Any]:
@@ -134,6 +236,9 @@ def main() -> int:
         encoding="utf-8",
     )
 
+    portable_archive = release_assets / "HellsaizPC_AI-windows-x64-portable.zip"
+    make_portable_zip(install_root, portable_archive)
+
     if args.previous_manifest and args.previous_signature:
         previous = load_previous_manifest(args.previous_manifest, args.previous_signature)
         previous_version = previous["version"]
@@ -151,7 +256,8 @@ def main() -> int:
 
     total = sum(record["size"] for record in files.values())
     print(f"Release manifest signed for {version}; {len(files)} files, {total} bytes.")
-    print(f"Installer payload prepared at {install_root}.")
+    print(f"Portable first-install ZIP prepared at {portable_archive}.")
+    print(f"Internal updater ZIP prepared at {release_assets / 'HellsaizPC_AI-windows-x64-full.zip'}.")
     return 0
 
 
