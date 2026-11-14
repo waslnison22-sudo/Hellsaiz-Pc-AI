@@ -33,6 +33,7 @@ def collect_speech_health(
     whisper_model: Path | None,
     tts_engine: str,
     piper_model_path: Path | None,
+    wake_enabled: bool = False,
     is_windows: bool | None = None,
 ) -> list[HealthItem]:
     """Return concise diagnostics without opening the microphone or playing audio."""
@@ -79,6 +80,8 @@ def collect_speech_health(
     check_stt(stt_primary, required=True)
     if stt_fallback and stt_fallback != "none" and stt_fallback != stt_primary:
         check_stt(stt_fallback, required=False)
+    if wake_enabled and stt_primary != "vosk" and stt_fallback != "vosk":
+        check_stt("vosk", required=False)
 
     if tts_engine == "piper":
         if not _module_available("piper"):
