@@ -37,7 +37,7 @@ def test_register_startup_task_uses_launcher_logon_and_highest(tmp_path: Path, m
 
 
 def test_register_startup_task_rejects_wrong_launcher(tmp_path: Path, monkeypatch):
-    monkeypatch.setattr(startup_task.os, "name", "nt")
+    monkeypatch.setattr(startup_task.sys, "platform", "win32")
     wrong = tmp_path / "HellsaizPC_AI.exe"
     wrong.write_bytes(b"wrong")
     with pytest.raises(startup_task.StartupTaskError, match="HellsaizLauncher.exe"):
@@ -45,7 +45,7 @@ def test_register_startup_task_rejects_wrong_launcher(tmp_path: Path, monkeypatc
 
 
 def test_register_startup_task_reports_scheduler_failure(tmp_path: Path, monkeypatch):
-    monkeypatch.setattr(startup_task.os, "name", "nt")
+    monkeypatch.setattr(startup_task.sys, "platform", "win32")
     launcher = tmp_path / "HellsaizLauncher.exe"
     launcher.write_bytes(b"launcher")
     with pytest.raises(startup_task.StartupTaskError, match="не зарегистрировала"):
@@ -56,14 +56,14 @@ def test_register_startup_task_reports_scheduler_failure(tmp_path: Path, monkeyp
 
 
 def test_unregister_startup_task_is_idempotent_when_missing(monkeypatch):
-    monkeypatch.setattr(startup_task.os, "name", "nt")
+    monkeypatch.setattr(startup_task.sys, "platform", "win32")
     startup_task.unregister_startup_task(
         runner=lambda *_a, **_k: FakeResult(1, stderr="ERROR: Cannot find the file specified")
     )
 
 
 def test_startup_status_uses_schtasks_query(monkeypatch):
-    monkeypatch.setattr(startup_task.os, "name", "nt")
+    monkeypatch.setattr(startup_task.sys, "platform", "win32")
     result = startup_task.is_registered(
         runner=lambda *_a, **_k: FakeResult(0)
     )
