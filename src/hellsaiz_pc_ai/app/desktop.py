@@ -33,7 +33,13 @@ def build_runtime(settings: Settings):
     register_clipboard_tools(registry)
     reminder_store = ReminderStore(settings.database_path)
     register_reminder_tools(registry, reminder_store)
-    router = CommandRouter(registry, settings.allowed_apps, settings.allowed_processes)
+    router = CommandRouter(
+        registry,
+        settings.allowed_apps,
+        settings.allowed_processes,
+        settings.app_aliases,
+        settings.wake_aliases,
+    )
 
     assistant = None
     if settings.llm.enabled:
