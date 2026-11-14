@@ -62,6 +62,21 @@ def make_router():
             RiskLevel.CONFIRM,
             lambda args, name=name: called.append((name, args)) or ToolResult(True, str(args)),
         ))
+    registry.register(ToolSpec(
+        "send_keyboard_shortcut",
+        "send an allowed shortcut",
+        {
+            "type": "object",
+            "properties": {
+                "window_title": {"type": "string"},
+                "shortcut": {"type": "string", "enum": ["CTRL+L", "F5"]},
+            },
+            "required": ["window_title", "shortcut"],
+            "additionalProperties": False,
+        },
+        RiskLevel.CONFIRM,
+        lambda args: called.append(("send_keyboard_shortcut", args)) or ToolResult(True, "shortcut"),
+    ))
     router = CommandRouter(registry, {}, {}, {})
     return router, called
 
@@ -119,3 +134,24 @@ def test_ui_automation_phrases_route_to_scoped_tools():
             {"text": "hello, world!", "control_name": "Поиск", "window_title": "Проводник"},
         ),
     ]
+
+
+def test_keyboard_shortcut_voice_command_uses_scoped_safe_schema():
+    router, called = make_router()
+
+    router.route("нажми сочетание Ctrl+L в окне Браузер")
+    router.route("нажми F5 в окне Проводник")
+
+    assert called[-2:] == [
+        ("send_keyboard_shortcut", {"shortcut": "CTRL+L", "window_title": "Браузер"}),
+        ("send_keyboard_shortcut", {"shortcut": "F5", "window_title": "Проводник"}),
+    ]
+
+
+def test_unlisted_keyboard_shortcut_is_rejected_by_schema():
+    router, called = make_router()
+
+    result = router.route("нажми сочетание Win+R в окне Рабочий стол")
+
+    assert result is None
+    assert called == []
