@@ -153,5 +153,5 @@ def test_unlisted_keyboard_shortcut_is_rejected_by_schema():
 
     result = router.route("нажми сочетание Win+R в окне Рабочий стол")
 
-    assert result is None
+    assert "ошибка" in result.casefold() or "отклонены" in result.casefold()
     assert called == []
