@@ -1530,10 +1530,43 @@ def main() -> int:
     use_voice_button.setObjectName("primaryButton")
     test_piper_voice_button = QPushButton("Прослушать")
     use_system_voice_button = QPushButton("Использовать голос Windows")
+    test_system_voice_button = QPushButton("Проверить голос Windows")
     voice_actions.addWidget(use_voice_button)
     voice_actions.addWidget(test_piper_voice_button)
     voice_actions.addWidget(use_system_voice_button)
+    voice_actions.addWidget(test_system_voice_button)
     voices_layout.addLayout(voice_actions)
+
+    system_voice_row = QHBoxLayout()
+    system_voice_row.addWidget(QLabel("Системный голос Windows"))
+    system_voice_combo = QComboBox()
+    system_voice_combo.setMinimumWidth(240)
+    system_voice_combo.addItem("Системный голос по умолчанию", "")
+    refresh_system_voices_button = QPushButton("Обновить список")
+    system_voice_row.addWidget(system_voice_combo, 1)
+    system_voice_row.addWidget(refresh_system_voices_button)
+    voices_layout.addLayout(system_voice_row)
+
+    sapi_options_row = QHBoxLayout()
+    sapi_options_row.addWidget(QLabel("Скорость SAPI5"))
+    sapi_rate_combo = QComboBox()
+    for rate in (100, 120, 140, 160, 175, 190, 210, 230, 250, 280):
+        sapi_rate_combo.addItem(f"{rate}", rate)
+    rate_index = sapi_rate_combo.findData(active_tts["rate"])
+    if rate_index >= 0:
+        sapi_rate_combo.setCurrentIndex(rate_index)
+    sapi_options_row.addWidget(sapi_rate_combo)
+    sapi_options_row.addWidget(QLabel("Громкость"))
+    sapi_volume_combo = QComboBox()
+    for volume in (40, 50, 60, 70, 80, 90, 100):
+        sapi_volume_combo.addItem(f"{volume}%", volume)
+    volume_index = sapi_volume_combo.findData(round(active_tts["volume"] * 100))
+    if volume_index >= 0:
+        sapi_volume_combo.setCurrentIndex(volume_index)
+    sapi_options_row.addWidget(sapi_volume_combo)
+    save_sapi_options_button = QPushButton("Сохранить параметры SAPI5")
+    sapi_options_row.addWidget(save_sapi_options_button)
+    voices_layout.addLayout(sapi_options_row)
     voices_status = QLabel(
         "Голоса ещё не загружены. Русские модели medium обычно занимают около 60–70 МБ."
     )
@@ -1542,6 +1575,8 @@ def main() -> int:
     voices_layout.addWidget(voices_status)
 
     voice_download_workers: list[QThread] = []
+    voice_test_workers: list[QThread] = []
+    sapi_inventory_workers: list[QThread] = []
 
     class VoiceDownloadWorker(QThread):
         completed = Signal(object)
@@ -1560,6 +1595,59 @@ def main() -> int:
             except Exception as exc:
                 logging.exception("Piper voice download failed")
                 self.failed.emit(f"Ошибка загрузки голоса: {exc}")
+
+    class VoiceTestWorker(QThread):
+        completed = Signal(str)
+        failed = Signal(str)
+
+        def __init__(
+            self,
+            engine: str,
+            voice_name: str,
+            model_path: Path | None,
+            rate: int,
+            volume: float,
+        ) -> None:
+            super().__init__()
+            self.engine = engine
+            self.voice_name = voice_name
+            self.model_path = model_path
+            self.rate = rate
+            self.volume = volume
+
+        def run(self) -> None:
+            try:
+                sample = "Привет. Я Хеллсайз. Проверка голосового движка завершена."
+                if self.engine == "piper":
+                    if self.model_path is None:
+                        raise FileNotFoundError("Не выбрана локальная модель Piper.")
+                    PiperSynthesizer(self.model_path).speak(sample)
+                elif self.engine == "sapi5":
+                    from hellsaiz_pc_ai.speech.sapi5 import Sapi5Synthesizer
+
+                    Sapi5Synthesizer(
+                        self.voice_name, self.rate, self.volume
+                    ).speak(sample)
+                else:
+                    raise ValueError(f"Неизвестный голосовой движок: {self.engine}")
+                self.completed.emit(f"Проверка {self.engine} завершена.")
+            except Exception as exc:
+                self.failed.emit(str(exc))
+
+    class SapiVoiceListWorker(QThread):
+        completed = Signal(object)
+        failed = Signal(str)
+
+        def run(self) -> None:
+            try:
+                from hellsaiz_pc_ai.speech.sapi5 import Sapi5Synthesizer
+
+                voices = Sapi5Synthesizer(
+                    "", active_tts["rate"], active_tts["volume"]
+                ).list_voices()
+                self.completed.emit(voices)
+            except Exception as exc:
+                self.failed.emit(str(exc))
 
     def refresh_voice_library() -> None:
         installed_voices_list.clear()
