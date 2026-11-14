@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 import tempfile
+import threading
 import wave
 from pathlib import Path
 
@@ -16,6 +17,10 @@ class PiperSynthesizer:
     Pass (executable, model) for the classic CLI or only (model) for the
     maintained piper-tts Python package used by the 0.1.4 voice library.
     """
+
+    _voice_cache: dict[Path, object] = {}
+    _cache_lock = threading.RLock()
+    _max_cached_voices = 2
 
     def __init__(
         self,
@@ -32,7 +37,6 @@ class PiperSynthesizer:
             self.executable = Path(executable) if executable is not None else None
             self.voice_model = Path(voice_model)
         self.timeout_seconds = timeout_seconds
-        self._voice = None
 
     def _load_voice(self):
         if not self.voice_model.is_file():
@@ -43,12 +47,26 @@ class PiperSynthesizer:
             raise SpeechSynthesisError(
                 'Piper is not installed. Run: pip install -e ".[voice]"'
             ) from exc
-        if self._voice is None:
+        key = self.voice_model.resolve()
+        with self._cache_lock:
+            cached = self._voice_cache.get(key)
+            if cached is not None:
+                return cached
             try:
-                self._voice = PiperVoice.load(str(self.voice_model))
+                voice = PiperVoice.load(str(key))
             except Exception as exc:
                 raise SpeechSynthesisError(f"Could not load Piper voice: {exc}") from exc
-        return self._voice
+            if len(self._voice_cache) >= self._max_cached_voices:
+                oldest = next(iter(self._voice_cache))
+                del self._voice_cache[oldest]
+            self._voice_cache[key] = voice
+            return voice
+
+    @classmethod
+    def clear_voice_cache(cls) -> None:
+        """Release cached native Piper/ONNX sessions during orderly shutdown."""
+        with cls._cache_lock:
+            cls._voice_cache.clear()
 
     def synthesize(self, text: str, output_file: Path) -> Path:
         text = text.strip()
@@ -79,9 +97,10 @@ class PiperSynthesizer:
         else:
             output_file.parent.mkdir(parents=True, exist_ok=True)
             try:
-                voice = self._load_voice()
-                with wave.open(str(output_file), "wb") as wav_file:
-                    voice.synthesize_wav(text, wav_file)
+                with self._cache_lock:
+                    voice = self._load_voice()
+                    with wave.open(str(output_file), "wb") as wav_file:
+                        voice.synthesize_wav(text, wav_file)
             except (OSError, ValueError):
                 raise
             except Exception as exc:
