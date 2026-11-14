@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Any
 
 from hellsaiz_pc_ai.core.models import ToolResult
@@ -22,6 +23,9 @@ HELP_TEXT = (
     "• «покажи открытые окна», «переключись на Блокнот»\n"
     "• «покажи элементы окна Настройки», «нажми Сохранить в окне Блокнот»\n"
     "• «введи текст ... в поле Поиск окна Проводник»\n"
+    "• «покажи файлы в папке Документы», «найди файл план в папке Документы»\n"
+    "• «прочитай файл ...», «открой папку ...»\n"
+    "• Создание папок и новых текстовых файлов — только при включённом разрешении на запись.\n"
     "• «сверни окно», «разверни окно», «восстанови окно», «закрой активное окно»\n"
     "• «заблокируй компьютер»\n"
     "• «помощь» или «список команд»\n\n"
@@ -280,6 +284,89 @@ class CommandRouter:
                     "control_name": type_match.group(2).strip(),
                     "window_title": type_match.group(3).strip(),
                 },
+                confirm,
+            )
+
+        def unquote_path(value: str) -> str:
+            value = value.strip()
+            if len(value) >= 2 and value[:1] in {chr(34), chr(39)} and value[-1:] == value[:1]:
+                return value[1:-1]
+            return value
+
+        list_files_match = re.fullmatch(
+            r"(?:покажи файлы в папке|список файлов в папке|что находится в папке)\\s+(.+)",
+            raw_command,
+            flags=re.IGNORECASE,
+        )
+        if list_files_match:
+            return self._execute(
+                "list_directory",
+                {"path": unquote_path(list_files_match.group(1))},
+                confirm,
+            )
+
+        search_files_match = re.fullmatch(
+            r"найди (?:файл|папку|элемент) (.+?) в папке (.+)",
+            raw_command,
+            flags=re.IGNORECASE,
+        )
+        if search_files_match:
+            return self._execute(
+                "search_files",
+                {
+                    "query": unquote_path(search_files_match.group(1)),
+                    "path": unquote_path(search_files_match.group(2)),
+                },
+                confirm,
+            )
+
+        read_file_match = re.fullmatch(
+            r"(?:прочитай файл|прочитай содержимое файла)\\s+(.+)",
+            raw_command,
+            flags=re.IGNORECASE,
+        )
+        if read_file_match:
+            return self._execute(
+                "read_text_file",
+                {"path": unquote_path(read_file_match.group(1))},
+                confirm,
+            )
+
+        open_path_match = re.fullmatch(
+            r"открой (?:файл|папку|документ)\\s+(.+)",
+            raw_command,
+            flags=re.IGNORECASE,
+        )
+        if open_path_match:
+            return self._execute(
+                "open_allowed_path",
+                {"path": unquote_path(open_path_match.group(1))},
+                confirm,
+            )
+
+        create_folder_match = re.fullmatch(
+            r"создай папку (.+?) в папке (.+)",
+            raw_command,
+            flags=re.IGNORECASE,
+        )
+        if create_folder_match:
+            folder_name = unquote_path(create_folder_match.group(1))
+            parent = unquote_path(create_folder_match.group(2))
+            target = str(Path(parent) / folder_name)
+            return self._execute("create_directory", {"path": target}, confirm)
+
+        create_file_match = re.fullmatch(
+            r"создай файл (.+?) в папке (.+?) с текстом (.+)",
+            raw_command,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        if create_file_match:
+            file_name = unquote_path(create_file_match.group(1))
+            parent = unquote_path(create_file_match.group(2))
+            target = str(Path(parent) / file_name)
+            return self._execute(
+                "write_text_file",
+                {"path": target, "text": create_file_match.group(3)},
                 confirm,
             )
 
