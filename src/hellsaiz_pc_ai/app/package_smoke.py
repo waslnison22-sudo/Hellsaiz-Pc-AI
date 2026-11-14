@@ -10,6 +10,8 @@ PACKAGED_RUNTIME_MODULES = (
     "PySide6.QtCore",
     "PySide6.QtWidgets",
     "hellsaiz_pc_ai.providers.gigachat",
+    "hellsaiz_pc_ai.tools.ui_automation",
+    "pywinauto",
     "cryptography.hazmat.primitives.asymmetric.ed25519",
     "numpy",
     "sounddevice",
