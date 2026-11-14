@@ -246,3 +246,12 @@ def test_unknown_application_alias_is_not_guessed():
 
     response = router.route("запусти кску", approve)
     assert "не добавлено" in response.casefold()
+
+
+
+def test_user_alias_cannot_shadow_another_canonical_app_id():
+    with pytest.raises(ValueError, match="Ambiguous"):
+        make_router(
+            allowed_apps={"steam": ("steam.exe",), "cs2": ("cs2.exe",)},
+            app_aliases={"steam": ("cs2",)},
+        )
