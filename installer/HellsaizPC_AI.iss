@@ -27,7 +27,7 @@ VersionInfoProductName=Hellsaiz PC AI
 VersionInfoCompany=Hellsaiz
 
 [Tasks]
-Name: "desktopicon"; Description: "Создать ярлык на рабочем столе"; GroupDescription: "Дополнительные ярлыки:"; Flags: unchecked
+Name: "desktopicon"; Description: "Создать ярлык на рабочем столе"; GroupDescription: "Дополнительные ярлыки:"
 
 [Files]
 Source: "..\dist\install\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
