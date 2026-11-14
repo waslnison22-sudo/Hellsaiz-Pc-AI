@@ -28,6 +28,12 @@ from hellsaiz_pc_ai.update_client import (
 from hellsaiz_pc_ai.install_layout import installed_app_root, installed_version
 from hellsaiz_pc_ai import startup_task
 from hellsaiz_pc_ai.network import v2raytun
+from hellsaiz_pc_ai.telegram import (
+    TelegramBotWorker,
+    TelegramSettings,
+    load_settings as load_telegram_settings,
+    save_settings as save_telegram_settings,
+)
 from hellsaiz_pc_ai.version import APP_VERSION
 from hellsaiz_pc_ai.core.orchestrator import AssistantOrchestrator
 from hellsaiz_pc_ai.core.registry import ToolRegistry
@@ -277,6 +283,14 @@ def main() -> int:
     ) = build_runtime(settings)
     file_access_path = settings.workflows_path.parent / "file_access.json"
     active_voice = {"name": str(profile_data.get("voice_name") or settings.speech.tts_voice_name)}
+    telegram_config_path = settings.workflows_path.parent / "telegram.json"
+    telegram_token_path = settings.workflows_path.parent / "telegram_token.dpapi"
+    try:
+        telegram_settings = load_telegram_settings(telegram_config_path)
+    except ValueError as exc:
+        logging.warning("Telegram settings are invalid; bot will stay disabled: %s", exc)
+        telegram_settings = TelegramSettings()
+
     network_settings_path = settings.workflows_path.parent / "network.json"
     try:
         network_settings = v2raytun.load_network_settings(network_settings_path)
@@ -2865,6 +2879,227 @@ def main() -> int:
     require_proxy_check.toggled.connect(lambda _checked: persist_network_settings())
     launch_v2raytun_check.toggled.connect(lambda _checked: persist_network_settings())
 
+    telegram_title = QLabel("TELEGRAM WORKER")
+    telegram_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
+    settings_layout.addWidget(telegram_title)
+    telegram_help = QLabel(
+        "Отдельный бот без ИИ. Доступ разрешён только указанным Telegram user ID и chat ID. "
+        "Токен хранится через Windows DPAPI. Бот не запускает программы, не выполняет shell-команды "
+        "и не получает доступ к файлам или окнам ПК."
+    )
+    telegram_help.setWordWrap(True)
+    telegram_help.setStyleSheet("color:#929aa6;")
+    settings_layout.addWidget(telegram_help)
+
+    telegram_token_row = QHBoxLayout()
+    telegram_token_input = QLineEdit()
+    telegram_token_input.setEchoMode(QLineEdit.EchoMode.Password)
+    telegram_token_input.setPlaceholderText("Токен бота от BotFather")
+    save_telegram_token_button = QPushButton("Сохранить токен")
+    telegram_token_row.addWidget(telegram_token_input, 1)
+    telegram_token_row.addWidget(save_telegram_token_button)
+    settings_layout.addLayout(telegram_token_row)
+
+    token_saved = False
+    try:
+        token_saved = bool(load_secret(telegram_token_path))
+    except SecureStoreError as exc:
+        logging.warning("Could not load the Telegram token: %s", exc)
+
+    telegram_token_status = QLabel(
+        "Токен защищён DPAPI и сохранён."
+        if token_saved else "Токен не сохранён."
+    )
+    telegram_token_status.setStyleSheet("color:#929aa6;")
+    settings_layout.addWidget(telegram_token_status)
+
+    telegram_users_input = QLineEdit(
+        ", ".join(str(value) for value in telegram_settings.allowed_user_ids)
+    )
+    telegram_users_input.setPlaceholderText("Разрешённые user ID через запятую")
+    telegram_chats_input = QLineEdit(
+        ", ".join(str(value) for value in telegram_settings.allowed_chat_ids)
+    )
+    telegram_chats_input.setPlaceholderText("Разрешённые chat ID через запятую")
+    settings_layout.addWidget(telegram_users_input)
+    settings_layout.addWidget(telegram_chats_input)
+
+    telegram_permissions_label = QLabel("Разрешённые безопасные команды")
+    telegram_permissions_label.setStyleSheet("color:#929aa6;")
+    settings_layout.addWidget(telegram_permissions_label)
+    telegram_permission_checks: dict[str, QCheckBox] = {}
+    for tool_name, command_name, description in (
+        ("get_local_time", "/time", "Локальные дата и время"),
+        ("get_system_info", "/system", "Основные сведения о системе"),
+        ("list_reminders", "/reminders", "Список активных напоминаний"),
+    ):
+        check = QCheckBox(f"{command_name} — {description}")
+        check.setChecked(tool_name in telegram_settings.allowed_tools)
+        telegram_permission_checks[tool_name] = check
+        settings_layout.addWidget(check)
+
+    telegram_settings_buttons = QHBoxLayout()
+    save_telegram_settings_button = QPushButton("Сохранить настройки бота")
+    telegram_enable_check = QCheckBox("Запустить Telegram worker")
+    telegram_enable_check.setChecked(telegram_settings.enabled)
+    telegram_settings_buttons.addWidget(save_telegram_settings_button)
+    telegram_settings_buttons.addWidget(telegram_enable_check)
+    settings_layout.addLayout(telegram_settings_buttons)
+
+    telegram_status = QLabel("Telegram worker выключен.")
+    telegram_status.setWordWrap(True)
+    telegram_status.setStyleSheet("color:#929aa6;")
+    settings_layout.addWidget(telegram_status)
+
+    class TelegramStatusBridge(QObject):
+        status = Signal(str)
+
+    telegram_status_bridge = TelegramStatusBridge()
+    telegram_status_bridge.status.connect(telegram_status.setText)
+    telegram_worker_state: dict[str, Any] = {"worker": None}
+    telegram_poll_timer = QTimer(window)
+    telegram_poll_timer.setInterval(1000)
+
+    def parse_telegram_ids(value: str, label: str) -> list[int]:
+        parts = [item.strip() for item in value.split(",") if item.strip()]
+        if len(parts) > 100:
+            raise ValueError(f"Для поля «{label}» разрешено не более 100 ID.")
+        values: list[int] = []
+        for item in parts:
+            try:
+                identifier = int(item)
+            except ValueError as exc:
+                raise ValueError(f"Поле «{label}» должно содержать только числовые ID.") from exc
+            if identifier == 0 or identifier in values:
+                if identifier == 0:
+                    raise ValueError(f"Поле «{label}» не может содержать ID 0.")
+                continue
+            values.append(identifier)
+        return values
+
+    def persist_telegram_settings(*, enabled: bool | None = None) -> bool:
+        try:
+            telegram_settings.allowed_user_ids[:] = parse_telegram_ids(
+                telegram_users_input.text(), "user ID"
+            )
+            telegram_settings.allowed_chat_ids[:] = parse_telegram_ids(
+                telegram_chats_input.text(), "chat ID"
+            )
+            telegram_settings.allowed_tools[:] = [
+                name for name, check in telegram_permission_checks.items()
+                if check.isChecked()
+            ]
+            if enabled is not None:
+                telegram_settings.enabled = enabled
+            save_telegram_settings(telegram_config_path, telegram_settings)
+            return True
+        except (OSError, ValueError) as exc:
+            telegram_status.setText(f"Не удалось сохранить Telegram: {exc}")
+            return False
+
+    def save_telegram_bot_token() -> None:
+        current_worker = telegram_worker_state["worker"]
+        if current_worker is not None and current_worker.is_alive():
+            telegram_token_status.setText("Сначала останови Telegram worker, затем меняй токен.")
+            return
+        value = telegram_token_input.text().strip()
+        try:
+            save_secret(telegram_token_path, value)
+            telegram_token_input.clear()
+            token_saved_now = bool(value)
+            telegram_token_status.setText(
+                "Токен защищён DPAPI и сохранён."
+                if token_saved_now else "Токен удалён. Telegram worker не сможет подключиться."
+            )
+        except SecureStoreError as exc:
+            telegram_token_status.setText(f"Не удалось сохранить токен: {exc}")
+
+    def reap_telegram_worker() -> None:
+        worker = telegram_worker_state["worker"]
+        if worker is not None and not worker.is_alive():
+            worker.join(timeout=0)
+            telegram_worker_state["worker"] = None
+            if telegram_settings.enabled:
+                telegram_enable_check.blockSignals(True)
+                telegram_enable_check.setChecked(False)
+                telegram_enable_check.blockSignals(False)
+                telegram_settings.enabled = False
+                try:
+                    save_telegram_settings(telegram_config_path, telegram_settings)
+                except (OSError, ValueError):
+                    logging.exception("Could not persist stopped Telegram worker state.")
+
+    def start_telegram_worker() -> bool:
+        current_worker = telegram_worker_state["worker"]
+        if current_worker is not None and current_worker.is_alive():
+            telegram_status.setText("Telegram worker уже работает или ещё останавливается.")
+            return False
+        try:
+            token = load_secret(telegram_token_path)
+            if not token:
+                raise ValueError("Сначала сохрани токен Telegram-бота.")
+            if not telegram_settings.allowed_user_ids or not telegram_settings.allowed_chat_ids:
+                raise ValueError("Укажи хотя бы один разрешённый user ID и chat ID.")
+            if not persist_telegram_settings(enabled=True):
+                return False
+            worker = TelegramBotWorker(
+                token,
+                registry,
+                allowed_user_ids=set(telegram_settings.allowed_user_ids),
+                allowed_chat_ids=set(telegram_settings.allowed_chat_ids),
+                allowed_tools=set(telegram_settings.allowed_tools),
+                proxy_url=str(network_settings.get("proxy_url") or ""),
+                require_proxy=bool(network_settings.get("require_proxy_for_telegram", True)),
+                health_url=str(network_settings.get("health_url") or v2raytun.DEFAULT_HEALTH_URL),
+                app_version=current_app_version,
+                status_callback=telegram_status_bridge.status.emit,
+            )
+            telegram_worker_state["worker"] = worker
+            worker.start()
+            telegram_status.setText("Telegram worker запускается…")
+            return True
+        except (OSError, ValueError, SecureStoreError) as exc:
+            telegram_status.setText(f"Не удалось запустить Telegram worker: {exc}")
+            return False
+
+    def stop_telegram_worker() -> None:
+        worker = telegram_worker_state["worker"]
+        if worker is None:
+            telegram_status.setText("Telegram worker уже остановлен.")
+            return
+        worker.stop()
+        telegram_status.setText(
+            "Отправлен запрос на остановку. Текущий long-poll запрос может завершиться до 30 секунд."
+        )
+
+    def toggle_telegram_worker(enabled: bool) -> None:
+        if enabled:
+            if not start_telegram_worker():
+                telegram_enable_check.blockSignals(True)
+                telegram_enable_check.setChecked(False)
+                telegram_enable_check.blockSignals(False)
+                telegram_settings.enabled = False
+                try:
+                    save_telegram_settings(telegram_config_path, telegram_settings)
+                except (OSError, ValueError):
+                    logging.exception("Could not save disabled Telegram settings.")
+        else:
+            persist_telegram_settings(enabled=False)
+            stop_telegram_worker()
+
+    def save_telegram_bot_settings() -> None:
+        if telegram_settings.enabled:
+            telegram_status.setText("Останови Telegram worker перед изменением списка ID и разрешений.")
+            return
+        if persist_telegram_settings():
+            telegram_status.setText("Список ID и матрица разрешений сохранены. Бот пока не запущен.")
+
+    save_telegram_token_button.clicked.connect(save_telegram_bot_token)
+    save_telegram_settings_button.clicked.connect(save_telegram_bot_settings)
+    telegram_enable_check.toggled.connect(toggle_telegram_worker)
+    telegram_poll_timer.timeout.connect(reap_telegram_worker)
+    telegram_poll_timer.start()
+
     startup_title = QLabel("АВТОЗАПУСК WINDOWS")
     startup_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
     settings_layout.addWidget(startup_title)
@@ -3481,6 +3716,12 @@ def main() -> int:
                         "Could not finish background task %s during shutdown",
                         type(worker).__name__,
                     )
+        telegram_worker = telegram_worker_state.get("worker")
+        if telegram_worker is not None and telegram_worker.is_alive():
+            telegram_worker.stop()
+            telegram_worker.join(timeout=33)
+            if telegram_worker.is_alive():
+                logging.error("Telegram worker did not stop before desktop shutdown timeout.")
         try:
             from hellsaiz_pc_ai.speech.vosk import VoskTranscriber
             from hellsaiz_pc_ai.speech.piper import PiperSynthesizer
@@ -3574,6 +3815,15 @@ def main() -> int:
             except Exception as exc:
                 network_status.setText(f"Автозапуск v2RayTun не выполнен: {exc}")
         QTimer.singleShot(1200, start_network_client_on_launch)
+    if telegram_settings.enabled:
+        telegram_enable_check.blockSignals(True)
+        telegram_enable_check.setChecked(True)
+        telegram_enable_check.blockSignals(False)
+        if not start_telegram_worker():
+            telegram_settings.enabled = False
+            telegram_enable_check.blockSignals(True)
+            telegram_enable_check.setChecked(False)
+            telegram_enable_check.blockSignals(False)
     if install_root is not None:
         try:
             marker = install_root / "health" / f"{current_app_version}.ok"
