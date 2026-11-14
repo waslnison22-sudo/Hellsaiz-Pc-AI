@@ -191,6 +191,26 @@ jobs:
               throw "Installer did not install $required."
             }
           }
+          $versionDirectory = Join-Path $smokeRoot "versions/$($installed.active_version)"
+          $installedApp = Join-Path $versionDirectory "HellsaizPC_AI.exe"
+          if (-not (Test-Path $installedApp -PathType Leaf)) {
+            throw "Installer did not install the versioned desktop executable."
+          }
+
+          foreach ($smoke in @(
+            @{ Path = $installedApp; Working = $versionDirectory; Label = "Installed desktop" },
+            @{ Path = (Join-Path $smokeRoot "HellsaizLauncher.exe"); Working = $smokeRoot; Label = "Installed launcher" },
+            @{ Path = (Join-Path $smokeRoot "HellsaizUpdater.exe"); Working = $smokeRoot; Label = "Installed updater" }
+          )) {
+            $smokeProcess = Start-Process -FilePath $smoke.Path -ArgumentList "--self-test" -WorkingDirectory $smoke.Working -PassThru
+            if (-not $smokeProcess.WaitForExit(300000)) {
+              Stop-Process -Id $smokeProcess.Id -Force -ErrorAction SilentlyContinue
+              throw "$($smoke.Label) self-test timed out after installation."
+            }
+            if ($smokeProcess.ExitCode -ne 0) {
+              throw "$($smoke.Label) self-test failed after installation: exit code $($smokeProcess.ExitCode)."
+            }
+          }
 
           $uninstaller = Join-Path $smokeRoot "unins000.exe"
           if (-not (Test-Path $uninstaller -PathType Leaf)) { throw "Installer did not register an uninstaller." }
