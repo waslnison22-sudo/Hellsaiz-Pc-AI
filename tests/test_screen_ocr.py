@@ -1,0 +1,72 @@
+from __future__ import annotations
+
+from hellsaiz_pc_ai.core.registry import ToolRegistry
+from hellsaiz_pc_ai.tools.screen_ocr import (
+    MAX_TEXT_CHARS,
+    _extract_text,
+    read_primary_screen_text,
+    register_screen_ocr_tools,
+)
+
+
+class FakeResult:
+    def __init__(self, texts, scores=None):
+        self.txts = texts
+        self.scores = scores
+
+
+def test_ocr_extracts_text_and_filters_low_confidence():
+    result = _extract_text(FakeResult(
+        ["  Hellsaiz   PC AI ", "noise", "", "Version 0.1.4"],
+        [0.99, 0.1, 0.8, 0.98],
+    ))
+    assert result == ["Hellsaiz PC AI", "Version 0.1.4"]
+
+
+def test_ocr_limits_output_length():
+    result = _extract_text(FakeResult(["x" * (MAX_TEXT_CHARS + 100)], [0.99]))
+    assert len(result[0]) == MAX_TEXT_CHARS
+
+
+def test_screen_capture_result_is_local_and_not_written():
+    calls = []
+    class FakeEngine:
+        def __call__(self, image):
+            calls.append(image)
+            return FakeResult(["Local only"], [0.95])
+
+    output = read_primary_screen_text(
+        capture=lambda: "frame",
+        engine_factory=FakeEngine,
+    )
+    assert output.ok
+    assert "Local only" in output.output
+    assert output.data == {
+        "line_count": 1,
+        "saved_to_disk": False,
+        "sent_to_network": False,
+    }
+    assert calls == ["frame"]
+
+
+def test_screen_ocr_reports_optional_dependency_failure():
+    output = read_primary_screen_text(
+        capture=lambda: "frame",
+        engine_factory=lambda: (_ for _ in ()).throw(ImportError("missing")),
+    )
+    assert not output.ok
+    assert "ImportError" in output.output
+
+
+def test_ocr_tool_is_disabled_until_user_opt_in():
+    registry = ToolRegistry()
+    state = {"enabled": False}
+    register_screen_ocr_tools(registry, enabled=lambda: state["enabled"])
+
+    disabled = registry.execute("read_screen_text", {})
+    assert not disabled.ok
+    assert "выключено" in disabled.output.casefold()
+
+    state["enabled"] = True
+    # Once enabled, a mocked screen capture is tested by read_primary_screen_text.
+    assert registry.get_spec("read_screen_text") is not None
