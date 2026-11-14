@@ -20,6 +20,8 @@ HELP_TEXT = (
     "• «погода в Москве», «курс доллара к рублю»\n"
     "• «который час», «какая дата», «информация о системе»\n"
     "• «покажи открытые окна», «переключись на Блокнот»\n"
+    "• «покажи элементы окна Настройки», «нажми Сохранить в окне Блокнот»\n"
+    "• «введи текст ... в поле Поиск окна Проводник»\n"
     "• «сверни окно», «разверни окно», «восстанови окно», «закрой активное окно»\n"
     "• «заблокируй компьютер»\n"
     "• «помощь» или «список команд»\n\n"
@@ -234,6 +236,52 @@ class CommandRouter:
         if focus_match:
             target = focus_match.group(1).strip()
             return self._execute("focus_window", {"target": target}, confirm)
+
+        inspect_match = re.fullmatch(
+            r"(?:покажи|список) (?:элементы|элементы управления) окна (.+)",
+            command,
+        )
+        if inspect_match:
+            return self._execute(
+                "inspect_window_controls",
+                {"window_title": inspect_match.group(1).strip()},
+                confirm,
+            )
+
+        click_match = re.fullmatch(r"нажми (.+?) в окне (.+)", command)
+        if click_match:
+            return self._execute(
+                "click_window_control",
+                {
+                    "control_name": click_match.group(1).strip(),
+                    "window_title": click_match.group(2).strip(),
+                },
+                confirm,
+            )
+
+        raw_command = self.strip_wake_name(text).strip()
+        type_match = re.fullmatch(
+            r"введи (.+?) в поле (.+?) окна (.+)",
+            raw_command,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        if type_match:
+            literal_text = type_match.group(1).strip()
+            if (
+                len(literal_text) >= 2
+                and literal_text[0] == literal_text[-1]
+                and literal_text[0] in {"\\"","'"}
+            ):
+                literal_text = literal_text[1:-1]
+            return self._execute(
+                "type_into_window_control",
+                {
+                    "text": literal_text,
+                    "control_name": type_match.group(2).strip(),
+                    "window_title": type_match.group(3).strip(),
+                },
+                confirm,
+            )
 
         window_commands = {
             "сверни окно": "minimize_active_window",
