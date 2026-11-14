@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from hellsaiz_pc_ai.core.models import RiskLevel, ToolResult
