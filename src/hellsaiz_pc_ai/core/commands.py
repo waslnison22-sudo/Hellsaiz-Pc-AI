@@ -19,6 +19,7 @@ HELP_TEXT = (
     "• «найди в интернете…», «поищи информацию о…»\n"
     "• «погода в Москве», «курс доллара к рублю»\n"
     "• «который час», «какая дата», «информация о системе»\n"
+    "• «сверни окно», «разверни окно», «восстанови окно», «закрой активное окно»\n"
     "• «заблокируй компьютер»\n"
     "• «помощь» или «список команд»\n\n"
     "Команды выполняются локально по заранее заданным правилам. "
@@ -210,6 +211,24 @@ class CommandRouter:
 
         if command in {"информация о системе", "сведения о системе", "характеристики пк", "система"}:
             return self._execute("get_system_info", {}, confirm)
+
+        window_commands = {
+            "сверни окно": "minimize_active_window",
+            "свернуть окно": "minimize_active_window",
+            "минимизируй окно": "minimize_active_window",
+            "сверни текущее окно": "minimize_active_window",
+            "разверни окно": "maximize_active_window",
+            "развернуть окно": "maximize_active_window",
+            "максимизируй окно": "maximize_active_window",
+            "восстанови окно": "restore_active_window",
+            "восстановить окно": "restore_active_window",
+            "верни окно": "restore_active_window",
+            "закрой активное окно": "close_active_window",
+            "закрой текущее окно": "close_active_window",
+        }
+        window_tool = window_commands.get(command)
+        if window_tool:
+            return self._execute(window_tool, {}, confirm)
 
         if command in {"заблокируй компьютер", "заблокировать компьютер", "заблокируй пк"}:
             return self._execute("lock_pc", {}, confirm)
