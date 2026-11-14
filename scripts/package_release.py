@@ -6,7 +6,6 @@ import hashlib
 import json
 import os
 import shutil
-import struct
 import zipfile
 from pathlib import Path, PurePosixPath
 from typing import Any
