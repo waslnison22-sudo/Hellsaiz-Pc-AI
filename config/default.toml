@@ -27,6 +27,10 @@ tts_voice_name = "Aleksandr"
 tts_rate = 175
 tts_volume = 0.9
 vosk_model_path = ""
+stt_primary = "vosk"
+stt_fallback = "whisper.cpp"
+whisper_cpp_executable = ""
+whisper_cpp_model = ""
 
 [windows.allowed_apps]
 notepad = ["notepad.exe"]
