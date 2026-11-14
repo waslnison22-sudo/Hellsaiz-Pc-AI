@@ -676,6 +676,15 @@ def main() -> int:
     model_row.addWidget(ai_enabled_check)
     profile_layout.addLayout(model_row)
 
+    provider_health_row = QHBoxLayout()
+    provider_health_button = QPushButton("Проверить соединение и модели")
+    model_candidates_combo = QComboBox()
+    model_candidates_combo.setMinimumWidth(260)
+    model_candidates_combo.addItem("Список моделей не загружен", None)
+    provider_health_row.addWidget(provider_health_button)
+    provider_health_row.addWidget(model_candidates_combo, 1)
+    profile_layout.addLayout(provider_health_row)
+
     voice_row = QHBoxLayout()
     voice_label = QLabel("Голос ответа")
     voice_label.setMinimumWidth(95)
@@ -807,6 +816,99 @@ def main() -> int:
 
     provider_combo.currentIndexChanged.connect(provider_changed)
     provider_changed()
+
+    provider_health_workers: list[QThread] = []
+
+    class ProviderHealthWorker(QThread):
+        completed = Signal(object)
+        failed = Signal(str)
+
+        def __init__(self, provider: Any) -> None:
+            super().__init__()
+            self.provider = provider
+
+        def run(self) -> None:
+            try:
+                self.completed.emit(self.provider.health_check())
+            except Exception as exc:
+                self.failed.emit(str(exc))
+
+    def apply_discovered_model(index: int) -> None:
+        value = model_candidates_combo.itemData(index)
+        if isinstance(value, str) and value:
+            model_edit.setText(value)
+
+    model_candidates_combo.currentIndexChanged.connect(apply_discovered_model)
+
+    def check_provider_connection() -> None:
+        if any(worker.isRunning() for worker in provider_health_workers):
+            return
+        selected_provider = str(provider_combo.currentData() or "custom")
+        try:
+            if selected_provider == "gigachat":
+                profile_name = named_profile_name.text().strip()
+                credential_path = provider_credential_path(
+                    settings.workflows_path.parent, profile_name
+                )
+                authorization_key = gigachat_key_edit.text().strip() or load_secret(credential_path)
+                if not authorization_key:
+                    profile_status.setText("Сначала укажи Authorization key GigaChat API.")
+                    return
+                provider = GigaChatProvider(
+                    authorization_key,
+                    model_edit.text().strip() or "GigaChat",
+                    base_url=endpoint_edit.text().strip() or GigaChatProvider.DEFAULT_BASE_URL,
+                    timeout_seconds=settings.llm.timeout_seconds,
+                )
+            else:
+                provider = OpenAICompatibleProvider(
+                    endpoint_edit.text().strip(),
+                    model_edit.text().strip() or "local-model",
+                    settings.llm.api_key,
+                    settings.llm.timeout_seconds,
+                    settings.allow_remote_llm,
+                )
+        except Exception as exc:
+            profile_status.setText(f"Проверка не запущена: {exc}")
+            return
+
+        provider_health_button.setEnabled(False)
+        profile_status.setText("Проверяю соединение и получаю список моделей…")
+        worker = ProviderHealthWorker(provider)
+        provider_health_workers.append(worker)
+
+        def on_provider_health(result: Any) -> None:
+            provider_health_button.setEnabled(True)
+            models = result.get("models", []) if isinstance(result, dict) else []
+            model_candidates_combo.clear()
+            if isinstance(models, list) and models:
+                for item in models:
+                    if isinstance(item, str):
+                        model_candidates_combo.addItem(item, item)
+                current_index = model_candidates_combo.findData(model_edit.text().strip())
+                if current_index >= 0:
+                    model_candidates_combo.setCurrentIndex(current_index)
+                model_available = result.get("model_available")
+                model_label = "найдена" if model_available else "не найдена в списке"
+                profile_status.setText(
+                    f"Соединение установлено · {len(models)} моделей · "
+                    f"модель «{result.get('model', '')}» {model_label}."
+                )
+            else:
+                model_candidates_combo.addItem("Сервер не вернул список моделей", None)
+                profile_status.setText("Соединение установлено, но список моделей пуст.")
+        def on_provider_health_failed(message: str) -> None:
+            provider_health_button.setEnabled(True)
+            profile_status.setText(f"Проверка провайдера не прошла: {message}")
+        worker.completed.connect(on_provider_health)
+        worker.failed.connect(on_provider_health_failed)
+        worker.finished.connect(
+            lambda: provider_health_workers.remove(worker)
+            if worker in provider_health_workers else None
+        )
+        worker.start()
+
+    provider_health_button.clicked.connect(check_provider_connection)
 
     def toggle_profile_menu() -> None:
         profile_animation.stop()
@@ -2966,6 +3068,7 @@ def main() -> int:
             [wake_listener_state["worker"]],
             workers,
             update_workers,
+            provider_health_workers,
             voice_download_workers,
             vosk_model_download_workers,
             _BACKGROUND_VOICE_WORKERS["tests"],
