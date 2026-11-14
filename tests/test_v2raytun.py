@@ -128,7 +128,7 @@ def test_network_settings_validate_and_persist(tmp_path: Path):
 
 
 def test_launch_client_uses_shell_false_and_no_undocumented_arguments(tmp_path: Path, monkeypatch):
-    monkeypatch.setattr(v2raytun.os, "name", "nt")
+    monkeypatch.setattr(v2raytun.sys, "platform", "win32")
     executable = tmp_path / "v2RayTun.exe"
     executable.write_bytes(b"exe")
     calls = []
