@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Iterable
 
 
 @dataclass(frozen=True)
@@ -55,7 +54,7 @@ def build_default_intent_engine() -> IntentEngine:
     )
     engine.register(
         "weather",
-        r"(?:погода|какая погода|что с погодой)(?:\s+(?:сейчас|сегодня))?(?:\s+(?:в|для)\s+(?P<city>.+))?",
+        r"(?:погода|какая погода|что с погодой)(?:\s+(?:сейчас|сегодня))?(?:\s+(?:в|для)\s+(?P<city>.+?))?(?:\s+(?:сейчас|сегодня))?",
     )
     engine.register(
         "exchange_rate",

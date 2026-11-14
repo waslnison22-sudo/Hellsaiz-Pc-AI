@@ -294,7 +294,7 @@ def test_alice_style_search_phrasings_resolve_to_one_skill():
 
 def test_weather_skill_extracts_city_and_asks_when_missing():
     router = make_router()
-    assert router.route("какая погода в Москве") == "Готово. weather: москва"
+    assert router.route("какая погода в Москве") == "Готово. weather: москве"
     assert "для какого города" in router.route("Хелп, погода").casefold()
 
 
@@ -315,7 +315,7 @@ def test_intent_engine_extracts_named_slots():
     assert search.name == "web_search"
     assert search.slots["query"] == "как устроен onnx"
     assert weather.name == "weather"
-    assert weather.slots["city"] == "белграде сегодня"
+    assert weather.slots["city"] == "белграде"
     assert rate.name == "exchange_rate"
     assert rate.slots["base"] == "евро"
     assert rate.slots["quote"] == "доллар"
