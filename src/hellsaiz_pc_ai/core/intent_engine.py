@@ -41,6 +41,20 @@ class IntentEngine:
                 for key, value in match.groupdict().items()
                 if value is not None and value.strip()
             }
+            if item.name == "exchange_rate":
+                currency_forms = {
+                    "доллара": "доллар",
+                    "доллары": "доллар",
+                    "доллару": "доллар",
+                    "рубля": "рубль",
+                    "рублю": "рубль",
+                    "юаня": "юань",
+                    "фунта": "фунт",
+                }
+                slots = {
+                    key: currency_forms.get(value, value)
+                    for key, value in slots.items()
+                }
             return IntentMatch(item.name, slots)
         return None
 
