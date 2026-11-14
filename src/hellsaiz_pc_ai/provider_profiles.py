@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 
 
 SCHEMA_VERSION = 1
-SUPPORTED_PROVIDERS = {"lm-studio", "ollama", "llama.cpp", "custom"}
+SUPPORTED_PROVIDERS = {"lm-studio", "ollama", "llama.cpp", "custom", "gigachat"}
 DEFAULT_PROFILE_NAME = "LM Studio"
 
 
