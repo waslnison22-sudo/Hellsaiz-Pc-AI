@@ -137,3 +137,77 @@ def test_runner_accepts_startup_and_schedule_events():
     )
     assert startup_result.started and startup_result.completed
     assert schedule_result.started and schedule_result.completed
+
+
+
+def test_repeat_action_executes_registered_tool_exactly_n_times():
+    data = {
+        "name": "Repeat",
+        "nodes": [
+            {"id": "start", "type": "trigger.text", "config": {"phrase": "repeat"}},
+            {
+                "id": "repeat",
+                "type": "action.repeat",
+                "config": {
+                    "name": "set_volume",
+                    "arguments": {"percent": 35},
+                    "count": 3,
+                },
+            },
+        ],
+        "edges": [{"from": "start", "to": "repeat"}],
+    }
+    graph = WorkflowGraph.from_dict(data)
+    result = WorkflowGraphRunner(registry()).run(
+        graph, WorkflowTrigger("text", "repeat"), confirm=allow
+    )
+
+    assert result.completed
+    assert [step.output for step in result.steps] == ["Volume 35"] * 3
+
+
+def test_repeat_action_stops_when_a_confirmation_is_rejected():
+    data = {
+        "name": "Repeat",
+        "nodes": [
+            {"id": "start", "type": "trigger.text", "config": {"phrase": "repeat"}},
+            {
+                "id": "repeat",
+                "type": "action.repeat",
+                "config": {
+                    "name": "set_volume",
+                    "arguments": {"percent": 35},
+                    "count": 4,
+                },
+            },
+        ],
+        "edges": [{"from": "start", "to": "repeat"}],
+    }
+    decisions = iter([True, False, True, True])
+    result = WorkflowGraphRunner(registry()).run(
+        WorkflowGraph.from_dict(data),
+        WorkflowTrigger("text", "repeat"),
+        confirm=lambda *_: next(decisions),
+    )
+
+    assert result.started and not result.completed
+    assert len(result.steps) == 2
+    assert "повтор 2/4" in result.message.casefold()
+
+
+@pytest.mark.parametrize("count", [0, 11, True, 1.5])
+def test_repeat_action_rejects_unbounded_or_invalid_counts(count):
+    data = {
+        "name": "Repeat",
+        "nodes": [
+            {"id": "start", "type": "trigger.text", "config": {"phrase": "repeat"}},
+            {
+                "id": "repeat",
+                "type": "action.repeat",
+                "config": {"name": "set_volume", "arguments": {"percent": 20}, "count": count},
+            },
+        ],
+        "edges": [{"from": "start", "to": "repeat"}],
+    }
+    with pytest.raises(ValueError, match="1..10"):
+        WorkflowGraph.from_dict(data)

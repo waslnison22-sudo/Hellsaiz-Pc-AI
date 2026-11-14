@@ -74,3 +74,31 @@ def append_hour_condition(
             {"from": condition_id, "to": false_id, "when": "false"},
         ],
     )
+
+
+
+def append_repeat_action(
+    graph: WorkflowGraph,
+    source_id: str,
+    node_id: str,
+    tool_name: str,
+    arguments: dict[str, object],
+    count: int,
+    registered_tools: set[str],
+) -> WorkflowGraph:
+    if tool_name not in registered_tools:
+        raise ValueError(f"Tool '{tool_name}' is not registered in the host.")
+    if not isinstance(arguments, dict):
+        raise ValueError("Tool arguments must be a JSON object.")
+    if isinstance(count, bool) or not isinstance(count, int) or not 1 <= count <= 10:
+        raise ValueError("Repeat count must be an integer between 1 and 10.")
+    return _append_node(
+        graph,
+        source_id,
+        [{
+            "id": node_id,
+            "type": "action.repeat",
+            "config": {"name": tool_name, "arguments": arguments, "count": count},
+        }],
+        [{"from": source_id, "to": node_id}],
+    )

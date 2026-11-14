@@ -17,7 +17,7 @@ from hellsaiz_pc_ai.providers.openai_compatible import OpenAICompatibleProvider,
 from hellsaiz_pc_ai.storage.sqlite_store import ChatStore
 from hellsaiz_pc_ai.tools.system import register_system_tools
 from hellsaiz_pc_ai.tools.windows import register_windows_tools
-from hellsaiz_pc_ai.workflows.builder import append_hour_condition, append_tool_action, append_wait_action, terminal_nodes
+from hellsaiz_pc_ai.workflows.builder import append_hour_condition, append_repeat_action, append_tool_action, append_wait_action, terminal_nodes
 from hellsaiz_pc_ai.workflows.graph import WorkflowGraph, WorkflowGraphRunner, WorkflowTrigger
 from hellsaiz_pc_ai.workflows.library import WorkflowLibrary
 from hellsaiz_pc_ai.workflows.scheduler import WorkflowScheduler
@@ -349,6 +349,20 @@ def main() -> int:
     condition_row.addWidget(add_condition_button)
     scenario_layout.addLayout(condition_row)
 
+    repeat_row = QHBoxLayout()
+    repeat_id = QLineEdit("repeat-action")
+    repeat_id.setPlaceholderText("id повтора")
+    repeat_count = QLineEdit("3")
+    repeat_count.setMaximumWidth(60)
+    add_repeat_button = QPushButton("Повторить выбранное действие")
+    repeat_hint = QLabel("Используется инструмент и JSON-аргументы из верхней строки.")
+    repeat_hint.setStyleSheet("color:#9098a4; font-size:11px;")
+    repeat_row.addWidget(repeat_id)
+    repeat_row.addWidget(repeat_count)
+    repeat_row.addWidget(add_repeat_button)
+    repeat_row.addWidget(repeat_hint, 1)
+    scenario_layout.addLayout(repeat_row)
+
     scenario_id = QLineEdit()
     scenario_id.setPlaceholderText("id-сценария, например night-mode")
     scenario_layout.addWidget(scenario_id)
@@ -571,6 +585,28 @@ def main() -> int:
         except (ValueError, json.JSONDecodeError) as exc:
             scenario_status.setText(f"Не удалось добавить ожидание: {exc}")
 
+    def add_repeat_node() -> None:
+        try:
+            graph = WorkflowGraph.from_dict(json.loads(graph_editor.toPlainText()))
+            source_id = builder_source.currentData()
+            if not source_id:
+                raise ValueError("Выбери конечный узел ветви.")
+            arguments = json.loads(builder_arguments.text() or "{}")
+            count = int(repeat_count.text())
+            updated = append_repeat_action(
+                graph,
+                str(source_id),
+                repeat_id.text().strip(),
+                str(builder_tool.currentData() or ""),
+                arguments,
+                count,
+                set(registered_tool_names),
+            )
+            apply_builder_graph(updated)
+            repeat_id.setText("repeat-action")
+        except (ValueError, json.JSONDecodeError) as exc:
+            scenario_status.setText(f"Не удалось добавить повтор: {exc}")
+
     def add_condition_node() -> None:
         try:
             graph = WorkflowGraph.from_dict(json.loads(graph_editor.toPlainText()))
@@ -589,6 +625,7 @@ def main() -> int:
     add_tool_button.clicked.connect(add_tool_node)
     add_wait_button.clicked.connect(add_wait_node)
     add_condition_button.clicked.connect(add_condition_node)
+    add_repeat_button.clicked.connect(add_repeat_node)
     refresh_builder_sources()
 
     def validate_scenario() -> WorkflowGraph | None:

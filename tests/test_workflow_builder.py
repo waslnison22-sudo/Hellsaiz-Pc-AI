@@ -1,6 +1,6 @@
 import pytest
 
-from hellsaiz_pc_ai.workflows.builder import append_hour_condition, append_tool_action, append_wait_action, terminal_nodes
+from hellsaiz_pc_ai.workflows.builder import append_hour_condition, append_repeat_action, append_tool_action, append_wait_action, terminal_nodes
 from hellsaiz_pc_ai.workflows.graph import WorkflowGraph
 
 
@@ -41,3 +41,22 @@ def test_hour_condition_creates_two_branches():
 def test_hour_condition_rejects_out_of_range_hour():
     with pytest.raises(ValueError):
         append_hour_condition(sample_graph(), "end", "hour", "gte", 24)
+
+
+
+def test_append_repeat_action_uses_registered_tool_and_is_bounded():
+    updated = append_repeat_action(
+        sample_graph(), "end", "repeat-volume", "set_volume",
+        {"percent": 25}, 3, {"set_volume"},
+    )
+    node = next(node for node in updated.nodes if node.id == "repeat-volume")
+    assert node.kind == "action.repeat"
+    assert node.config["count"] == 3
+    assert terminal_nodes(updated) == ["repeat-volume"]
+
+
+def test_append_repeat_action_rejects_unregistered_tool_and_unbounded_count():
+    with pytest.raises(ValueError, match="not registered"):
+        append_repeat_action(sample_graph(), "end", "repeat", "powershell", {}, 2, set())
+    with pytest.raises(ValueError, match="1 and 10"):
+        append_repeat_action(sample_graph(), "end", "repeat", "set_volume", {}, 99, {"set_volume"})

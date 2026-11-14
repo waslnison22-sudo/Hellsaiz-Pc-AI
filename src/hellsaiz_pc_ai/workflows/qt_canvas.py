@@ -46,6 +46,8 @@ class WorkflowNodeItem(QGraphicsObject):
             return f"hour {cfg.get('operator')} {cfg.get('value')}"
         if self.node.kind == "action.tool":
             return str(cfg.get("name", ""))
+        if self.node.kind == "action.repeat":
+            return f"{cfg.get('name', '')} × {cfg.get('count', 1)}"
         if self.node.kind == "action.wait":
             return f"wait {cfg.get('seconds')} sec"
         return ""
@@ -59,6 +61,7 @@ class WorkflowNodeItem(QGraphicsObject):
             "trigger.hotkey": "#20252d",
             "condition.hour": "#252a32",
             "action.tool": "#171b21",
+            "action.repeat": "#20252d",
             "action.wait": "#171b21",
         }
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)

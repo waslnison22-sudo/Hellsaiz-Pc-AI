@@ -9,8 +9,8 @@ from typing import Any, Callable, Literal
 from hellsaiz_pc_ai.core.models import ToolResult
 from hellsaiz_pc_ai.core.registry import ConfirmCallback, ToolRegistry
 
-NodeKind = Literal["trigger.text", "trigger.hotkey", "trigger.schedule", "trigger.startup", "condition.hour", "action.tool", "action.wait"]
-_ALLOWED_KINDS = {"trigger.text", "trigger.hotkey", "trigger.schedule", "trigger.startup", "condition.hour", "action.tool", "action.wait"}
+NodeKind = Literal["trigger.text", "trigger.hotkey", "trigger.schedule", "trigger.startup", "condition.hour", "action.tool", "action.repeat", "action.wait"]
+_ALLOWED_KINDS = {"trigger.text", "trigger.hotkey", "trigger.schedule", "trigger.startup", "condition.hour", "action.tool", "action.repeat", "action.wait"}
 _ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
 _HOTKEY_RE = re.compile(
     r"^(?:(?:Ctrl|Alt|Shift|Win)\+){1,3}(?:[A-Z0-9]|F(?:[1-9]|1[0-2])|SPACE|ENTER|TAB)$",
@@ -131,6 +131,14 @@ class WorkflowGraph:
                 raise ValueError(f"Tool action '{node.id}' needs a registered tool name.")
             if not isinstance(arguments, dict):
                 raise ValueError(f"Tool action '{node.id}' arguments must be an object.")
+        elif node.kind == "action.repeat":
+            tool, arguments, count = cfg.get("name"), cfg.get("arguments"), cfg.get("count")
+            if set(cfg) != {"name", "arguments", "count"}:
+                raise ValueError(f"Repeat action '{node.id}' needs name, arguments and count.")
+            if not isinstance(tool, str) or not tool.strip() or not isinstance(arguments, dict):
+                raise ValueError(f"Repeat action '{node.id}' needs a registered tool and JSON arguments.")
+            if isinstance(count, bool) or not isinstance(count, int) or not 1 <= count <= 10:
+                raise ValueError("A repeat action is limited to 1..10 iterations.")
         elif node.kind == "action.wait":
             seconds = cfg.get("seconds")
             if set(cfg) != {"seconds"} or isinstance(seconds, bool) or not isinstance(seconds, (int, float)):
@@ -283,6 +291,19 @@ class WorkflowGraphRunner:
                 passed = self._compare_hour(self.clock().hour, cfg["operator"], cfg["value"])
                 branch = "true" if passed else "false"
                 current = next(edge.target for edge in edges if edge.when == branch)
+                continue
+            if node.kind == "action.repeat":
+                for iteration in range(node.config["count"]):
+                    result = self.registry.execute(
+                        node.config["name"], node.config["arguments"], confirm
+                    )
+                    results.append(result)
+                    if not result.ok:
+                        return WorkflowExecution(
+                            True, False, tuple(results),
+                            f"Повтор {iteration + 1}/{node.config['count']}: {result.output}",
+                        )
+                current = edges[0].target if edges else ""
                 continue
             if node.kind == "action.wait":
                 seconds = float(node.config["seconds"])
