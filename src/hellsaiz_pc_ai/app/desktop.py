@@ -274,6 +274,7 @@ def main() -> int:
         router, assistant, store, workflow_library, workflow_runner, registry,
         reminder_store, allowed_apps, profile_data, file_access_settings
     ) = build_runtime(settings)
+    file_access_path = settings.workflows_path.parent / "file_access.json"
     active_voice = {"name": str(profile_data.get("voice_name") or settings.speech.tts_voice_name)}
     raw_tts_rate = profile_data.get("tts_rate", settings.speech.tts_rate)
     tts_rate = (
