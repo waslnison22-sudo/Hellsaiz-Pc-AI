@@ -40,3 +40,48 @@ def test_stop_is_idempotent(tmp_path):
     listener.stop()
 
     assert listener._stop.is_set()
+
+
+def test_listener_opens_selected_microphone_device(tmp_path, monkeypatch):
+    import sys
+    from types import SimpleNamespace
+
+    model_dir = tmp_path / "vosk"
+    model_dir.mkdir()
+    listener_box = {}
+
+    class FakeModel:
+        def __init__(self, path):
+            self.path = path
+
+    class FakeRecognizer:
+        def __init__(self, model, sample_rate):
+            self.model = model
+            self.sample_rate = sample_rate
+
+    class FakeStream:
+        def __init__(self, **kwargs):
+            listener_box["kwargs"] = kwargs
+
+        def __enter__(self):
+            listener_box["listener"].stop()
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+    fake_sounddevice = SimpleNamespace(RawInputStream=FakeStream)
+    fake_vosk = SimpleNamespace(Model=FakeModel, KaldiRecognizer=FakeRecognizer)
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sounddevice)
+    monkeypatch.setitem(sys.modules, "vosk", fake_vosk)
+    listener = WakeWordListener(
+        model_dir,
+        ["Хелл"],
+        lambda _: None,
+        device="USB Mic · WASAPI",
+    )
+    listener_box["listener"] = listener
+
+    listener.listen()
+
+    assert listener_box["kwargs"]["device"] == "USB Mic · WASAPI"
