@@ -9,7 +9,7 @@ if ($LASTEXITCODE -ne 0) { throw "Windows build dependencies could not be instal
 
 Remove-Item -Recurse -Force dist, build -ErrorAction SilentlyContinue
 
-pyinstaller --noconfirm --clean --onedir --windowed --uac-admin --name HellsaizPC_AI --distpath dist/app --workpath build/app --collect-all vosk --collect-all sounddevice --collect-all pycaw --collect-all pynput --collect-all piper --collect-all onnxruntime src/hellsaiz_pc_ai/__main__.py
+pyinstaller --noconfirm --clean --onedir --windowed --uac-admin --name HellsaizPC_AI --distpath dist/app --workpath build/app --collect-all vosk --collect-all sounddevice --collect-all pycaw --collect-all pynput --collect-all pywinauto --collect-all comtypes --collect-all piper --collect-all onnxruntime src/hellsaiz_pc_ai/__main__.py
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed to build the desktop application." }
 
 pyinstaller --noconfirm --clean --onefile --windowed --uac-admin --name HellsaizLauncher --distpath dist/tools --workpath build/launcher src/hellsaiz_pc_ai/launcher.py
