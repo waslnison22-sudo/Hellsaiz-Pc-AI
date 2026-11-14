@@ -383,5 +383,4 @@ def test_telegram_user_and_chat_id_signs_are_validated(tmp_path: Path):
         '"allowed_chat_ids":[-2],"allowed_tools":["get_local_time"]}',
         encoding="utf-8",
     )
-    with pytest.raises(ValueError, match="положительные ID"):
-        load_settings(path)
+    assert load_settings(path).allowed_chat_ids == [-2]
