@@ -129,9 +129,9 @@ def test_wait_for_parent_uses_pointer_sized_windows_handles(monkeypatch):
 
 
 @pytest.mark.skipif(__import__("os").name != "nt", reason="The update installer is Windows-only.")
-@pytest.mark.parametrize("health_ok", [True, False])
+@pytest.mark.parametrize("health_state", ["ok", "fail", "exception"])
 def test_full_update_migrates_existing_install_and_preserves_user_data(
-    tmp_path: Path, monkeypatch, health_ok: bool
+    tmp_path: Path, monkeypatch, health_state: str
 ):
     import json
 
@@ -180,9 +180,14 @@ def test_full_update_migrates_existing_install_and_preserves_user_data(
 
     monkeypatch.setattr(updater, "verify_signed_manifest", lambda *_args: manifest)
     monkeypatch.setattr(updater, "_wait_for_parent", lambda *_args: None)
-    monkeypatch.setattr(updater, "_launch_and_check", lambda *_args: health_ok)
+    if health_state == "exception":
+        def fail_launch(*_args):
+            raise OSError("launcher failed to start")
+        monkeypatch.setattr(updater, "_launch_and_check", fail_launch)
+    else:
+        monkeypatch.setattr(updater, "_launch_and_check", lambda *_args: health_state == "ok")
 
-    if health_ok:
+    if health_state == "ok":
         result = updater.apply_update(
             install_root, archive_path, manifest_path, signature_path,
             "full", "0.1.3", 0,
@@ -194,7 +199,7 @@ def test_full_update_migrates_existing_install_and_preserves_user_data(
         assert (user_data / "profile.json").read_text(encoding="utf-8") == '{"theme":"dark"}'
         assert not update_dir.exists()
     else:
-        with pytest.raises(ApplyUpdateError, match="автоматический откат"):
+        with pytest.raises(ApplyUpdateError, match="автоматический откат|автоматический откат"):
             updater.apply_update(
                 install_root, archive_path, manifest_path, signature_path,
                 "full", "0.1.3", 0,
