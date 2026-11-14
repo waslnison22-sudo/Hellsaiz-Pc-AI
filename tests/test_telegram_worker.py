@@ -384,6 +384,11 @@ def test_disabling_telegram_deletes_stale_token(monkeypatch, tmp_path: Path):
     )
     settings = TelegramSettings(False, [111], [222], [], token="")
     save_settings(path, settings)
+    assert load_settings(path).token == TOKEN
+    assert protected[str(path.with_name("telegram_token.dpapi"))] == TOKEN
+
+    # Explicit deletion is a separate user action.
+    config.delete_saved_token(path)
     assert load_settings(path).token == ""
     assert not protected
 
