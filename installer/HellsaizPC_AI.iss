@@ -37,7 +37,7 @@ Name: "{autoprograms}\Hellsaiz PC AI"; Filename: "{app}\HellsaizLauncher.exe"; W
 Name: "{autodesktop}\Hellsaiz PC AI"; Filename: "{app}\HellsaizLauncher.exe"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [UninstallRun]
-Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""Hellsaiz PC AI"" /F"; Flags: runhidden waituntilterminated; RunOnceId: "RemoveHellsaizStartupTask"; StatusMsg: "Удаление задачи автозапуска..."
+Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""Hellsaiz PC AI"" /F"; Flags: runhidden waituntilterminated ignoreerrors; RunOnceId: "RemoveHellsaizStartupTask"; StatusMsg: "Удаление задачи автозапуска..."
 
 [Run]
 Filename: "{app}\HellsaizLauncher.exe"; Description: "Запустить Hellsaiz PC AI"; Flags: postinstall nowait skipifsilent
