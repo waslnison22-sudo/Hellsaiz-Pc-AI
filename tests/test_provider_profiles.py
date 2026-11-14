@@ -59,7 +59,6 @@ def test_profiles_can_be_saved_selected_and_reloaded(tmp_path: Path):
 
 
 def test_duplicate_profile_names_are_rejected_case_insensitively():
-    store = default_profile_store()
     with pytest.raises(ValueError, match="уникальными"):
         load_store_from_value({
             "schema_version": 1,
