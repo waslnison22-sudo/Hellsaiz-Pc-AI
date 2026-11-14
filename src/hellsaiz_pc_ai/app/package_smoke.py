@@ -4,10 +4,11 @@ import importlib
 from collections.abc import Callable
 
 
+# Only require modules that the desktop runtime actually imports. QtWebEngine
+# is not used by the current UI and is not part of the base PySide6 runtime.
 PACKAGED_RUNTIME_MODULES = (
     "PySide6.QtCore",
     "PySide6.QtWidgets",
-    "PySide6.QtWebEngineWidgets",
     "cryptography.hazmat.primitives.asymmetric.ed25519",
     "numpy",
     "sounddevice",
