@@ -33,10 +33,12 @@ def _capture_primary_monitor() -> Any:
         screenshot = capture.grab(monitor)
         image = np.asarray(screenshot)[:, :, :3]
     height, width = image.shape[:2]
-    scale = max(height / MAX_IMAGE_EDGE, width / MAX_IMAGE_EDGE, 1.0)
-    if scale > 1.0:
-        step = int(scale + 0.5)
-        image = image[::step, ::step, :]
+    if max(height, width) > MAX_IMAGE_EDGE:
+        new_height = min(height, MAX_IMAGE_EDGE)
+        new_width = min(width, MAX_IMAGE_EDGE)
+        y_indices = np.linspace(0, height - 1, new_height, dtype=np.intp)
+        x_indices = np.linspace(0, width - 1, new_width, dtype=np.intp)
+        image = image[y_indices][:, x_indices, :]
     return image
 
 
