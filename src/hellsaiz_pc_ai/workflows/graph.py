@@ -96,9 +96,26 @@ class WorkflowGraph:
     def _validate_node(node: GraphNode) -> None:
         cfg = node.config
         if node.kind == "trigger.text":
-            phrase = cfg.get("phrase")
-            if set(cfg) != {"phrase"} or not isinstance(phrase, str) or not phrase.strip() or len(phrase) > 128:
-                raise ValueError(f"Text trigger '{node.id}' needs a phrase (1..128 chars).")
+            if set(cfg) == {"phrase"}:
+                phrases = [cfg["phrase"]]
+            elif set(cfg) == {"phrases"}:
+                phrases = cfg["phrases"]
+            else:
+                raise ValueError(
+                    f"Text trigger '{node.id}' needs phrase or phrases, but not both."
+                )
+            if (
+                not isinstance(phrases, list)
+                or not 1 <= len(phrases) <= 16
+                or any(
+                    not isinstance(phrase, str) or not phrase.strip() or len(phrase) > 128
+                    for phrase in phrases
+                )
+            ):
+                raise ValueError(f"Text trigger '{node.id}' needs 1..16 phrases (1..128 chars each).")
+            normalized_phrases = [re.sub(r"\s+", " ", phrase.casefold()).strip() for phrase in phrases]
+            if len(set(normalized_phrases)) != len(normalized_phrases):
+                raise ValueError(f"Text trigger '{node.id}' contains duplicate phrases.")
         elif node.kind == "trigger.hotkey":
             hotkey = cfg.get("hotkey")
             if set(cfg) != {"hotkey"} or not isinstance(hotkey, str) or not _HOTKEY_RE.fullmatch(hotkey):
@@ -262,7 +279,7 @@ class WorkflowGraphRunner:
         root = next(node for node in graph.nodes if node.kind.startswith("trigger."))
         expected_kind = root.kind.removeprefix("trigger.")
         if expected_kind == "text":
-            expected_value = root.config["phrase"]
+            expected_values = root.config.get("phrases", [root.config.get("phrase", "")])
         elif expected_kind == "hotkey":
             expected_value = root.config["hotkey"]
         elif expected_kind == "schedule":
@@ -273,7 +290,10 @@ class WorkflowGraphRunner:
         if trigger.kind != expected_kind:
             return WorkflowExecution(False, False, (), "Trigger type does not match.")
         if expected_kind == "text":
-            matches = self._normalize_phrase(trigger.value) == self._normalize_phrase(expected_value)
+            normalized_input = self._normalize_phrase(trigger.value)
+            matches = normalized_input in {
+                self._normalize_phrase(value) for value in expected_values
+            }
         elif expected_kind == "startup":
             matches = trigger.value == ""
         else:
