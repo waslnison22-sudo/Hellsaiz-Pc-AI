@@ -75,7 +75,6 @@ from hellsaiz_pc_ai.tools.screen_ocr import (
     register_screen_ocr_tools,
 )
 from hellsaiz_pc_ai.tools.ocr_models import (
-    OcrModelError,
     check_russian_ocr_models,
     download_russian_ocr_models,
 )
@@ -2655,6 +2654,170 @@ def main() -> int:
     refresh_microphones_button.clicked.connect(refresh_microphone_devices)
     always_listen_check.toggled.connect(lambda _checked: save_stt_profile())
     refresh_microphone_devices()
+
+    ocr_models_root = settings.workflows_path.parent / "models" / "ocr_ru"
+    vision_settings_path = settings.workflows_path.parent / "vision.json"
+    ocr_model_workers: list[QThread] = []
+    ocr_model_state = {"ready": False}
+
+    class OcrModelsWorker(QThread):
+        progress = Signal(str, str)
+        completed = Signal(object)
+        failed = Signal(str)
+
+        def __init__(self, *, download: bool) -> None:
+            super().__init__()
+            self.download = download
+
+        def run(self) -> None:
+            try:
+                if self.download:
+                    status = download_russian_ocr_models(
+                        ocr_models_root,
+                        progress=self.progress.emit,
+                    )
+                else:
+                    status = check_russian_ocr_models(ocr_models_root)
+                self.completed.emit(status)
+            except Exception as exc:
+                self.failed.emit(f"{type(exc).__name__}: {exc}")
+
+    ocr_title = QLabel("ЛОКАЛЬНОЕ РАСПОЗНАВАНИЕ ЭКРАНА")
+    ocr_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
+    settings_layout.addWidget(ocr_title)
+    ocr_help = QLabel(
+        "OCR работает локально на основном мониторе. Снимок не сохраняется и не отправляется "
+        "в сеть. Русские ONNX-модели загружаются только после нажатия кнопки."
+    )
+    ocr_help.setWordWrap(True)
+    ocr_help.setStyleSheet("color:#929aa6;")
+    settings_layout.addWidget(ocr_help)
+
+    ocr_enabled_check = QCheckBox("Разрешить команду «прочитай текст на экране»")
+    ocr_enabled_check.setChecked(bool(vision_settings.get("ocr_enabled", False)))
+    ocr_enabled_check.setEnabled(False)
+    settings_layout.addWidget(ocr_enabled_check)
+
+    ocr_buttons = QHBoxLayout()
+    check_ocr_models_button = QPushButton("Проверить модели")
+    download_ocr_models_button = QPushButton("Загрузить русские OCR-модели")
+    ocr_buttons.addWidget(check_ocr_models_button)
+    ocr_buttons.addWidget(download_ocr_models_button)
+    settings_layout.addLayout(ocr_buttons)
+
+    ocr_status = QLabel("Проверяю наличие локальных моделей OCR…")
+    ocr_status.setWordWrap(True)
+    ocr_status.setStyleSheet("color:#929aa6;")
+    settings_layout.addWidget(ocr_status)
+
+    def persist_vision_settings() -> bool:
+        temporary = vision_settings_path.with_suffix(".json.tmp")
+        try:
+            temporary.write_text(
+                json.dumps(
+                    {"schema_version": 1, "ocr_enabled": bool(vision_settings["ocr_enabled"])},
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            temporary.replace(vision_settings_path)
+            return True
+        except (OSError, ValueError) as exc:
+            ocr_status.setText(f"Не удалось сохранить разрешение OCR: {exc}")
+            return False
+
+    def apply_ocr_model_status(status: Any) -> None:
+        ready = bool(getattr(status, "ready", False))
+        ocr_model_state["ready"] = ready
+        missing = list(getattr(status, "missing", ()))
+        invalid = list(getattr(status, "invalid", ()))
+        if ready:
+            ocr_status.setText("Все три русские OCR-модели установлены и прошли SHA-256 проверку.")
+            ocr_enabled_check.setEnabled(True)
+        else:
+            details = []
+            if missing:
+                details.append("отсутствуют: " + ", ".join(missing))
+            if invalid:
+                details.append("повреждены: " + ", ".join(invalid))
+            ocr_status.setText(
+                "Модели OCR ещё не готовы (" + "; ".join(details) + "). Нажми «Загрузить русские OCR-модели»."
+            )
+            ocr_enabled_check.blockSignals(True)
+            ocr_enabled_check.setChecked(False)
+            ocr_enabled_check.blockSignals(False)
+            ocr_enabled_check.setEnabled(False)
+            if vision_settings.get("ocr_enabled"):
+                vision_settings["ocr_enabled"] = False
+                persist_vision_settings()
+        clear_ocr_engine_cache()
+
+    def on_ocr_worker_progress(key: str, state: str) -> None:
+        state_label = "проверена" if state == "already-installed" else "загружена"
+        ocr_status.setText(f"OCR-модель {key}: {state_label}…")
+
+    def start_ocr_models_worker(*, download: bool) -> None:
+        if any(worker.isRunning() for worker in ocr_model_workers):
+            return
+        check_ocr_models_button.setEnabled(False)
+        download_ocr_models_button.setEnabled(False)
+        ocr_status.setText(
+            "Загружаю и проверяю русские OCR-модели…"
+            if download else "Проверяю SHA-256 русских OCR-моделей…"
+        )
+        worker = OcrModelsWorker(download=download)
+        ocr_model_workers.append(worker)
+
+        def on_completed(status: Any) -> None:
+            apply_ocr_model_status(status)
+
+        def on_failed(message: str) -> None:
+            ocr_status.setText("OCR не готов: " + message)
+            try:
+                apply_ocr_model_status(check_russian_ocr_models(ocr_models_root))
+            except Exception:
+                logging.exception("Could not verify OCR model state after failure")
+
+        worker.progress.connect(on_ocr_worker_progress)
+        worker.completed.connect(on_completed)
+        worker.failed.connect(on_failed)
+
+        def on_finished() -> None:
+            check_ocr_models_button.setEnabled(True)
+            download_ocr_models_button.setEnabled(True)
+            if worker in ocr_model_workers:
+                ocr_model_workers.remove(worker)
+
+        worker.finished.connect(on_finished)
+        worker.start()
+
+    def toggle_ocr_permission(enabled: bool) -> None:
+        if enabled and not ocr_model_state["ready"]:
+            ocr_enabled_check.blockSignals(True)
+            ocr_enabled_check.setChecked(False)
+            ocr_enabled_check.blockSignals(False)
+            ocr_status.setText("Сначала установи и проверь все русские OCR-модели.")
+            return
+        previous = bool(vision_settings["ocr_enabled"])
+        vision_settings["ocr_enabled"] = enabled
+        if not persist_vision_settings():
+            vision_settings["ocr_enabled"] = previous
+            ocr_enabled_check.blockSignals(True)
+            ocr_enabled_check.setChecked(previous)
+            ocr_enabled_check.blockSignals(False)
+            return
+        if not enabled:
+            clear_ocr_engine_cache()
+        ocr_status.setText(
+            "Локальный OCR разрешён. Команда работает только после прямого запроса."
+            if enabled else "Локальный OCR выключен."
+        )
+
+    check_ocr_models_button.clicked.connect(lambda: start_ocr_models_worker(download=False))
+    download_ocr_models_button.clicked.connect(lambda: start_ocr_models_worker(download=True))
+    ocr_enabled_check.toggled.connect(toggle_ocr_permission)
+    QTimer.singleShot(0, lambda: start_ocr_models_worker(download=False))
 
     file_access_title = QLabel("ДОСТУП К ФАЙЛАМ")
     file_access_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
