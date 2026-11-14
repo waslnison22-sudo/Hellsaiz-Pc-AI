@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from hellsaiz_pc_ai.update_client import UpdateCheckError
 from hellsaiz_pc_ai.updater import (
     ApplyUpdateError,
     _clone_current_version,
@@ -43,7 +44,7 @@ def test_archive_rejects_path_traversal(tmp_path: Path):
     with zipfile.ZipFile(archive_path, "w") as archive:
         archive.writestr("../outside.txt", b"escape")
 
-    with pytest.raises(Exception, match="Недопустимый путь"):
+    with pytest.raises(UpdateCheckError, match="Недопустимый путь"):
         _extract_archive(archive_path, stage, "delta", {})
 
     assert not (tmp_path / "outside.txt").exists()
