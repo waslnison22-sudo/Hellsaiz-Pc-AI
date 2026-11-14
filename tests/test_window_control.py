@@ -1,5 +1,3 @@
-import os
-
 from hellsaiz_pc_ai.core.registry import ToolRegistry
 from hellsaiz_pc_ai.tools import window_control
 
