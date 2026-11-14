@@ -62,7 +62,7 @@ def test_vosk_archive_rejects_symlink_entries(tmp_path: Path):
     with zipfile.ZipFile(archive, "a") as output:
         output.writestr(link, "../outside")
 
-    with pytest.raises(library.ModelInstallError, match="символ"):
+    with pytest.raises(library.ModelInstallError, match="Символ"):
         library._safe_extract(archive, tmp_path / "extract")
 
 
