@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from hellsaiz_pc_ai.secure_store import load_secret, save_secret, delete_secret
+from hellsaiz_pc_ai.secure_store import delete_secret, load_secret, save_secret
 
 
 SCHEMA_VERSION = 1
@@ -55,6 +55,10 @@ def _normalize_settings(raw: Any) -> TelegramSettings:
         raise ValueError("Флаг enabled должен быть логическим значением.")
     users = _parse_ids(raw.get("allowed_user_ids", []), "allowed_user_ids")
     chats = _parse_ids(raw.get("allowed_chat_ids", []), "allowed_chat_ids")
+    if any(value < 0 for value in users):
+        raise ValueError("allowed_user_ids может содержать только положительные ID пользователей.")
+    if any(value < 0 for value in chats):
+        raise ValueError("allowed_chat_ids может содержать только положительные ID чатов.")
     tools = raw.get("allowed_tools", [])
     if not isinstance(tools, list) or len(tools) > len(AVAILABLE_SAFE_TOOLS):
         raise ValueError("allowed_tools имеет некорректный формат.")
