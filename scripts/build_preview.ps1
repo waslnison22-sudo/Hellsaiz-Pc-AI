@@ -83,6 +83,11 @@ function Invoke-ExecutableSmokeTest {
         throw "$Label self-test timed out."
     }
     if ($process.ExitCode -ne 0) {
+        $diagnosticLog = Join-Path $env:TEMP "HellsaizPC_AI-package-self-test.log"
+        if ($Label -like "*Desktop application*" -and (Test-Path $diagnosticLog)) {
+            $details = Get-Content $diagnosticLog -Raw
+            Write-Host "Packaged application self-test diagnostics:`n$details"
+        }
         throw "$Label self-test failed with exit code $($process.ExitCode)."
     }
     Write-Host "$Label self-test passed."
