@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import os
 import subprocess
+import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
@@ -39,7 +39,7 @@ def is_registered(
     *,
     runner: Runner = subprocess.run,
 ) -> bool:
-    if os.name != "nt":
+    if sys.platform != "win32":
         return False
     result = _run(
         ["schtasks.exe", "/Query", "/TN", TASK_NAME],
