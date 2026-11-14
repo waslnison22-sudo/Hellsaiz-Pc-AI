@@ -41,10 +41,9 @@ jobs:
         shell: pwsh
         run: ./scripts/build_preview.ps1
 
-      - name: Upload unsigned preview package
-        uses: actions/upload-artifact@v4
-        with:
-          name: HellsaizPC_AI-windows-x64-preview
-          path: dist/preview/HellsaizPC_AI-windows-x64-preview.zip
-          if-no-files-found: error
-          retention-days: 7
+      - name: Verify preview installer output
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "dist/HellsaizPC_AI_Setup.exe" -PathType Leaf)) { throw "Setup installer is missing." }
+          if ((Get-Item "dist/HellsaizPC_AI_Setup.exe").Length -le 0) { throw "Setup installer is empty." }
+          Write-Host "Windows executable and installer build verified."
