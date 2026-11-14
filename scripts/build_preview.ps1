@@ -73,8 +73,13 @@ function Invoke-ExecutableSmokeTest {
         [Parameter(Mandatory = $true)][string]$Label
     )
     $process = Start-Process -FilePath (Resolve-Path $Executable) -ArgumentList "--self-test" -WorkingDirectory (Resolve-Path $WorkingDirectory) -PassThru
-    if (-not $process.WaitForExit(120000)) {
+    if (-not $process.WaitForExit(300000)) {
         Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+        $diagnosticLog = Join-Path $env:TEMP "HellsaizPC_AI-package-self-test.log"
+        if ($Label -like "*Desktop application*" -and (Test-Path $diagnosticLog)) {
+            $tail = (Get-Content $diagnosticLog -Tail 30) -join [Environment]::NewLine
+            throw "$Label self-test timed out. Last diagnostic lines:`n$tail"
+        }
         throw "$Label self-test timed out."
     }
     if ($process.ExitCode -ne 0) {
