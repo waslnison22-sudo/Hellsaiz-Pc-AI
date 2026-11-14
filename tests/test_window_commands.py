@@ -12,14 +12,27 @@ def make_router():
         "maximize_active_window",
         "restore_active_window",
         "close_active_window",
+        "list_windows",
     ):
         registry.register(ToolSpec(
             name,
             name,
             {"type": "object", "properties": {}, "additionalProperties": False},
             RiskLevel.CONFIRM,
-            lambda _args, name=name: called.append(name) or ToolResult(True, name),
+            lambda _args, name=name: called.append((name, {})) or ToolResult(True, name),
         ))
+    registry.register(ToolSpec(
+        "focus_window",
+        "focus a named window",
+        {
+            "type": "object",
+            "properties": {"target": {"type": "string", "minLength": 1, "maxLength": 160}},
+            "required": ["target"],
+            "additionalProperties": False,
+        },
+        RiskLevel.CONFIRM,
+        lambda args: called.append(("focus_window", args)) or ToolResult(True, args["target"]),
+    ))
     router = CommandRouter(registry, {}, {}, {})
     return router, called
 
@@ -37,7 +50,21 @@ def test_active_window_phrases_map_to_registered_tools():
         result = router.route(phrase)
         assert result == f"Готово. {tool}"
 
-    assert called == list(expected.values())
+    assert [name for name, _ in called] == list(expected.values())
+
+
+def test_window_inventory_and_focus_phrases_extract_target():
+    router, called = make_router()
+
+    assert router.route("покажи открытые окна") == "Готово. list_windows"
+    assert router.route("переключись на Steam") == "Готово. Steam"
+    assert router.route("активируй окно браузер Google Chrome") == "Готово. браузер google chrome"
+
+    assert called == [
+        ("list_windows", {}),
+        ("focus_window", {"target": "steam"}),
+        ("focus_window", {"target": "браузер google chrome"}),
+    ]
 
 
 def test_unknown_window_command_is_not_guessed():
