@@ -34,9 +34,11 @@ foreach ($path in $required) {
 
 $metadataDir = "dist/preview"
 New-Item -ItemType Directory -Force -Path $metadataDir | Out-Null
+$version = python -c 'from hellsaiz_pc_ai.version import APP_VERSION; print(APP_VERSION)'
+if ($LASTEXITCODE -ne 0) { throw "Could not read the embedded application version." }
 $metadata = @(
     "Build type: non-release preview",
-    "Version: $(python -c "from hellsaiz_pc_ai.version import APP_VERSION; print(APP_VERSION)")",
+    "Version: $version",
     "Commit: $env:GITHUB_SHA",
     "Runtime: Windows x64",
     "Application: onedir PyInstaller bundle",
