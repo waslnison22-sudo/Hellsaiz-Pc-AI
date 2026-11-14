@@ -107,7 +107,7 @@ def launch_v2raytun(
     *,
     popen: Any = subprocess.Popen,
 ) -> Any:
-    if os.name != "nt":
+    if sys.platform != "win32":
         raise NetworkDependencyError("Запуск v2RayTun поддерживается только в Windows.")
     path = validate_executable_path(str(executable_path))
     try:
