@@ -19,6 +19,7 @@ PACKAGED_RUNTIME_MODULES = (
     "hellsaiz_pc_ai.telegram.config",
     "hellsaiz_pc_ai.telegram.worker",
     "hellsaiz_pc_ai.tools.screen_ocr",
+    "hellsaiz_pc_ai.tools.ocr_models",
     "mss",
     "rapidocr",
     "onnxruntime",
