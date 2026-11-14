@@ -51,14 +51,12 @@ def build_runtime(settings: Settings):
 def main() -> int:
     try:
         from PySide6.QtCore import QObject, Qt, QThread, Signal, Slot
-        from PySide6.QtGui import QBrush, QColor, QFont, QPen
+        from PySide6.QtGui import QFont
         from PySide6.QtWidgets import (
             QApplication,
             QCheckBox,
             QComboBox,
             QFileDialog,
-            QGraphicsScene,
-            QGraphicsView,
             QHBoxLayout,
             QLabel,
             QLineEdit,
@@ -73,6 +71,7 @@ def main() -> int:
             QVBoxLayout,
             QWidget,
         )
+        from hellsaiz_pc_ai.workflows.qt_canvas import WorkflowCanvas
     except ImportError:
         print("PySide6 is missing. Run: pip install -e .")
         return 2
@@ -274,8 +273,8 @@ def main() -> int:
     scenario_title.setStyleSheet("font-size:18px; font-weight:650; color:#f1f2f4;")
     scenario_layout.addWidget(scenario_title)
     scenario_hint = QLabel(
-        "Связывай триггеры, условия и действия. Ctrl+Alt+H — пример запуска по горячей клавише. "
-        "Глобальный listener требует пакета windows; произвольный код не поддерживается."
+        "Перетаскивай узлы мышью, сохраняй их расположение и настраивай связи через JSON. "
+        "Ctrl+Alt+H — пример запуска. Произвольный код не поддерживается."
     )
     scenario_hint.setStyleSheet("color:#aab0ba;")
     scenario_layout.addWidget(scenario_hint)
@@ -286,8 +285,7 @@ def main() -> int:
     scenario_workspace.addWidget(scenario_list, 1)
 
     scenario_splitter = QSplitter(Qt.Orientation.Horizontal)
-    graph_scene = QGraphicsScene()
-    graph_view = QGraphicsView(graph_scene)
+    graph_view = WorkflowCanvas()
     graph_view.setMinimumWidth(360)
     scenario_splitter.addWidget(graph_view)
     graph_editor = QPlainTextEdit()
@@ -308,6 +306,10 @@ def main() -> int:
     validate_scenario_button = QPushButton("Проверить граф")
     save_scenario_button = QPushButton("Сохранить")
     delete_scenario_button = QPushButton("Удалить")
+    fit_graph_button = QPushButton("По размеру")
+    reset_layout_button = QPushButton("Сбросить расположение")
+    scenario_buttons.addWidget(fit_graph_button)
+    scenario_buttons.addWidget(reset_layout_button)
     scenario_buttons.addWidget(new_scenario_button)
     scenario_buttons.addWidget(new_hotkey_scenario_button)
     scenario_buttons.addWidget(validate_scenario_button)
@@ -318,39 +320,13 @@ def main() -> int:
     scenario_status.setStyleSheet("color:#aab0ba;")
     scenario_layout.addWidget(scenario_status)
 
-    def render_graph(graph: WorkflowGraph) -> None:
-        graph_scene.clear()
-        positions = {
-            node.id: ((index % 3) * 290, (index // 3) * 150)
-            for index, node in enumerate(graph.nodes)
-        }
-        for edge in graph.edges:
-            x1, y1 = positions[edge.source]
-            x2, y2 = positions[edge.target]
-            start_x, start_y = x1 + 220, y1 + 36
-            end_x, end_y = x2, y2 + 36
-            graph_scene.addLine(
-                start_x, start_y, end_x, end_y, QPen(QColor("#777f8a"), 2)
-            )
-            if edge.when:
-                label = graph_scene.addText(edge.when.upper())
-                label.setDefaultTextColor(QColor("#c9cdd4"))
-                label.setPos((start_x + end_x) / 2, (start_y + end_y) / 2 - 18)
-        for node in graph.nodes:
-            x, y = positions[node.id]
-            graph_scene.addRect(
-                x, y, 220, 72,
-                QPen(QColor("#848c98"), 1.4),
-                QBrush(QColor("#171b22")),
-            )
-            title = graph_scene.addText(node.id)
-            title.setDefaultTextColor(QColor("#f4f5f7"))
-            title.setFont(QFont("Segoe UI", 10, QFont.Weight.DemiBold))
-            title.setPos(x + 12, y + 8)
-            kind = graph_scene.addText(node.kind)
-            kind.setDefaultTextColor(QColor("#abb2bd"))
-            kind.setPos(x + 12, y + 36)
-        graph_scene.setSceneRect(graph_scene.itemsBoundingRect().adjusted(-35, -35, 35, 35))
+    def render_graph(
+        graph: WorkflowGraph, workflow_id: str | None = None, preserve: bool = False
+    ) -> None:
+        positions = workflow_library.load_layout(workflow_id) if workflow_id else {}
+        if preserve:
+            positions.update(graph_view.export_layout())
+        graph_view.set_graph(graph, positions)
 
     def refresh_scenario_list() -> None:
         scenario_list.clear()
@@ -376,7 +352,7 @@ def main() -> int:
             graph = workflow_library.load(workflow_id)
             scenario_id.setText(workflow_id)
             graph_editor.setPlainText(json.dumps(graph.to_dict(), ensure_ascii=False, indent=2))
-            render_graph(graph)
+            render_graph(graph, workflow_id)
             scenario_status.setText(f"Загружен сценарий: {graph.name}")
         except (OSError, ValueError, json.JSONDecodeError) as exc:
             scenario_status.setText(f"Не удалось загрузить сценарий: {exc}")
@@ -430,7 +406,7 @@ def main() -> int:
     def validate_scenario() -> WorkflowGraph | None:
         try:
             graph = WorkflowGraph.from_dict(json.loads(graph_editor.toPlainText()))
-            render_graph(graph)
+            render_graph(graph, scenario_id.text().strip() or None, preserve=True)
             scenario_status.setText(
                 f"Граф корректен: {len(graph.nodes)} узлов, {len(graph.edges)} связей."
             )
@@ -449,6 +425,7 @@ def main() -> int:
             return
         try:
             workflow_library.save(workflow_id, graph)
+            workflow_library.save_layout(workflow_id, graph_view.export_layout())
             refresh_scenario_list()
             refresh_hotkey_service()
             scenario_status.setText(f"Сценарий «{graph.name}» сохранён локально.")
@@ -476,6 +453,8 @@ def main() -> int:
     validate_scenario_button.clicked.connect(validate_scenario)
     save_scenario_button.clicked.connect(save_scenario)
     delete_scenario_button.clicked.connect(delete_scenario)
+    fit_graph_button.clicked.connect(graph_view.fit_graph)
+    reset_layout_button.clicked.connect(graph_view.reset_layout)
     scenario_list.itemSelectionChanged.connect(load_selected_scenario)
     refresh_scenario_list()
     tabs.addTab(scenario_page, "Сценарии")

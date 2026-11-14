@@ -34,3 +34,39 @@ def test_library_deletes_graph(tmp_path):
     library.save("demo", sample_graph())
     library.delete("demo")
     assert library.list() == []
+
+
+def test_library_persists_visual_node_positions(tmp_path):
+    library = WorkflowLibrary(tmp_path)
+    library.save("demo", sample_graph())
+    positions = {
+        "start": {"x": 72.5, "y": 44},
+        "open": {"x": 390, "y": 210.25},
+    }
+
+    saved = library.save_layout("demo", positions)
+
+    assert saved.is_file()
+    assert library.load_layout("demo") == {
+        "start": {"x": 72.5, "y": 44.0},
+        "open": {"x": 390.0, "y": 210.25},
+    }
+
+
+def test_library_rejects_invalid_visual_layout_coordinates(tmp_path):
+    library = WorkflowLibrary(tmp_path)
+
+    with pytest.raises(ValueError, match="out of range"):
+        library.save_layout("demo", {"start": {"x": 100001, "y": 0}})
+
+    with pytest.raises(ValueError, match="numeric"):
+        library.save_layout("demo", {"start": {"x": True, "y": 0}})
+
+
+def test_deleting_workflow_also_deletes_its_layout(tmp_path):
+    library = WorkflowLibrary(tmp_path)
+    library.save("demo", sample_graph())
+    library.save_layout("demo", {"start": {"x": 10, "y": 20}})
+    library.delete("demo")
+
+    assert library.load_layout("demo") == {}
