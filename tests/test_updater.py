@@ -8,6 +8,7 @@ import pytest
 
 from hellsaiz_pc_ai.update_client import UpdateCheckError, _safe_manifest_path
 from hellsaiz_pc_ai import updater
+from hellsaiz_pc_ai.version import APP_VERSION
 from hellsaiz_pc_ai.updater import (
     ApplyUpdateError,
     _clone_current_version,
@@ -161,13 +162,13 @@ def test_full_update_migrates_existing_install_and_preserves_user_data(
     manifest = {
         "schema_version": 1,
         "app_id": updater.APP_ID,
-        "version": "0.1.4",
+        "version": APP_VERSION,
         "platform": updater.PLATFORM,
         "entrypoint": "HellsaizPC_AI.exe",
         "files": records,
     }
 
-    update_dir = install_root / "updates" / "0.1.4"
+    update_dir = install_root / "updates" / APP_VERSION
     update_dir.mkdir(parents=True)
     archive_path = update_dir / "package.zip"
     with zipfile.ZipFile(archive_path, "w") as archive:
@@ -192,10 +193,10 @@ def test_full_update_migrates_existing_install_and_preserves_user_data(
             install_root, archive_path, manifest_path, signature_path,
             "full", "0.1.3", 0,
         )
-        assert result == versions / "0.1.4"
+        assert result == versions / APP_VERSION
         assert (result / "HellsaizPC_AI.exe").read_bytes() == b"new-app"
         assert (versions / "0.1.3" / "HellsaizPC_AI.exe").read_bytes() == b"old-app"
-        assert json.loads((install_root / "active.json").read_text(encoding="utf-8"))["active_version"] == "0.1.4"
+        assert json.loads((install_root / "active.json").read_text(encoding="utf-8"))["active_version"] == APP_VERSION
         assert (user_data / "profile.json").read_text(encoding="utf-8") == '{"theme":"dark"}'
         assert not update_dir.exists()
     else:
@@ -207,5 +208,5 @@ def test_full_update_migrates_existing_install_and_preserves_user_data(
         active = json.loads((install_root / "active.json").read_text(encoding="utf-8"))
         assert active["active_version"] == "0.1.3"
         assert (versions / "0.1.3" / "HellsaizPC_AI.exe").read_bytes() == b"old-app"
-        assert not (versions / "0.1.4").exists()
+        assert not (versions / APP_VERSION).exists()
         assert (user_data / "profile.json").is_file()
