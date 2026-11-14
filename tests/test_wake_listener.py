@@ -70,7 +70,11 @@ def test_listener_opens_selected_microphone_device(tmp_path, monkeypatch):
         def __exit__(self, exc_type, exc, traceback):
             return False
 
-    fake_sounddevice = SimpleNamespace(RawInputStream=FakeStream)
+    fake_sounddevice = SimpleNamespace(
+        RawInputStream=FakeStream,
+        query_devices=lambda device=None, kind=None: {"default_samplerate": 16000},
+        check_input_settings=lambda **kwargs: None,
+    )
     fake_vosk = SimpleNamespace(Model=FakeModel, KaldiRecognizer=FakeRecognizer)
     monkeypatch.setitem(sys.modules, "sounddevice", fake_sounddevice)
     monkeypatch.setitem(sys.modules, "vosk", fake_vosk)
