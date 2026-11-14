@@ -85,3 +85,21 @@ cs2 = ["игра"]
 
     with pytest.raises(ValueError, match="ambiguous"):
         load_settings(path)
+
+
+
+def test_app_alias_cannot_shadow_another_canonical_app_id(tmp_path: Path):
+    path = tmp_path / "config.toml"
+    path.write_text(
+        """[windows.allowed_apps]
+steam = ["steam.exe"]
+cs2 = ["cs2.exe"]
+
+[windows.app_aliases]
+steam = ["cs2"]
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="ambiguous"):
+        load_settings(path)
