@@ -111,10 +111,7 @@ def download_russian_ocr_models(
         digest = hashlib.sha256()
         downloaded = 0
         try:
-            try:
-                response = opener(request, timeout=timeout_seconds)
-            except TypeError:
-                response = opener(request)
+            response = opener(request, timeout=timeout_seconds)
             with response:
                 declared_size = response.headers.get("Content-Length")
                 if declared_size:
