@@ -53,6 +53,7 @@ class WakeWordListener:
         sample_rate: int = 16000,
         command_timeout_seconds: float = 8.0,
         queue_blocks: int = 64,
+        device: str | int | None = None,
     ) -> None:
         self.model_dir = Path(model_dir)
         self.aliases = tuple(alias.strip() for alias in aliases if alias and alias.strip())
@@ -67,6 +68,7 @@ class WakeWordListener:
         self.sample_rate = sample_rate
         self.command_timeout_seconds = command_timeout_seconds
         self.queue_blocks = max(8, min(int(queue_blocks), 256))
+        self.device = device
         self._stop = threading.Event()
 
     def stop(self) -> None:
@@ -112,6 +114,7 @@ class WakeWordListener:
                 blocksize=4000,
                 channels=1,
                 dtype="int16",
+                device=self.device,
                 callback=audio_callback,
             ):
                 while not self._stop.is_set():
