@@ -80,6 +80,11 @@ def load_settings(path: Path) -> TelegramSettings:
     return normalized
 
 
+def delete_saved_token(path: Path) -> None:
+    """Explicitly delete the separately protected bot token."""
+    delete_secret(path.with_name("telegram_token.dpapi"))
+
+
 def save_settings(path: Path, settings: TelegramSettings) -> None:
     normalized = _normalize_settings({
         "schema_version": SCHEMA_VERSION,
@@ -90,9 +95,7 @@ def save_settings(path: Path, settings: TelegramSettings) -> None:
     })
     token_path = path.with_name("telegram_token.dpapi")
     token_value = validate_bot_token(settings.token) if settings.token.strip() else ""
-    if not token_value:
-        delete_secret(token_path)
-    else:
+    if token_value:
         save_secret(token_path, token_value)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + ".tmp")
