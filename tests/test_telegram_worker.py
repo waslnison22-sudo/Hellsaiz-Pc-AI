@@ -366,3 +366,22 @@ def test_disabling_telegram_deletes_stale_token(monkeypatch, tmp_path: Path):
     save_settings(path, settings)
     assert load_settings(path).token == ""
     assert not protected
+
+
+def test_telegram_user_and_chat_id_signs_are_validated(tmp_path: Path):
+    path = tmp_path / "telegram.json"
+    path.write_text(
+        '{"schema_version":1,"enabled":true,"allowed_user_ids":[-1],'
+        '"allowed_chat_ids":[2],"allowed_tools":["get_local_time"]}',
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="положительные ID"):
+        load_settings(path)
+
+    path.write_text(
+        '{"schema_version":1,"enabled":true,"allowed_user_ids":[1],'
+        '"allowed_chat_ids":[-2],"allowed_tools":["get_local_time"]}',
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="положительные ID"):
+        load_settings(path)
