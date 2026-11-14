@@ -78,6 +78,9 @@ def test_listener_opens_selected_microphone_device(tmp_path, monkeypatch):
         "hellsaiz_pc_ai.speech.capture.resolve_input_device",
         lambda _name: 7,
     )
+    from hellsaiz_pc_ai.speech.vosk import VoskTranscriber
+
+    VoskTranscriber.clear_model_cache()
     listener = WakeWordListener(
         model_dir,
         ["Хелл"],
@@ -86,6 +89,9 @@ def test_listener_opens_selected_microphone_device(tmp_path, monkeypatch):
     )
     listener_box["listener"] = listener
 
-    listener.listen()
-
-    assert listener_box["kwargs"]["device"] == 7
+    try:
+        listener.listen()
+        assert listener_box["kwargs"]["device"] == 7
+        assert len(VoskTranscriber._model_cache) == 1
+    finally:
+        VoskTranscriber.clear_model_cache()
