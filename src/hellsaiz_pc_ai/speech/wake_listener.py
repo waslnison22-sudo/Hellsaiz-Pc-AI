@@ -104,6 +104,11 @@ class WakeWordListener:
                     pass
 
         try:
+            selected_device = self.device
+            if isinstance(selected_device, str):
+                from hellsaiz_pc_ai.speech.capture import resolve_input_device
+
+                selected_device = resolve_input_device(selected_device)
             model = Model(str(self.model_dir))
             recognizer = KaldiRecognizer(model, self.sample_rate)
             awaiting_command = False
@@ -114,7 +119,7 @@ class WakeWordListener:
                 blocksize=4000,
                 channels=1,
                 dtype="int16",
-                device=self.device,
+                device=selected_device,
                 callback=audio_callback,
             ):
                 while not self._stop.is_set():
