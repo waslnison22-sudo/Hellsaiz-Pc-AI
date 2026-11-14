@@ -80,7 +80,7 @@ class WorkflowScheduler:
             for workflow_id, graph in entries:
                 root = self._root(graph)
                 if root.kind == "trigger.startup":
-                    due.append((workflow_id, WorkflowTrigger("startup", "")))
+                    due.append((workflow_id, WorkflowTrigger("startup", "", workflow_id)))
 
         token_time = current.strftime("%Y-%m-%d@%H:%M")
         for workflow_id, graph in entries:
@@ -95,7 +95,7 @@ class WorkflowScheduler:
                 continue
             if self._fired.get(workflow_id) == token_time:
                 continue
-            due.append((workflow_id, WorkflowTrigger("schedule", scheduled_time)))
+            due.append((workflow_id, WorkflowTrigger("schedule", scheduled_time, workflow_id)))
             self._fired[workflow_id] = token_time
             changed = True
 

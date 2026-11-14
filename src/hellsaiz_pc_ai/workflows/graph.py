@@ -198,6 +198,7 @@ class WorkflowGraph:
 class WorkflowTrigger:
     kind: Literal["text", "hotkey", "schedule", "startup"]
     value: str
+    workflow_id: str | None = None
 
 
 @dataclass(frozen=True)

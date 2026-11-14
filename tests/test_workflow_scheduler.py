@@ -72,3 +72,30 @@ def test_schedule_only_fires_in_matching_minute(tmp_path):
     assert scheduler.poll(datetime(2026, 11, 16, 9, 29)) == []
     assert scheduler.poll(datetime(2026, 11, 16, 9, 30))
     assert scheduler.poll(datetime(2026, 11, 16, 9, 31)) == []
+
+
+def test_same_time_schedules_keep_individual_workflow_targets(tmp_path):
+    library = WorkflowLibrary(tmp_path / "workflows")
+    for workflow_id in ("morning", "backup"):
+        library.save(
+            workflow_id,
+            graph("trigger.schedule", {"time": "09:30", "days": [1, 2, 3, 4, 5, 6, 7]}),
+        )
+    scheduler = WorkflowScheduler(library, tmp_path / "schedule.json")
+
+    due = scheduler.poll(datetime(2026, 11, 16, 9, 30))
+
+    targets = {trigger.workflow_id for _, trigger in due}
+    assert targets == {"morning", "backup"}
+    assert {workflow_id for workflow_id, _ in due} == targets
+
+
+def test_startup_events_include_their_own_workflow_targets(tmp_path):
+    library = WorkflowLibrary(tmp_path / "workflows")
+    library.save("start-a", graph("trigger.startup", {}))
+    library.save("start-b", graph("trigger.startup", {}))
+    scheduler = WorkflowScheduler(library, tmp_path / "schedule.json")
+
+    due = scheduler.poll(datetime(2026, 11, 14, 8, 0))
+
+    assert {trigger.workflow_id for _, trigger in due} == {"start-a", "start-b"}

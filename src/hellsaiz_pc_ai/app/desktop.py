@@ -116,16 +116,16 @@ def main() -> int:
             return response["event"].wait(timeout=120) and bool(response["approved"])
 
     class HotkeyBridge(QObject):
-        activated = Signal(str)
+        activated = Signal(str, str)
 
     class HotkeyDispatcher(QObject):
         def __init__(self, callback: Any) -> None:
             super().__init__()
             self.callback = callback
 
-        @Slot(str)
-        def dispatch(self, combo: str) -> None:
-            self.callback(combo)
+        @Slot(str, str)
+        def dispatch(self, workflow_id: str, combo: str) -> None:
+            self.callback(workflow_id, combo)
 
     class Worker(QThread):
         completed = Signal(str, str)
@@ -164,6 +164,8 @@ def main() -> int:
                 try:
                     trigger = self.workflow_trigger or WorkflowTrigger("text", prompt)
                     for workflow_id, graph in workflow_library.list():
+                        if trigger.workflow_id is not None and workflow_id != trigger.workflow_id:
+                            continue
                         execution = workflow_runner.run(
                             graph, trigger, confirm=self.broker.confirm
                         )
@@ -358,6 +360,7 @@ def main() -> int:
     validate_scenario_button = QPushButton("Проверить граф")
     save_scenario_button = QPushButton("Сохранить")
     delete_scenario_button = QPushButton("Удалить")
+    run_scenario_button = QPushButton("Запустить сейчас")
     fit_graph_button = QPushButton("По размеру")
     reset_layout_button = QPushButton("Сбросить расположение")
     scenario_buttons.addWidget(fit_graph_button)
@@ -368,6 +371,7 @@ def main() -> int:
     scenario_buttons.addWidget(new_startup_scenario_button)
     scenario_buttons.addWidget(validate_scenario_button)
     scenario_buttons.addWidget(save_scenario_button)
+    scenario_buttons.addWidget(run_scenario_button)
     scenario_buttons.addWidget(delete_scenario_button)
     scenario_layout.addLayout(scenario_buttons)
     scenario_status = QLabel("Сценарии хранятся локально в JSON.")
@@ -633,6 +637,39 @@ def main() -> int:
             refresh_hotkey_service()
             scenario_status.setText(f"Сценарий {workflow_id} удалён.")
 
+    def run_selected_scenario() -> None:
+        workflow_id = scenario_id.text().strip()
+        if not workflow_id:
+            scenario_status.setText("Сначала выбери или сохрани сценарий.")
+            return
+        try:
+            graph = workflow_library.load(workflow_id)
+            root = next(node for node in graph.nodes if node.kind.startswith("trigger."))
+            trigger_kind = root.kind.removeprefix("trigger.")
+            trigger_value = {
+                "text": root.config.get("phrase", ""),
+                "hotkey": root.config.get("hotkey", ""),
+                "schedule": root.config.get("time", ""),
+                "startup": "",
+            }[trigger_kind]
+        except (OSError, ValueError, KeyError, StopIteration, json.JSONDecodeError) as exc:
+            scenario_status.setText(f"Не удалось подготовить сценарий: {exc}")
+            return
+
+        answer = QMessageBox.question(
+            window,
+            "Запустить сценарий",
+            f"Выполнить сценарий «{graph.name}» сейчас?\n"
+            "Опасные действия по-прежнему запросят отдельное подтверждение.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        start_worker(
+            workflow_trigger=WorkflowTrigger(trigger_kind, trigger_value, workflow_id)
+        )
+
     new_scenario_button.clicked.connect(create_scenario)
     new_hotkey_scenario_button.clicked.connect(create_hotkey_scenario)
     new_schedule_scenario_button.clicked.connect(create_schedule_scenario)
@@ -640,6 +677,7 @@ def main() -> int:
     validate_scenario_button.clicked.connect(validate_scenario)
     save_scenario_button.clicked.connect(save_scenario)
     delete_scenario_button.clicked.connect(delete_scenario)
+    run_scenario_button.clicked.connect(run_selected_scenario)
     fit_graph_button.clicked.connect(graph_view.fit_graph)
     reset_layout_button.clicked.connect(graph_view.reset_layout)
     scenario_list.itemSelectionChanged.connect(load_selected_scenario)
@@ -899,11 +937,11 @@ def main() -> int:
     input_box.returnPressed.connect(send)
     voice_button.clicked.connect(lambda: start_worker(voice_input=True))
 
-    def dispatch_hotkey(combo: str) -> None:
+    def dispatch_hotkey(workflow_id: str, combo: str) -> None:
         if workers:
-            logging.info("Ignoring %s because another action is running", combo)
+            logging.info("Ignoring hotkey %s for %s because another action is running", combo, workflow_id)
             return
-        start_worker(workflow_trigger=WorkflowTrigger("hotkey", combo))
+        start_worker(workflow_trigger=WorkflowTrigger("hotkey", combo, workflow_id))
 
     hotkey_bridge = HotkeyBridge()
     hotkey_dispatcher = HotkeyDispatcher(dispatch_hotkey)
@@ -935,7 +973,9 @@ def main() -> int:
                 continue
             normalized_hotkeys.add(normalized)
             hotkey_bindings[combo] = (
-                lambda combo=combo: hotkey_bridge.activated.emit(combo)
+                lambda workflow_id=workflow_id, combo=combo: hotkey_bridge.activated.emit(
+                    workflow_id, combo
+                )
             )
 
         hotkey_service = GlobalHotkeyService(hotkey_bindings)
