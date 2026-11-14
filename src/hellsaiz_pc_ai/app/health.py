@@ -33,6 +33,7 @@ def collect_speech_health(
     whisper_model: Path | None,
     tts_engine: str,
     piper_model_path: Path | None,
+    microphone_device: str = "",
     wake_enabled: bool = False,
     is_windows: bool | None = None,
 ) -> list[HealthItem]:
@@ -40,12 +41,37 @@ def collect_speech_health(
     windows = os.name == "nt" if is_windows is None else is_windows
     checks: list[HealthItem] = []
     mic_ok = _module_available("sounddevice")
-    checks.append(HealthItem(
-        "Микрофон",
-        "ok" if mic_ok else "warning",
-        "Модуль sounddevice установлен." if mic_ok
-        else 'Не установлен sounddevice. Выполни: pip install -e ".[voice]"',
-    ))
+    if not mic_ok:
+        checks.append(HealthItem(
+            "Микрофон", "warning",
+            'Не установлен sounddevice. Выполни: pip install -e ".[voice]"',
+        ))
+    else:
+        try:
+            from hellsaiz_pc_ai.speech.capture import list_input_devices
+
+            devices = list_input_devices()
+            device_names = {item.name for item in devices}
+            device_labels = {item.display_name for item in devices}
+            if not devices:
+                checks.append(HealthItem(
+                    "Микрофон", "warning", "Windows не обнаружила входных микрофонов.",
+                ))
+            elif microphone_device and microphone_device not in device_names | device_labels:
+                checks.append(HealthItem(
+                    "Микрофон", "warning",
+                    f"Выбранное устройство «{microphone_device}» не найдено.",
+                ))
+            else:
+                current_name = microphone_device or "системное устройство по умолчанию"
+                checks.append(HealthItem(
+                    "Микрофон", "ok",
+                    f"Входное устройство доступно: {current_name}.",
+                ))
+        except Exception as exc:
+            checks.append(HealthItem(
+                "Микрофон", "warning", f"Не удалось проверить входные устройства: {exc}",
+            ))
 
     def check_stt(name: str, *, required: bool) -> None:
         severity: HealthLevel = "error" if required else "warning"
