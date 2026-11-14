@@ -136,6 +136,20 @@ def test_open_app_runs_without_confirmation():
     assert router.route("открой блокнот", deny) == "Готово. opened notepad"
 
 
+def test_common_windows_system_tools_resolve_through_the_allowlist():
+    router = make_router(
+        allowed_apps={
+            "task_manager": ("taskmgr.exe",),
+            "settings": ("__shell_link__", "ms-settings:"),
+            "control_panel": ("control.exe",),
+        }
+    )
+
+    assert router.route("открой диспетчер задач") == "Готово. opened task_manager"
+    assert router.route("запусти параметры") == "Готово. opened settings"
+    assert router.route("открой панель управления") == "Готово. opened control_panel"
+
+
 def test_unlisted_app_does_not_execute():
     assert "не добавлено" in make_router().route("открой powershell").casefold()
 
