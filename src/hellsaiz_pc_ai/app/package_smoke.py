@@ -16,6 +16,8 @@ PACKAGED_RUNTIME_MODULES = (
     "hellsaiz_pc_ai.companion.controller",
     "hellsaiz_pc_ai.companion.model_manifest",
     "hellsaiz_pc_ai.startup_task",
+    "hellsaiz_pc_ai.telegram.config",
+    "hellsaiz_pc_ai.telegram.worker",
     "pywinauto",
     "cryptography.hazmat.primitives.asymmetric.ed25519",
     "numpy",
