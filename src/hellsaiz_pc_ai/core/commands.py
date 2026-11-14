@@ -68,7 +68,10 @@ class CommandRouter:
         self.wake_aliases = tuple(
             sorted({self._normalize_phrase(alias) for alias in aliases if alias.strip()}, key=len, reverse=True)
         )
-        self.app_alias_lookup: dict[str, str] = {}
+        self.app_alias_lookup: dict[str, str] = {
+            self._normalize_phrase(canonical): canonical
+            for canonical in self.allowed_apps
+        }
         for canonical, phrases in (app_aliases or {}).items():
             canonical_key = canonical.casefold()
             if canonical_key not in self.allowed_apps:
