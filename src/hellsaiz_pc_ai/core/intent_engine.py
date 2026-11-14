@@ -73,8 +73,8 @@ def build_default_intent_engine() -> IntentEngine:
     engine.register(
         "exchange_rate",
         r"(?:курс(?: валют)?|сколько стоит)\s+"
-        r"(?P<base>доллар(?:а|ы)?|usd|евро|eur|юан(?:ь|я)|cny|руб(?:ль|ля|лю)|rub|фунт(?:а)?|gbp)"
+        r"(?P<base>доллар(?:а|ы|у)?|usd|евро|eur|юан(?:ь|я)|cny|руб(?:ль|ля|лю)|rub|фунт(?:а)?|gbp)"
         r"(?:\s+(?:к|по отношению к)\s+"
-        r"(?P<quote>доллар(?:а|ы)?|usd|евро|eur|юан(?:ь|я)|cny|руб(?:ль|ля|лю)|rub|фунт(?:а)?|gbp))?",
+        r"(?P<quote>доллар(?:а|ы|у)?|usd|евро|eur|юан(?:ь|я)|cny|руб(?:ль|ля|лю)|rub|фунт(?:а)?|gbp))?",
     )
     return engine
