@@ -52,6 +52,12 @@ from hellsaiz_pc_ai.workflows.library import WorkflowLibrary
 from hellsaiz_pc_ai.workflows.scheduler import WorkflowScheduler
 
 
+_BACKGROUND_VOICE_WORKERS: dict[str, list[Any]] = {
+    "tests": [],
+    "sapi_inventory": [],
+}
+
+
 def build_runtime(settings: Settings):
     registry = ToolRegistry()
     register_system_tools(registry)
@@ -1575,8 +1581,6 @@ def main() -> int:
     voices_layout.addWidget(voices_status)
 
     voice_download_workers: list[QThread] = []
-    voice_test_workers: list[QThread] = []
-    sapi_inventory_workers: list[QThread] = []
 
     class VoiceDownloadWorker(QThread):
         completed = Signal(object)
@@ -1736,7 +1740,7 @@ def main() -> int:
             voices_status.setText(f"Не удалось сохранить параметры речи: {exc}")
 
     def refresh_system_voice_list() -> None:
-        if any(worker.isRunning() for worker in sapi_inventory_workers):
+        if any(worker.isRunning() for worker in _BACKGROUND_VOICE_WORKERS["sapi_inventory"]):
             voices_status.setText("Список системных голосов уже обновляется.")
             return
         refresh_system_voices_button.setEnabled(False)
@@ -1780,7 +1784,7 @@ def main() -> int:
         if workers:
             voices_status.setText("Дождись завершения текущей команды помощника.")
             return
-        if any(worker.isRunning() for worker in voice_test_workers):
+        if any(worker.isRunning() for worker in _BACKGROUND_VOICE_WORKERS["tests"]):
             voices_status.setText("Проверка голосового движка уже выполняется.")
             return
         model_path = None
