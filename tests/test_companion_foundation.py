@@ -38,12 +38,12 @@ def test_companion_speech_visemes_require_speaking_mode():
     controller = CompanionController()
 
     with pytest.raises(ValueError, match="SPEAKING"):
-        controller.set_viseme(CompanionViseme.A, 0.8)
+        controller.set_viseme(CompanionViseme.VOWEL_A, 0.8)
 
     controller.set_mode(CompanionMode.SPEAKING)
-    snapshot = controller.set_viseme(CompanionViseme.A, 0.8)
+    snapshot = controller.set_viseme(CompanionViseme.VOWEL_A, 0.8)
 
-    assert snapshot.viseme == CompanionViseme.A
+    assert snapshot.viseme == CompanionViseme.VOWEL_A
     assert snapshot.mouth_weight == 0.8
 
     idle = controller.set_mode(CompanionMode.IDLE)
@@ -57,7 +57,7 @@ def test_companion_controller_validates_animation_ranges():
     with pytest.raises(ValueError):
         CompanionSnapshot(gaze_x=1.2)
     with pytest.raises(ValueError):
-        CompanionSnapshot(mode=CompanionMode.IDLE, viseme=CompanionViseme.A)
+        CompanionSnapshot(mode=CompanionMode.IDLE, viseme=CompanionViseme.VOWEL_A)
 
 
 def test_model_manifest_loads_valid_local_model_package(tmp_path: Path):
