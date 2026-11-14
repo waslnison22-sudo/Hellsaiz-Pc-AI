@@ -54,6 +54,7 @@ class TelegramBotWorker(threading.Thread):
         status_callback: Callable[[str], None] | None = None,
         api_call: Callable[[str, dict[str, Any]], dict[str, Any]] | None = None,
         network_checker: Callable[[str, str], Any] = check_http_proxy,
+        network_retry_seconds: float = 30.0,
     ) -> None:
         super().__init__(name="HellsaizTelegramWorker", daemon=True)
         self.token = validate_bot_token(token)
@@ -71,6 +72,9 @@ class TelegramBotWorker(threading.Thread):
         self.app_version = app_version
         self.status_callback = status_callback or (lambda _message: None)
         self._api_call_injected = api_call
+        if not 0.0 <= network_retry_seconds <= 300.0:
+            raise ValueError("network_retry_seconds должен быть от 0 до 300 секунд.")
+        self.network_retry_seconds = network_retry_seconds
         self._network_checker = network_checker
         self._stop_event = threading.Event()
         self._offset: int | None = None
@@ -206,7 +210,7 @@ class TelegramBotWorker(threading.Thread):
             return
         try:
             if not self._network_ready():
-                while not self._stop_event.wait(30):
+                while not self._stop_event.wait(self.network_retry_seconds):
                     if self._network_ready():
                         break
                 else:
