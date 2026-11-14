@@ -1,12 +1,24 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import zipfile
 from pathlib import Path
 
 import pytest
 
-from scripts.package_release import make_portable_zip, validate_portable_zip
+from hellsaiz_pc_ai.update_client import UpdateCheckError
+
+
+_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "package_release.py"
+_SPEC = importlib.util.spec_from_file_location("hellsaiz_package_release", _SCRIPT_PATH)
+if _SPEC is None or _SPEC.loader is None:
+    raise RuntimeError("Could not load scripts/package_release.py for tests.")
+_PACKAGE_RELEASE = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(_PACKAGE_RELEASE)
+
+make_portable_zip = _PACKAGE_RELEASE.make_portable_zip
+validate_portable_zip = _PACKAGE_RELEASE.validate_portable_zip
 
 
 def _portable_layout(root: Path, version: str = "0.1.3") -> Path:
@@ -50,7 +62,7 @@ def test_portable_zip_rejects_invalid_active_version(tmp_path: Path):
         encoding="utf-8",
     )
 
-    with pytest.raises(ValueError):
+    with pytest.raises(UpdateCheckError):
         make_portable_zip(install_root, tmp_path / "portable.zip")
 
 
