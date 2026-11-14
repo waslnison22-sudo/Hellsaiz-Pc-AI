@@ -805,16 +805,22 @@ def main() -> int:
     ai_enabled_check.setChecked(bool(profile_data.get("enabled", settings.llm.enabled)))
     speak_toggle.setChecked(bool(profile_data.get("auto_speak", settings.speech.auto_speak)))
 
+    provider_selection_state = {
+        "last": str(provider_combo.currentData() or "custom")
+    }
+
     def provider_changed() -> None:
         provider = str(provider_combo.currentData() or "custom")
-        if provider != "custom":
-            endpoint_edit.setText(endpoint_defaults[provider])
+        if provider != provider_selection_state["last"]:
+            endpoint_edit.setText(endpoint_defaults.get(provider, settings.llm.base_url))
+            provider_selection_state["last"] = provider
         is_gigachat = provider == "gigachat"
         gigachat_key_label.setVisible(is_gigachat)
         gigachat_key_edit.setVisible(is_gigachat)
         gigachat_key_status.setVisible(is_gigachat)
-        if is_gigachat:
+        if is_gigachat and provider != provider_selection_state.get("loaded_provider"):
             endpoint_edit.setText(GigaChatProvider.DEFAULT_BASE_URL)
+        provider_selection_state["loaded_provider"] = provider
 
     provider_combo.currentIndexChanged.connect(provider_changed)
     provider_changed()
