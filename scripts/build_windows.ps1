@@ -29,13 +29,11 @@ if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed to build the update helper.
 python scripts/package_release.py --version $Version --app-dir dist/app/HellsaizPC_AI --launcher dist/tools/HellsaizLauncher.exe --updater dist/tools/HellsaizUpdater.exe
 if ($LASTEXITCODE -ne 0) { throw "Release package generation failed." }
 
-$setupCompiler = Join-Path $env:ProgramFiles(x86) "Inno Setup 6\ISCC.exe"
-if (-not (Test-Path $setupCompiler)) {
-    choco install innosetup --yes --no-progress
-    if ($LASTEXITCODE -ne 0) { throw "Inno Setup installation failed." }
+$fullPackage = "dist/release-assets/HellsaizPC_AI-windows-x64-full.zip"
+$portablePackage = "dist/release-assets/HellsaizPC_AI-windows-x64-portable.zip"
+foreach ($package in @($fullPackage, $portablePackage)) {
+    if (-not (Test-Path $package -PathType Leaf)) { throw "Required ZIP package was not created: $package" }
+    if ((Get-Item $package).Length -le 0) { throw "ZIP package is empty: $package" }
 }
-if (-not (Test-Path $setupCompiler)) { throw "Inno Setup compiler was not found." }
-& $setupCompiler "/DAppVersion=$Version" "installer/HellsaizPC_AI.iss"
-if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed to compile the installer." }
 
-Write-Host "Windows installer and release assets are ready in dist/."
+Write-Host "Portable ZIP and signed updater packages are ready in dist/release-assets/."
