@@ -81,10 +81,9 @@ def _clone_current_version(source: Path, destination: Path) -> None:
             target.mkdir(parents=True, exist_ok=True)
         elif item.is_file():
             target.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                os.link(item, target)
-            except OSError:
-                shutil.copy2(item, target)
+            # Copy, do not hard-link: writing a changed delta file must never
+            # mutate the still-active version through a shared inode.
+            shutil.copy2(item, target)
 
 
 def _prune_to_manifest(stage: Path, manifest_files: dict[str, dict[str, Any]]) -> None:
