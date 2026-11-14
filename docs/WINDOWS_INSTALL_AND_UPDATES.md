@@ -6,6 +6,8 @@ The Windows release publishes two different ZIP formats. They are intentionally 
 
 `HellsaizPC_AI-windows-x64-portable.zip` is the user-facing download. Extract the complete archive and start `HellsaizLauncher.exe` from its root. It contains `active.json`, the stable launcher and updater, and the complete PyInstaller onedir build under `versions/<version>/`. The launcher selects the version declared by `active.json`.
 
+On the first successful application start, the versioned app creates or repairs a desktop shortcut named `Hellsaiz PC AI.lnk`. The shortcut always targets the root-level `HellsaizLauncher.exe`, not the versioned application executable, so it remains valid when the updater activates a newer version. The Inno Setup installer also enables the desktop shortcut task by default.
+
 ## Internal update payload
 
 `HellsaizPC_AI-windows-x64-full.zip` is for the updater only. Its files are at ZIP root and match the signed manifest records exactly. Delta archives, when available, likewise contain only changed manifest-listed files at ZIP root. Do not extract these archives as a first-time installation; doing so omits the launcher layout and active-version metadata.
