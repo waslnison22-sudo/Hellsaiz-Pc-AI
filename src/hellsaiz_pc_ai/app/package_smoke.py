@@ -11,6 +11,8 @@ PACKAGED_RUNTIME_MODULES = (
     "PySide6.QtWidgets",
     "hellsaiz_pc_ai.providers.gigachat",
     "hellsaiz_pc_ai.tools.ui_automation",
+    "hellsaiz_pc_ai.companion.controller",
+    "hellsaiz_pc_ai.companion.model_manifest",
     "pywinauto",
     "cryptography.hazmat.primitives.asymmetric.ed25519",
     "numpy",
