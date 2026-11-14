@@ -9,7 +9,7 @@ from typing import Any, Callable, Literal
 from hellsaiz_pc_ai.core.models import ToolResult
 from hellsaiz_pc_ai.core.registry import ConfirmCallback, ToolRegistry
 
-NodeKind = Literal["trigger.text", "trigger.hotkey", "trigger.schedule", "trigger.startup", "condition.hour", "action.tool", "action.repeat", "action.wait"]
+NodeKind = Literal["trigger.text", "trigger.hotkey", "trigger.schedule", "trigger.startup", "condition.hour", "condition.weekday", "action.tool", "action.repeat", "action.wait"]
 _ALLOWED_KINDS = {"trigger.text", "trigger.hotkey", "trigger.schedule", "trigger.startup", "condition.hour", "action.tool", "action.repeat", "action.wait"}
 _ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
 _HOTKEY_RE = re.compile(
@@ -125,6 +125,15 @@ class WorkflowGraph:
                 raise ValueError(f"Hour condition '{node.id}' has invalid settings.")
             if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 23:
                 raise ValueError(f"Hour condition '{node.id}' value must be 0..23.")
+        elif node.kind == "condition.weekday":
+            weekday = cfg.get("value")
+            if (
+                set(cfg) != {"value"}
+                or isinstance(weekday, bool)
+                or not isinstance(weekday, int)
+                or not 1 <= weekday <= 7
+            ):
+                raise ValueError(f"Weekday condition '{node.id}' value must be ISO weekday 1..7.")
         elif node.kind == "action.tool":
             tool, arguments = cfg.get("name"), cfg.get("arguments", {})
             if set(cfg) - {"name", "arguments"} or not isinstance(tool, str) or not tool:
@@ -165,7 +174,7 @@ class WorkflowGraph:
 
         for node in nodes:
             out = outgoing[node.id]
-            if node.kind == "condition.hour":
+            if node.kind in {"condition.hour", "condition.weekday"}:
                 if len(out) != 2 or {edge.when for edge in out} != {"true", "false"}:
                     raise ValueError(f"Condition '{node.id}' needs one true and one false branch.")
             elif len(out) > 1 or any(edge.when is not None for edge in out):
@@ -289,6 +298,11 @@ class WorkflowGraphRunner:
             if node.kind == "condition.hour":
                 cfg = node.config
                 passed = self._compare_hour(self.clock().hour, cfg["operator"], cfg["value"])
+                branch = "true" if passed else "false"
+                current = next(edge.target for edge in edges if edge.when == branch)
+                continue
+            if node.kind == "condition.weekday":
+                passed = self.clock().isoweekday() == node.config["value"]
                 branch = "true" if passed else "false"
                 current = next(edge.target for edge in edges if edge.when == branch)
                 continue

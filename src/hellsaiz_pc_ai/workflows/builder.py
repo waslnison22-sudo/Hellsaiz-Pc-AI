@@ -102,3 +102,26 @@ def append_repeat_action(
         }],
         [{"from": source_id, "to": node_id}],
     )
+
+
+
+def append_weekday_condition(
+    graph: WorkflowGraph, source_id: str, condition_id: str, weekday: int
+) -> WorkflowGraph:
+    if isinstance(weekday, bool) or not isinstance(weekday, int) or not 1 <= weekday <= 7:
+        raise ValueError("Weekday must be an ISO weekday from 1 to 7.")
+    true_id, false_id = f"{condition_id}_true", f"{condition_id}_false"
+    return _append_node(
+        graph,
+        source_id,
+        [
+            {"id": condition_id, "type": "condition.weekday", "config": {"value": weekday}},
+            {"id": true_id, "type": "action.wait", "config": {"seconds": 0}},
+            {"id": false_id, "type": "action.wait", "config": {"seconds": 0}},
+        ],
+        [
+            {"from": source_id, "to": condition_id},
+            {"from": condition_id, "to": true_id, "when": "true"},
+            {"from": condition_id, "to": false_id, "when": "false"},
+        ],
+    )

@@ -17,7 +17,7 @@ from hellsaiz_pc_ai.providers.openai_compatible import OpenAICompatibleProvider,
 from hellsaiz_pc_ai.storage.sqlite_store import ChatStore
 from hellsaiz_pc_ai.tools.system import register_system_tools
 from hellsaiz_pc_ai.tools.windows import register_windows_tools
-from hellsaiz_pc_ai.workflows.builder import append_hour_condition, append_repeat_action, append_tool_action, append_wait_action, terminal_nodes
+from hellsaiz_pc_ai.workflows.builder import append_hour_condition, append_repeat_action, append_tool_action, append_wait_action, append_weekday_condition, terminal_nodes
 from hellsaiz_pc_ai.workflows.graph import WorkflowGraph, WorkflowGraphRunner, WorkflowTrigger
 from hellsaiz_pc_ai.workflows.library import WorkflowLibrary
 from hellsaiz_pc_ai.workflows.scheduler import WorkflowScheduler
@@ -376,6 +376,22 @@ def main() -> int:
     repeat_row.addWidget(repeat_hint, 1)
     scenario_layout.addLayout(repeat_row)
 
+    weekday_row = QHBoxLayout()
+    weekday_id = QLineEdit("weekday-check")
+    weekday_id.setPlaceholderText("id дня недели")
+    weekday_value = QComboBox()
+    for day_name, day_number in [
+        ("Понедельник", 1), ("Вторник", 2), ("Среда", 3), ("Четверг", 4),
+        ("Пятница", 5), ("Суббота", 6), ("Воскресенье", 7),
+    ]:
+        weekday_value.addItem(day_name, day_number)
+    add_weekday_button = QPushButton("Добавить условие дня")
+    weekday_row.addWidget(weekday_id)
+    weekday_row.addWidget(weekday_value)
+    weekday_row.addWidget(add_weekday_button)
+    weekday_row.addStretch(1)
+    scenario_layout.addLayout(weekday_row)
+
     scenario_id = QLineEdit()
     scenario_id.setPlaceholderText("id-сценария, например night-mode")
     scenario_layout.addWidget(scenario_id)
@@ -598,6 +614,23 @@ def main() -> int:
         except (ValueError, json.JSONDecodeError) as exc:
             scenario_status.setText(f"Не удалось добавить ожидание: {exc}")
 
+    def add_weekday_condition_node() -> None:
+        try:
+            graph = WorkflowGraph.from_dict(json.loads(graph_editor.toPlainText()))
+            source_id = builder_source.currentData()
+            if not source_id:
+                raise ValueError("Выбери конечный узел ветви.")
+            updated = append_weekday_condition(
+                graph,
+                str(source_id),
+                weekday_id.text().strip(),
+                int(weekday_value.currentData()),
+            )
+            apply_builder_graph(updated)
+            weekday_id.setText("weekday-check")
+        except (ValueError, json.JSONDecodeError) as exc:
+            scenario_status.setText(f"Не удалось добавить условие дня недели: {exc}")
+
     def add_repeat_node() -> None:
         try:
             graph = WorkflowGraph.from_dict(json.loads(graph_editor.toPlainText()))
@@ -639,6 +672,7 @@ def main() -> int:
     add_wait_button.clicked.connect(add_wait_node)
     add_condition_button.clicked.connect(add_condition_node)
     add_repeat_button.clicked.connect(add_repeat_node)
+    add_weekday_button.clicked.connect(add_weekday_condition_node)
     refresh_builder_sources()
 
     def validate_scenario() -> WorkflowGraph | None:

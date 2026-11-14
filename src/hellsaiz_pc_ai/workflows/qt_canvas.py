@@ -44,6 +44,8 @@ class WorkflowNodeItem(QGraphicsObject):
             return str(cfg.get("hotkey", ""))
         if self.node.kind == "condition.hour":
             return f"hour {cfg.get('operator')} {cfg.get('value')}"
+        if self.node.kind == "condition.weekday":
+            return f"ISO weekday = {cfg.get('value')}"
         if self.node.kind == "action.tool":
             return str(cfg.get("name", ""))
         if self.node.kind == "action.repeat":
@@ -60,6 +62,7 @@ class WorkflowNodeItem(QGraphicsObject):
             "trigger.text": "#20252d",
             "trigger.hotkey": "#20252d",
             "condition.hour": "#252a32",
+            "condition.weekday": "#252a32",
             "action.tool": "#171b21",
             "action.repeat": "#20252d",
             "action.wait": "#171b21",

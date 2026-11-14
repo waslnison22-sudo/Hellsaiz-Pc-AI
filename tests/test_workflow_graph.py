@@ -211,3 +211,45 @@ def test_repeat_action_rejects_unbounded_or_invalid_counts(count):
     }
     with pytest.raises(ValueError, match="1..10"):
         WorkflowGraph.from_dict(data)
+
+
+
+def test_weekday_condition_executes_the_matching_branch():
+    graph = WorkflowGraph.from_dict({
+        "name": "Weekday",
+        "nodes": [
+            {"id": "start", "type": "trigger.text", "config": {"phrase": "weekday"}},
+            {"id": "day", "type": "condition.weekday", "config": {"value": 6}},
+            {"id": "saturday", "type": "action.wait", "config": {"seconds": 0}},
+            {"id": "other", "type": "action.wait", "config": {"seconds": 1}},
+        ],
+        "edges": [
+            {"from": "start", "to": "day"},
+            {"from": "day", "to": "saturday", "when": "true"},
+            {"from": "day", "to": "other", "when": "false"},
+        ],
+    })
+    runner = WorkflowGraphRunner(registry(), clock=lambda: datetime(2026, 11, 14, 10, 0))
+    result = runner.run(graph, WorkflowTrigger("text", "weekday"))
+
+    assert result.completed
+    assert "Ожидание 0 сек." in result.steps[0].output
+
+
+def test_weekday_condition_rejects_invalid_values():
+    for value in (0, 8, True, 2.5):
+        with pytest.raises(ValueError, match="ISO weekday"):
+            WorkflowGraph.from_dict({
+                "name": "Invalid weekday",
+                "nodes": [
+                    {"id": "start", "type": "trigger.text", "config": {"phrase": "go"}},
+                    {"id": "day", "type": "condition.weekday", "config": {"value": value}},
+                    {"id": "yes", "type": "action.wait", "config": {"seconds": 0}},
+                    {"id": "no", "type": "action.wait", "config": {"seconds": 0}},
+                ],
+                "edges": [
+                    {"from": "start", "to": "day"},
+                    {"from": "day", "to": "yes", "when": "true"},
+                    {"from": "day", "to": "no", "when": "false"},
+                ],
+            })

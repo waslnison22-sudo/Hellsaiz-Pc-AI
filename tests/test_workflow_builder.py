@@ -1,6 +1,6 @@
 import pytest
 
-from hellsaiz_pc_ai.workflows.builder import append_hour_condition, append_repeat_action, append_tool_action, append_wait_action, terminal_nodes
+from hellsaiz_pc_ai.workflows.builder import append_hour_condition, append_repeat_action, append_tool_action, append_wait_action, append_weekday_condition, terminal_nodes
 from hellsaiz_pc_ai.workflows.graph import WorkflowGraph
 
 
@@ -60,3 +60,15 @@ def test_append_repeat_action_rejects_unregistered_tool_and_unbounded_count():
         append_repeat_action(sample_graph(), "end", "repeat", "powershell", {}, 2, set())
     with pytest.raises(ValueError, match="1 and 10"):
         append_repeat_action(sample_graph(), "end", "repeat", "set_volume", {}, 99, {"set_volume"})
+
+
+
+def test_append_weekday_condition_creates_two_branches():
+    updated = append_weekday_condition(sample_graph(), "end", "weekday", 6)
+    assert {edge.when for edge in updated.edges if edge.source == "weekday"} == {"true", "false"}
+    assert set(terminal_nodes(updated)) == {"weekday_true", "weekday_false"}
+
+
+def test_append_weekday_condition_rejects_invalid_day():
+    with pytest.raises(ValueError, match="ISO weekday"):
+        append_weekday_condition(sample_graph(), "end", "weekday", 8)
