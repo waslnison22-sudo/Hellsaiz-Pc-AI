@@ -125,7 +125,7 @@ class CommandRouter:
         reminder_match = re.match(
             r"^напомни(?: мне)?\s+через\s+(\d{1,5})\s+"
             r"(секунд(?:у|ы|а)?|сек|минут(?:у|ы|а)?|мин|час(?:а|ов)?|ч)\s+(.+?)\s*$",
-            command,
+            self.strip_wake_name(text),
             flags=re.IGNORECASE | re.DOTALL,
         )
         if reminder_match:
