@@ -13,7 +13,7 @@ def main() -> int:
         try:
             with log_path.open("w", encoding="utf-8") as log:
                 def report(message: str) -> None:
-                    log.write(message + "\\n")
+                    log.write(message + "\n")
                     log.flush()
 
                 report("Hellsaiz PC AI packaged runtime self-test started.")
