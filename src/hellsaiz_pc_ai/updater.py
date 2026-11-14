@@ -333,7 +333,7 @@ def main() -> int:
     try:
         if not args.install:
             raise ApplyUpdateError("Не указан режим установки обновления.")
-        installed = apply_update(
+        apply_update(
             args.install_root, args.archive, args.manifest, args.signature,
             args.mode, args.from_version, args.parent_pid
         )

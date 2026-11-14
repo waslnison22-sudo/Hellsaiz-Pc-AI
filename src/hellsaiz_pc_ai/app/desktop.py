@@ -164,7 +164,8 @@ def main() -> int:
         reminder_store, allowed_apps, profile_data
     ) = build_runtime(settings)
     active_voice = {"name": str(profile_data.get("voice_name") or settings.speech.tts_voice_name)}
-    install_root = installed_app_root()\n    current_app_version = installed_version(install_root, APP_VERSION)
+    install_root = installed_app_root()
+    current_app_version = installed_version(install_root, APP_VERSION)
 
     app = QApplication.instance() or QApplication([])
     window = QMainWindow()
