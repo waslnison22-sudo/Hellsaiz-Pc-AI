@@ -215,6 +215,9 @@ def main() -> int:
             profile_data.get("whisper_cpp_model") or settings.speech.whisper_cpp_model or ""
         ),
     }
+    active_microphone = {
+        "name": str(profile_data.get("microphone_device") or "")
+    }
     install_root = installed_app_root()
     current_app_version = installed_version(install_root, APP_VERSION)
     if install_root is not None:
@@ -264,10 +267,16 @@ def main() -> int:
         status = Signal(str)
         failed = Signal(str)
 
-        def __init__(self, model_dir: Path, aliases: tuple[str, ...]) -> None:
+        def __init__(
+            self,
+            model_dir: Path,
+            aliases: tuple[str, ...],
+            device: str | None = None,
+        ) -> None:
             super().__init__()
             self.model_dir = model_dir
             self.aliases = aliases
+            self.device = device
             self.listener = None
 
         def run(self) -> None:
@@ -279,6 +288,7 @@ def main() -> int:
                     self.aliases,
                     on_command=self.command.emit,
                     on_status=self.status.emit,
+                    device=self.device,
                 )
                 self.listener.listen()
             except Exception as exc:
@@ -344,7 +354,9 @@ def main() -> int:
                         audio_path = Path(audio_file.name)
                     try:
                         record_microphone(
-                            audio_path, duration_seconds=active_stt["recording_seconds"]
+                            audio_path,
+                            duration_seconds=active_stt["recording_seconds"],
+                            device=active_microphone["name"] or None,
                         )
                         speech_router = build_speech_router(
                             primary=active_stt["primary"],
@@ -1708,6 +1720,19 @@ def main() -> int:
     recording_row.addWidget(save_stt_button)
     settings_layout.addLayout(recording_row)
 
+    microphone_row = QHBoxLayout()
+    microphone_row.addWidget(QLabel("Микрофон"))
+    microphone_combo = QComboBox()
+    microphone_combo.setMinimumWidth(250)
+    refresh_microphones_button = QPushButton("Обновить")
+    microphone_row.addWidget(microphone_combo, 1)
+    microphone_row.addWidget(refresh_microphones_button)
+    settings_layout.addLayout(microphone_row)
+    microphone_status = QLabel("Входное устройство по умолчанию.")
+    microphone_status.setWordWrap(True)
+    microphone_status.setStyleSheet("color:#929aa6;")
+    settings_layout.addWidget(microphone_status)
+
     stt_status = QLabel(
         "Распознавание работает локально. Whisper.cpp активируется только при выборе и указании обоих файлов."
     )
@@ -1730,6 +1755,39 @@ def main() -> int:
     speech_health_status.setWordWrap(True)
     speech_health_status.setStyleSheet("color:#929aa6;")
     settings_layout.addWidget(speech_health_status)
+
+    def refresh_microphone_devices() -> None:
+        saved_name = active_microphone["name"]
+        microphone_combo.clear()
+        microphone_combo.addItem("Системный микрофон по умолчанию", "")
+        try:
+            from hellsaiz_pc_ai.speech.capture import list_input_devices
+
+            devices = list_input_devices()
+            for device in devices:
+                microphone_combo.addItem(
+                    f"{device.display_name} · {device.max_input_channels} вход.",
+                    device.name,
+                )
+            saved_index = microphone_combo.findData(saved_name)
+            if saved_name and saved_index < 0:
+                microphone_status.setText(
+                    f"Сохранённый микрофон «{saved_name}» не найден. "
+                    "Выбери доступное устройство или системный микрофон."
+                )
+                microphone_combo.setCurrentIndex(0)
+            else:
+                microphone_combo.setCurrentIndex(max(0, saved_index))
+                microphone_status.setText(
+                    f"Найдено входных устройств: {len(devices)}. "
+                    "Выбор действует для push-to-talk и Hands-free."
+                )
+        except Exception as exc:
+            microphone_status.setText(
+                f"Не удалось получить список микрофонов: {exc}. "
+                "Можно использовать системное устройство по умолчанию."
+            )
+            microphone_combo.setCurrentIndex(0)
 
     def choose_vosk_model() -> None:
         selected = QFileDialog.getExistingDirectory(
@@ -1797,6 +1855,7 @@ def main() -> int:
         ):
             stt_status.setText("Для Whisper.cpp укажи и whisper-cli.exe, и GGML-модель.")
             return
+        active_microphone["name"] = str(microphone_combo.currentData() or "")
         active_stt.update({
             "primary": primary,
             "fallback": fallback,
@@ -1813,6 +1872,7 @@ def main() -> int:
             "whisper_cpp_model": active_stt["whisper_cpp_model"],
             "recording_seconds": float(recording_duration_combo.currentData()),
             "always_listen": always_listen_check.isChecked(),
+            "microphone_device": active_microphone["name"],
         })
         profile_path = settings.workflows_path.parent / "ai_profile.json"
         try:
@@ -1910,7 +1970,9 @@ def main() -> int:
                 logging.warning("Could not persist disabled wake listener: %s", exc)
             return
 
-        worker = WakeListenerWorker(model_dir, settings.wake_aliases)
+        worker = WakeListenerWorker(
+            model_dir, settings.wake_aliases, active_microphone["name"] or None
+        )
         wake_listener_state["worker"] = worker
 
         def on_wake_command(prompt: str) -> None:
@@ -1969,7 +2031,9 @@ def main() -> int:
     choose_whisper_executable_button.clicked.connect(choose_whisper_executable)
     choose_whisper_model_button.clicked.connect(choose_whisper_model)
     save_stt_button.clicked.connect(save_stt_profile)
+    refresh_microphones_button.clicked.connect(refresh_microphone_devices)
     always_listen_check.toggled.connect(lambda _checked: save_stt_profile())
+    refresh_microphone_devices()
 
     update_title = QLabel("ОБНОВЛЕНИЯ")
     update_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
