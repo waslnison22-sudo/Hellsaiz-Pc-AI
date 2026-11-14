@@ -47,3 +47,33 @@ def test_endpoint_rejects_unsafe_url_components(url: str):
 def test_llm_timeout_must_be_bounded():
     with pytest.raises(ValueError, match="timeout"):
         OpenAICompatibleProvider("http://127.0.0.1:1234/v1", "model", timeout_seconds=0)
+
+
+def test_openai_compatible_provider_discovers_models_and_health(monkeypatch):
+    from hellsaiz_pc_ai.providers import openai_compatible
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return b'{"data":[{"id":"qwen3"},{"id":"llama3.2"}]}'
+
+    requests = []
+
+    def fake_urlopen(request, timeout):
+        requests.append((request, timeout))
+        return FakeResponse()
+
+    monkeypatch.setattr(openai_compatible, "urlopen", fake_urlopen)
+    provider = OpenAICompatibleProvider("http://127.0.0.1:1234/v1", "qwen3")
+
+    assert provider.list_models() == ["qwen3", "llama3.2"]
+    health = provider.health_check()
+    assert health["model_available"]
+    assert health["capabilities"]["chat_completions"]
+    assert len(requests) == 2
+    assert requests[0][0].full_url == "http://127.0.0.1:1234/v1/models"
