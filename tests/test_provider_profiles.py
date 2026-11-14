@@ -8,6 +8,7 @@ import pytest
 from hellsaiz_pc_ai.provider_profiles import (
     active_profile,
     activate_profile,
+    load_store_from_value,
     default_profile_store,
     load_profile_store,
     save_profile_store,
@@ -60,15 +61,31 @@ def test_profiles_can_be_saved_selected_and_reloaded(tmp_path: Path):
 def test_duplicate_profile_names_are_rejected_case_insensitively():
     store = default_profile_store()
     with pytest.raises(ValueError, match="уникальными"):
-        upsert_profile(
-            store,
-            {
-                "name": "ollama",
-                "provider": "ollama",
-                "base_url": "http://127.0.0.1:11434/v1",
-                "model": "llama3.2",
-            },
-        )
+        load_store_from_value({
+            "schema_version": 1,
+            "active_profile": "LM Studio",
+            "profiles": [
+                {
+                    "name": "LM Studio",
+                    "provider": "lm-studio",
+                    "base_url": "http://127.0.0.1:1234/v1",
+                    "model": "local-model",
+                    "enabled": False,
+                },
+                {
+                    "name": "Ollama",
+                    "provider": "ollama",
+                    "base_url": "http://127.0.0.1:11434/v1",
+                    "model": "llama3.2",
+                },
+                {
+                    "name": "ollama",
+                    "provider": "ollama",
+                    "base_url": "http://127.0.0.1:11434/v1",
+                    "model": "qwen2.5",
+                },
+            ],
+        })
 
 
 @pytest.mark.parametrize(
