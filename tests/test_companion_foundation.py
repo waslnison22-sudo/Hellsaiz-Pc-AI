@@ -80,7 +80,17 @@ def test_model_manifest_loads_valid_local_model_package(tmp_path: Path):
     assert info.renderer_id == "live2d-cubism"
 
 
-@pytest.mark.parametrize("entrypoint", ["../outside.model3.json", "/outside.model3.json", "C:/outside.json"])
+@pytest.mark.parametrize(
+    "entrypoint",
+    [
+        "../outside.model3.json",
+        "/outside.model3.json",
+        "C:/outside.json",
+        "models//character.model3.json",
+        "./character.model3.json",
+        "models/../character.model3.json",
+    ],
+)
 def test_model_manifest_rejects_paths_outside_model_directory(tmp_path: Path, entrypoint: str):
     manifest = {
         "schema_version": 1,
