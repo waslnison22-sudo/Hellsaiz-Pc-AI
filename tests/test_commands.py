@@ -130,10 +130,10 @@ def test_time_command_routes_to_registered_tool():
     assert make_router().route("Хеллсайз, который час?") == "Готово. 13.11.2026 12:00"
 
 
-def test_open_app_requires_confirmation():
+def test_open_app_runs_without_confirmation():
     router = make_router()
-    assert "отменено" in router.route("открой блокнот", deny).casefold()
-    assert router.route("открой блокнот", approve) == "Готово. opened notepad"
+    assert router.route("открой блокнот") == "Готово. opened notepad"
+    assert router.route("открой блокнот", deny) == "Готово. opened notepad"
 
 
 def test_unlisted_app_does_not_execute():
@@ -150,9 +150,9 @@ def test_volume_command_is_deterministic_and_range_checked():
     assert "от 0 до 100" in router.route("установи громкость на 150").casefold()
 
 
-def test_close_process_uses_allowlist_and_confirmation():
+def test_close_process_runs_immediately_but_keeps_allowlist():
     router = make_router()
-    assert "closed discord" in router.route("закрой дискорд", approve).casefold()
+    assert "closed discord" in router.route("закрой дискорд").casefold()
     assert "не добавлен" in router.route("закрой powershell").casefold()
 
 
@@ -165,14 +165,14 @@ def test_read_clipboard_requires_an_explicit_command():
     assert router.route("поговори со мной") is None
 
 
-def test_write_clipboard_preserves_text_and_requires_confirmation():
+def test_write_clipboard_runs_on_explicit_command_without_confirmation():
     router = make_router()
 
-    denied = router.route("скопируй: Hello, World!", deny)
-    assert "отменено" in denied.casefold()
-
-    approved = router.route("Хеллсайз, скопируй Привет, Мир!", approve)
-    assert approved == "Готово. clipboard updated"
+    result = router.route("скопируй: Hello, World!")
+    assert result == "Готово. clipboard updated"
+    assert router.route("Хеллсайз, скопируй Привет, Мир!", deny) == (
+        "Готово. clipboard updated"
+    )
 
 
 def test_write_clipboard_accepts_multiline_payload():
@@ -185,7 +185,7 @@ def test_write_clipboard_accepts_multiline_payload():
 def test_reminder_command_parses_seconds_minutes_and_hours():
     router = make_router()
     assert router.route("напомни через 30 секунд проверить") == (
-        "Не выполнено. Действие отменено: подтверждение не получено."
+        "Готово. reminder 30: проверить"
     )
     assert router.route("Хеллсайз, напомни мне через 5 минут Проверить чайник", approve) == (
         "Готово. reminder 300: Проверить чайник"
@@ -195,9 +195,11 @@ def test_reminder_command_parses_seconds_minutes_and_hours():
     )
 
 
-def test_reminder_command_validates_delay_and_requires_confirmation():
+def test_reminder_command_runs_immediately_and_validates_delay():
     router = make_router()
-    assert "отменено" in router.route("напомни через 5 минут позвонить", deny).casefold()
+    assert router.route("напомни через 5 минут позвонить", deny) == (
+        "Готово. reminder 300: позвонить"
+    )
     assert "от 10 секунд" in router.route("напомни через 3 секунды позвонить").casefold()
     assert "формат" in router.route("напомни завтра позвонить").casefold()
 
@@ -205,8 +207,7 @@ def test_reminder_command_validates_delay_and_requires_confirmation():
 def test_list_and_dismiss_reminders_are_explicit():
     router = make_router()
     assert router.route("мои напоминания") == "Готово. no reminders"
-    assert router.route("удали напоминание 12", deny).startswith("Не выполнено.")
-    assert router.route("удали напоминание 12", approve) == "Готово. dismissed 12"
+    assert router.route("удали напоминание 12") == "Готово. dismissed 12"
 
 
 
