@@ -1676,6 +1676,12 @@ def main() -> int:
     wake_listener_status.setWordWrap(True)
     wake_listener_status.setStyleSheet("color:#929aa6;")
     settings_layout.addWidget(wake_listener_status)
+    speech_health_button = QPushButton("Проверить голосовую систему")
+    settings_layout.addWidget(speech_health_button)
+    speech_health_status = QLabel("Диагностика ещё не запускалась.")
+    speech_health_status.setWordWrap(True)
+    speech_health_status.setStyleSheet("color:#929aa6;")
+    settings_layout.addWidget(speech_health_status)
 
     def choose_vosk_model() -> None:
         selected = QFileDialog.getExistingDirectory(
@@ -1742,12 +1748,48 @@ def main() -> int:
             stt_status.setText(
                 f"Настройки распознавания сохранены. Основной движок: {primary}; резервный: {fallback}."
             )
+            refresh_speech_health()
             if always_listen_check.isChecked():
                 start_wake_listener()
             else:
                 wake_listener_status.setText("Фоновое прослушивание выключено.")
         except OSError as exc:
             stt_status.setText(f"Не удалось сохранить настройки: {exc}")
+
+    def refresh_speech_health() -> None:
+        from hellsaiz_pc_ai.app.health import collect_speech_health
+
+        voice_id = str(profile_data.get("piper_voice_id") or "")
+        voice_models = list_installed_voices(settings.workflows_path.parent / "voices")
+        selected_model = next(
+            (voice for voice in voice_models if voice.voice_id == voice_id), None
+        )
+        checks = collect_speech_health(
+            stt_primary=active_stt["primary"],
+            stt_fallback=active_stt["fallback"],
+            vosk_model_path=Path(active_stt["vosk_model_path"]),
+            whisper_executable=(
+                Path(active_stt["whisper_cpp_executable"])
+                if active_stt["whisper_cpp_executable"] else None
+            ),
+            whisper_model=(
+                Path(active_stt["whisper_cpp_model"])
+                if active_stt["whisper_cpp_model"] else None
+            ),
+            tts_engine=str(profile_data.get("tts_engine") or "sapi5"),
+            piper_model_path=selected_model.model_path if selected_model else None,
+            wake_enabled=always_listen_check.isChecked(),
+        )
+        labels = {"ok": "OK", "warning": "WARN", "error": "ERROR"}
+        speech_health_status.setText(
+            "\\n".join(
+                f"[{labels[item.level]}] {item.component}: {item.message}"
+                for item in checks
+            )
+        )
+
+    speech_health_button.clicked.connect(refresh_speech_health)
+    refresh_speech_health()
 
     def stop_wake_listener() -> None:
         worker = wake_listener_state["worker"]
