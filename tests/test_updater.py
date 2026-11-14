@@ -199,7 +199,7 @@ def test_full_update_migrates_existing_install_and_preserves_user_data(
         assert (user_data / "profile.json").read_text(encoding="utf-8") == '{"theme":"dark"}'
         assert not update_dir.exists()
     else:
-        with pytest.raises(ApplyUpdateError, match="автоматический откат|автоматический откат"):
+        with pytest.raises(ApplyUpdateError, match="автоматический откат"):
             updater.apply_update(
                 install_root, archive_path, manifest_path, signature_path,
                 "full", "0.1.3", 0,
