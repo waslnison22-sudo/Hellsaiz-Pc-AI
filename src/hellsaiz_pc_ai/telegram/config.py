@@ -57,8 +57,8 @@ def _normalize_settings(raw: Any) -> TelegramSettings:
     chats = _parse_ids(raw.get("allowed_chat_ids", []), "allowed_chat_ids")
     if any(value < 0 for value in users):
         raise ValueError("allowed_user_ids может содержать только положительные ID пользователей.")
-    if any(value < 0 for value in chats):
-        raise ValueError("allowed_chat_ids может содержать только положительные ID чатов.")
+    # Telegram group and supergroup chat IDs are negative by design.
+    # Chat IDs may be signed; zero is already rejected by _parse_ids.
     tools = raw.get("allowed_tools", [])
     if not isinstance(tools, list) or len(tools) > len(AVAILABLE_SAFE_TOOLS):
         raise ValueError("allowed_tools имеет некорректный формат.")
