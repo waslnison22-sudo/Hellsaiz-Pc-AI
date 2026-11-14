@@ -189,6 +189,23 @@ def main() -> int:
         reminder_store, allowed_apps, profile_data
     ) = build_runtime(settings)
     active_voice = {"name": str(profile_data.get("voice_name") or settings.speech.tts_voice_name)}
+    raw_tts_rate = profile_data.get("tts_rate", settings.speech.tts_rate)
+    tts_rate = (
+        int(raw_tts_rate)
+        if isinstance(raw_tts_rate, int)
+        and not isinstance(raw_tts_rate, bool)
+        and 80 <= raw_tts_rate <= 300
+        else settings.speech.tts_rate
+    )
+    raw_tts_volume = profile_data.get("tts_volume", settings.speech.tts_volume)
+    tts_volume = (
+        float(raw_tts_volume)
+        if isinstance(raw_tts_volume, (int, float))
+        and not isinstance(raw_tts_volume, bool)
+        and 0.0 <= float(raw_tts_volume) <= 1.0
+        else settings.speech.tts_volume
+    )
+    active_tts = {"rate": tts_rate, "volume": tts_volume}
     raw_recording_seconds = profile_data.get(
         "recording_seconds", settings.speech.recording_seconds
     )
@@ -337,6 +354,7 @@ def main() -> int:
             microphone_device: str = "",
             assistant_profile: dict[str, Any] | None = None,
             voice_name: str = "Aleksandr",
+            tts_profile: dict[str, Any] | None = None,
         ) -> None:
             super().__init__()
             self.prompt = prompt
@@ -347,6 +365,7 @@ def main() -> int:
             self.microphone_device = microphone_device
             self.assistant_profile = dict(assistant_profile or profile_data)
             self.voice_name = voice_name
+            self.tts_profile = dict(tts_profile or active_tts)
 
         def run(self) -> None:
             try:
@@ -447,8 +466,8 @@ def main() -> int:
                         speakers = {
                             "sapi5": Sapi5Synthesizer(
                                 self.voice_name,
-                                settings.speech.tts_rate,
-                                settings.speech.tts_volume,
+                                self.tts_profile["rate"],
+                                self.tts_profile["volume"],
                             )
                         }
                         voice_id = str(self.assistant_profile.get("piper_voice_id") or "")
@@ -2442,6 +2461,7 @@ def main() -> int:
             microphone_device=active_microphone["name"],
             assistant_profile=profile_data,
             voice_name=active_voice["name"],
+            tts_profile=active_tts,
         )
         workers.append(worker)
 
