@@ -224,6 +224,37 @@ def main() -> int:
         def dispatch(self, workflow_id: str, combo: str) -> None:
             self.callback(workflow_id, combo)
 
+    class WakeListenerWorker(QThread):
+        command = Signal(str)
+        status = Signal(str)
+        failed = Signal(str)
+
+        def __init__(self, model_dir: Path, aliases: tuple[str, ...]) -> None:
+            super().__init__()
+            self.model_dir = model_dir
+            self.aliases = aliases
+            self.listener = None
+
+        def run(self) -> None:
+            try:
+                from hellsaiz_pc_ai.speech.wake_listener import WakeWordListener
+
+                self.listener = WakeWordListener(
+                    self.model_dir,
+                    self.aliases,
+                    on_command=self.command.emit,
+                    on_status=self.status.emit,
+                )
+                self.listener.listen()
+            except Exception as exc:
+                self.failed.emit(str(exc))
+
+        def stop_listener(self) -> None:
+            if self.listener is not None:
+                self.listener.stop()
+
+    wake_listener_worker: WakeListenerWorker | None = None
+
     class Worker(QThread):
         completed = Signal(str, str)
         failed = Signal(str)
