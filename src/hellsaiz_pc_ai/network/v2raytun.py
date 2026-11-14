@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -83,7 +84,7 @@ def validate_executable_path(value: str) -> Path:
 
 
 def detect_v2raytun_running() -> bool:
-    if os.name != "nt":
+    if sys.platform != "win32":
         return False
     try:
         import psutil
