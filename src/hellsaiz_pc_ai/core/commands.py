@@ -270,7 +270,7 @@ class CommandRouter:
             if (
                 len(literal_text) >= 2
                 and literal_text[0] == literal_text[-1]
-                and literal_text[0] in {"\\"","'"}
+                and literal_text[:1] in {chr(34), chr(39)}
             ):
                 literal_text = literal_text[1:-1]
             return self._execute(
