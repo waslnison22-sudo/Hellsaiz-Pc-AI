@@ -99,5 +99,5 @@ def test_sapi5_reports_missing_selected_voice(monkeypatch):
 def test_sapi5_rejects_non_windows_voice_discovery(monkeypatch):
     monkeypatch.setattr("hellsaiz_pc_ai.speech.sapi5._is_windows", lambda: False)
 
-    with pytest.raises(RuntimeError, match="только на Windows"):
+    with pytest.raises(RuntimeError, match="only on Windows"):
         Sapi5Synthesizer().list_voices()
