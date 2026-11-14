@@ -17,6 +17,7 @@ from hellsaiz_pc_ai.providers.openai_compatible import OpenAICompatibleProvider,
 from hellsaiz_pc_ai.storage.sqlite_store import ChatStore
 from hellsaiz_pc_ai.tools.system import register_system_tools
 from hellsaiz_pc_ai.tools.windows import register_windows_tools
+from hellsaiz_pc_ai.workflows.builder import append_hour_condition, append_tool_action, append_wait_action, terminal_nodes
 from hellsaiz_pc_ai.workflows.graph import WorkflowGraph, WorkflowGraphRunner, WorkflowTrigger
 from hellsaiz_pc_ai.workflows.library import WorkflowLibrary
 
@@ -297,6 +298,54 @@ def main() -> int:
     scenario_workspace.addWidget(scenario_splitter, 5)
     scenario_layout.addLayout(scenario_workspace, 1)
 
+    builder_title = QLabel("КОНСТРУКТОР УЗЛОВ")
+    builder_title.setStyleSheet("color:#c5cad2; font-size:11px; letter-spacing:1.5px;")
+    scenario_layout.addWidget(builder_title)
+    builder_row = QHBoxLayout()
+    builder_source = QComboBox()
+    builder_source.setMinimumWidth(120)
+    builder_id = QLineEdit("new-action")
+    builder_id.setPlaceholderText("id нового узла")
+    builder_tool = QComboBox()
+    registered_tool_names = []
+    for tool_schema in registry.openai_schemas():
+        function = tool_schema["function"]
+        registered_tool_names.append(function["name"])
+        builder_tool.addItem(function["name"], function["name"])
+    builder_arguments = QLineEdit("{}")
+    builder_arguments.setPlaceholderText('Аргументы JSON, например {"app":"notepad"}')
+    add_tool_button = QPushButton("Добавить действие")
+    builder_row.addWidget(builder_source)
+    builder_row.addWidget(builder_id)
+    builder_row.addWidget(builder_tool)
+    builder_row.addWidget(builder_arguments, 2)
+    builder_row.addWidget(add_tool_button)
+    scenario_layout.addLayout(builder_row)
+
+    condition_row = QHBoxLayout()
+    wait_id = QLineEdit("wait-next")
+    wait_id.setPlaceholderText("id ожидания")
+    wait_seconds = QLineEdit("2")
+    wait_seconds.setMaximumWidth(60)
+    add_wait_button = QPushButton("Добавить ожидание")
+    condition_id = QLineEdit("hour-check")
+    condition_id.setPlaceholderText("id условия")
+    condition_operator = QComboBox()
+    for label, operator in [("час ≥", "gte"), ("час =", "eq"), ("час <", "lt"), ("час ≤", "lte"), ("час >", "gt")]:
+        condition_operator.addItem(label, operator)
+    condition_hour = QLineEdit("22")
+    condition_hour.setMaximumWidth(45)
+    add_condition_button = QPushButton("Добавить условие")
+    condition_row.addWidget(wait_id)
+    condition_row.addWidget(wait_seconds)
+    condition_row.addWidget(add_wait_button)
+    condition_row.addSpacing(8)
+    condition_row.addWidget(condition_id)
+    condition_row.addWidget(condition_operator)
+    condition_row.addWidget(condition_hour)
+    condition_row.addWidget(add_condition_button)
+    scenario_layout.addLayout(condition_row)
+
     scenario_id = QLineEdit()
     scenario_id.setPlaceholderText("id-сценария, например night-mode")
     scenario_layout.addWidget(scenario_id)
@@ -353,6 +402,7 @@ def main() -> int:
             scenario_id.setText(workflow_id)
             graph_editor.setPlainText(json.dumps(graph.to_dict(), ensure_ascii=False, indent=2))
             render_graph(graph, workflow_id)
+            refresh_builder_sources(graph)
             scenario_status.setText(f"Загружен сценарий: {graph.name}")
         except (OSError, ValueError, json.JSONDecodeError) as exc:
             scenario_status.setText(f"Не удалось загрузить сценарий: {exc}")
@@ -375,7 +425,9 @@ def main() -> int:
         scenario_id.setText("night-mode")
         graph_editor.setPlainText(json.dumps(example, ensure_ascii=False, indent=2))
         try:
-            render_graph(WorkflowGraph.from_dict(example))
+            example_graph = WorkflowGraph.from_dict(example)
+            render_graph(example_graph)
+            refresh_builder_sources(example_graph)
             scenario_status.setText("Пример создан. Проверь и сохрани его.")
         except ValueError as exc:
             scenario_status.setText(str(exc))
@@ -396,17 +448,91 @@ def main() -> int:
         scenario_id.setText("hotkey-volume")
         graph_editor.setPlainText(json.dumps(example, ensure_ascii=False, indent=2))
         try:
-            render_graph(WorkflowGraph.from_dict(example))
+            example_graph = WorkflowGraph.from_dict(example)
+            render_graph(example_graph)
+            refresh_builder_sources(example_graph)
             scenario_status.setText(
                 "Пример создан. Сохрани его; Ctrl+Alt+H будет запускать действие с подтверждением."
             )
         except ValueError as exc:
             scenario_status.setText(str(exc))
 
+    def refresh_builder_sources(graph: WorkflowGraph | None = None) -> None:
+        try:
+            current = graph or WorkflowGraph.from_dict(json.loads(graph_editor.toPlainText()))
+            selected = builder_source.currentData()
+            builder_source.clear()
+            for node_id in terminal_nodes(current):
+                builder_source.addItem(node_id, node_id)
+            if selected is not None:
+                index = builder_source.findData(selected)
+                if index >= 0:
+                    builder_source.setCurrentIndex(index)
+        except (ValueError, json.JSONDecodeError):
+            builder_source.clear()
+
+    def apply_builder_graph(updated: WorkflowGraph) -> None:
+        graph_editor.setPlainText(json.dumps(updated.to_dict(), ensure_ascii=False, indent=2))
+        render_graph(updated, scenario_id.text().strip() or None, preserve=True)
+        refresh_builder_sources(updated)
+        scenario_status.setText(
+            f"Добавлен узел. В графе {len(updated.nodes)} узлов и {len(updated.edges)} связей."
+        )
+
+    def add_tool_node() -> None:
+        try:
+            graph = WorkflowGraph.from_dict(json.loads(graph_editor.toPlainText()))
+            source_id = builder_source.currentData()
+            if not source_id:
+                raise ValueError("Выбери конечный узел ветви.")
+            arguments = json.loads(builder_arguments.text() or "{}")
+            updated = append_tool_action(
+                graph, str(source_id), builder_id.text().strip(),
+                str(builder_tool.currentData() or ""), arguments, set(registered_tool_names)
+            )
+            apply_builder_graph(updated)
+            builder_id.setText("new-action")
+        except (ValueError, json.JSONDecodeError) as exc:
+            scenario_status.setText(f"Не удалось добавить действие: {exc}")
+
+    def add_wait_node() -> None:
+        try:
+            graph = WorkflowGraph.from_dict(json.loads(graph_editor.toPlainText()))
+            source_id = builder_source.currentData()
+            if not source_id:
+                raise ValueError("Выбери конечный узел ветви.")
+            seconds = float(wait_seconds.text().replace(",", "."))
+            updated = append_wait_action(graph, str(source_id), wait_id.text().strip(), seconds)
+            apply_builder_graph(updated)
+            wait_id.setText("wait-next")
+        except (ValueError, json.JSONDecodeError) as exc:
+            scenario_status.setText(f"Не удалось добавить ожидание: {exc}")
+
+    def add_condition_node() -> None:
+        try:
+            graph = WorkflowGraph.from_dict(json.loads(graph_editor.toPlainText()))
+            source_id = builder_source.currentData()
+            if not source_id:
+                raise ValueError("Выбери конечный узел ветви.")
+            updated = append_hour_condition(
+                graph, str(source_id), condition_id.text().strip(),
+                str(condition_operator.currentData()), int(condition_hour.text())
+            )
+            apply_builder_graph(updated)
+            condition_id.setText("hour-check")
+        except (ValueError, json.JSONDecodeError) as exc:
+            scenario_status.setText(f"Не удалось добавить условие: {exc}")
+
+    add_tool_button.clicked.connect(add_tool_node)
+    add_wait_button.clicked.connect(add_wait_node)
+    add_condition_button.clicked.connect(add_condition_node)
+    refresh_builder_sources()
+
     def validate_scenario() -> WorkflowGraph | None:
         try:
             graph = WorkflowGraph.from_dict(json.loads(graph_editor.toPlainText()))
             render_graph(graph, scenario_id.text().strip() or None, preserve=True)
+            refresh_builder_sources(graph)
             scenario_status.setText(
                 f"Граф корректен: {len(graph.nodes)} узлов, {len(graph.edges)} связей."
             )
