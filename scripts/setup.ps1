@@ -13,7 +13,7 @@ py -3 -m venv .venv
 $python = Join-Path (Get-Location) ".venv\Scripts\python.exe"
 if (-not (Test-Path $python)) { throw "Virtual environment creation failed." }
 & $python -m pip install --upgrade pip
-& $python -m pip install -e ".[dev]"
+& $python -m pip install -e ".[dev,voice,windows]"
 $configDir = Join-Path $env:LOCALAPPDATA "HellsaizPC_AI"
 New-Item -ItemType Directory -Force -Path $configDir | Out-Null
 $config = Join-Path $configDir "config.toml"
