@@ -33,6 +33,14 @@ def test_health_reports_installed_local_engines(tmp_path: Path, monkeypatch):
     piper_model = tmp_path / "voice.onnx"
     piper_model.write_bytes(b"fake")
     monkeypatch.setattr("hellsaiz_pc_ai.app.health._module_available", lambda _name: True)
+    monkeypatch.setattr(
+        "hellsaiz_pc_ai.speech.capture.list_input_devices",
+        lambda: [
+            __import__("hellsaiz_pc_ai.speech.capture", fromlist=["InputDevice"]).InputDevice(
+                0, "USB Mic", "WASAPI", 1, 48000
+            )
+        ],
+    )
 
     checks = collect_speech_health(
         stt_primary="whisper.cpp",
