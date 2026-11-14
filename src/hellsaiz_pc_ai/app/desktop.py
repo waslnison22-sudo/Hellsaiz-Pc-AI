@@ -173,6 +173,20 @@ def main() -> int:
         reminder_store, allowed_apps, profile_data
     ) = build_runtime(settings)
     active_voice = {"name": str(profile_data.get("voice_name") or settings.speech.tts_voice_name)}
+    active_stt = {
+        "primary": str(profile_data.get("stt_primary") or settings.speech.stt_primary),
+        "fallback": str(profile_data.get("stt_fallback") or settings.speech.stt_fallback),
+        "vosk_model_path": str(
+            profile_data.get("vosk_model_path") or settings.speech.vosk_model_path
+        ),
+        "whisper_cpp_executable": str(
+            profile_data.get("whisper_cpp_executable")
+            or settings.speech.whisper_cpp_executable or ""
+        ),
+        "whisper_cpp_model": str(
+            profile_data.get("whisper_cpp_model") or settings.speech.whisper_cpp_model or ""
+        ),
+    }
     install_root = installed_app_root()
     current_app_version = installed_version(install_root, APP_VERSION)
     if install_root is not None:
@@ -221,11 +235,39 @@ def main() -> int:
                 prompt = self.prompt
                 if self.voice_input:
                     from hellsaiz_pc_ai.speech.capture import record_microphone
-                    from hellsaiz_pc_ai.speech.vosk import VoskTranscriber
+                    from hellsaiz_pc_ai.speech.factory import build_speech_router
 
-                    audio_path = Path(tempfile.gettempdir()) / "hellsaiz-command.wav"
-                    record_microphone(audio_path, duration_seconds=5.0)
-                    prompt = VoskTranscriber(settings.speech.vosk_model_path).transcribe(audio_path)
+                    with tempfile.NamedTemporaryFile(
+                        prefix="hellsaiz-command-", suffix=".wav", delete=False
+                    ) as audio_file:
+                        audio_path = Path(audio_file.name)
+                    try:
+                        record_microphone(
+                            audio_path, duration_seconds=settings.speech.recording_seconds
+                        )
+                        speech_router = build_speech_router(
+                            primary=active_stt["primary"],
+                            fallback=active_stt["fallback"],
+                            vosk_model_path=Path(active_stt["vosk_model_path"]),
+                            whisper_executable=(
+                                Path(active_stt["whisper_cpp_executable"])
+                                if active_stt["whisper_cpp_executable"] else None
+                            ),
+                            whisper_model=(
+                                Path(active_stt["whisper_cpp_model"])
+                                if active_stt["whisper_cpp_model"] else None
+                            ),
+                        )
+                        transcription = speech_router.transcribe(audio_path)
+                        prompt = transcription.text
+                        if transcription.fallback_used:
+                            logging.warning(
+                                "Speech recognition fell back to %s after %s",
+                                transcription.engine,
+                                transcription.fallback_reason,
+                            )
+                    finally:
+                        audio_path.unlink(missing_ok=True)
                 if self.workflow_trigger is None and not prompt.strip():
                     self.failed.emit("Команда не распознана.")
                     return
@@ -1486,6 +1528,150 @@ def main() -> int:
     settings_layout.addWidget(QLabel(f"История: {settings.database_path}"))
     settings_layout.addWidget(QLabel(f"Сценарии: {settings.workflows_path}"))
 
+    speech_title = QLabel("РАСПОЗНАВАНИЕ РЕЧИ")
+    speech_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
+    settings_layout.addWidget(speech_title)
+
+    stt_engine_row = QHBoxLayout()
+    stt_primary_combo = QComboBox()
+    stt_primary_combo.addItem("Vosk · офлайн", "vosk")
+    stt_primary_combo.addItem("Whisper.cpp · офлайн", "whisper.cpp")
+    stt_fallback_combo = QComboBox()
+    stt_fallback_combo.addItem("Без резерва", "none")
+    stt_fallback_combo.addItem("Vosk", "vosk")
+    stt_fallback_combo.addItem("Whisper.cpp", "whisper.cpp")
+    stt_engine_row.addWidget(QLabel("Основной движок"))
+    stt_engine_row.addWidget(stt_primary_combo, 1)
+    stt_engine_row.addWidget(QLabel("Резервный"))
+    stt_engine_row.addWidget(stt_fallback_combo, 1)
+    settings_layout.addLayout(stt_engine_row)
+
+    def set_combo_data(combo: QComboBox, value: str) -> None:
+        index = combo.findData(value)
+        if index >= 0:
+            combo.setCurrentIndex(index)
+
+    set_combo_data(stt_primary_combo, active_stt["primary"])
+    set_combo_data(stt_fallback_combo, active_stt["fallback"])
+
+    vosk_model_row = QHBoxLayout()
+    vosk_model_edit = QLineEdit(active_stt["vosk_model_path"])
+    vosk_model_edit.setPlaceholderText("Папка распакованной русской модели Vosk")
+    choose_vosk_model_button = QPushButton("Папка Vosk…")
+    vosk_model_row.addWidget(QLabel("Модель Vosk"))
+    vosk_model_row.addWidget(vosk_model_edit, 1)
+    vosk_model_row.addWidget(choose_vosk_model_button)
+    settings_layout.addLayout(vosk_model_row)
+
+    whisper_executable_row = QHBoxLayout()
+    whisper_executable_edit = QLineEdit(active_stt["whisper_cpp_executable"])
+    whisper_executable_edit.setPlaceholderText("Путь к whisper-cli.exe")
+    choose_whisper_executable_button = QPushButton("Выбрать EXE…")
+    whisper_executable_row.addWidget(QLabel("Whisper CLI"))
+    whisper_executable_row.addWidget(whisper_executable_edit, 1)
+    whisper_executable_row.addWidget(choose_whisper_executable_button)
+    settings_layout.addLayout(whisper_executable_row)
+
+    whisper_model_row = QHBoxLayout()
+    whisper_model_edit = QLineEdit(active_stt["whisper_cpp_model"])
+    whisper_model_edit.setPlaceholderText("Путь к GGML-модели .bin")
+    choose_whisper_model_button = QPushButton("Выбрать модель…")
+    whisper_model_row.addWidget(QLabel("Whisper модель"))
+    whisper_model_row.addWidget(whisper_model_edit, 1)
+    whisper_model_row.addWidget(choose_whisper_model_button)
+    settings_layout.addLayout(whisper_model_row)
+
+    recording_row = QHBoxLayout()
+    recording_row.addWidget(QLabel("Длительность записи"))
+    recording_duration_combo = QComboBox()
+    for seconds in (3, 5, 7, 10, 15):
+        recording_duration_combo.addItem(f"{seconds} сек.", float(seconds))
+    set_combo_data(recording_duration_combo, str(int(settings.speech.recording_seconds)))
+    duration_index = recording_duration_combo.findData(float(settings.speech.recording_seconds))
+    if duration_index >= 0:
+        recording_duration_combo.setCurrentIndex(duration_index)
+    recording_row.addWidget(recording_duration_combo)
+    save_stt_button = QPushButton("Сохранить голосовые настройки")
+    recording_row.addWidget(save_stt_button)
+    settings_layout.addLayout(recording_row)
+
+    stt_status = QLabel(
+        "Распознавание работает локально. Whisper.cpp активируется только при выборе и указании обоих файлов."
+    )
+    stt_status.setWordWrap(True)
+    stt_status.setStyleSheet("color:#929aa6;")
+    settings_layout.addWidget(stt_status)
+
+    def choose_vosk_model() -> None:
+        selected = QFileDialog.getExistingDirectory(
+            window, "Выбрать папку модели Vosk", vosk_model_edit.text()
+        )
+        if selected:
+            vosk_model_edit.setText(selected)
+
+    def choose_whisper_executable() -> None:
+        selected, _ = QFileDialog.getOpenFileName(
+            window, "Выбрать whisper-cli.exe", whisper_executable_edit.text(),
+            "Исполняемые файлы (*.exe);;Все файлы (*)",
+        )
+        if selected:
+            whisper_executable_edit.setText(selected)
+
+    def choose_whisper_model() -> None:
+        selected, _ = QFileDialog.getOpenFileName(
+            window, "Выбрать GGML-модель Whisper.cpp", whisper_model_edit.text(),
+            "Модели GGML (*.bin);;Все файлы (*)",
+        )
+        if selected:
+            whisper_model_edit.setText(selected)
+
+    def save_stt_profile() -> None:
+        primary = str(stt_primary_combo.currentData())
+        fallback = str(stt_fallback_combo.currentData())
+        if primary == fallback:
+            stt_status.setText("Основной и резервный движки должны различаться.")
+            return
+        if primary == "whisper.cpp" and (
+            not whisper_executable_edit.text().strip()
+            or not whisper_model_edit.text().strip()
+        ):
+            stt_status.setText("Для Whisper.cpp укажи и whisper-cli.exe, и GGML-модель.")
+            return
+        active_stt.update({
+            "primary": primary,
+            "fallback": fallback,
+            "vosk_model_path": vosk_model_edit.text().strip(),
+            "whisper_cpp_executable": whisper_executable_edit.text().strip(),
+            "whisper_cpp_model": whisper_model_edit.text().strip(),
+        })
+        profile_data.update({
+            "stt_primary": primary,
+            "stt_fallback": fallback,
+            "vosk_model_path": active_stt["vosk_model_path"],
+            "whisper_cpp_executable": active_stt["whisper_cpp_executable"],
+            "whisper_cpp_model": active_stt["whisper_cpp_model"],
+            "recording_seconds": float(recording_duration_combo.currentData()),
+        })
+        profile_path = settings.workflows_path.parent / "ai_profile.json"
+        try:
+            profile_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = profile_path.with_suffix(".json.tmp")
+            temporary.write_text(
+                json.dumps(profile_data, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            temporary.replace(profile_path)
+            stt_status.setText(
+                f"Настройки распознавания сохранены. Основной движок: {primary}; резервный: {fallback}."
+            )
+        except OSError as exc:
+            stt_status.setText(f"Не удалось сохранить настройки: {exc}")
+
+    choose_vosk_model_button.clicked.connect(choose_vosk_model)
+    choose_whisper_executable_button.clicked.connect(choose_whisper_executable)
+    choose_whisper_model_button.clicked.connect(choose_whisper_model)
+    save_stt_button.clicked.connect(save_stt_profile)
+
     update_title = QLabel("ОБНОВЛЕНИЯ")
     update_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
     settings_layout.addWidget(update_title)
@@ -1852,12 +2038,6 @@ def main() -> int:
         workflow_trigger: WorkflowTrigger | None = None,
     ) -> None:
         if workflow_trigger is None and not voice_input and not prompt.strip():
-            return
-        if voice_input and not settings.speech.vosk_model_path.is_dir():
-            transcript.append(
-                "<p style='color:#c5c9d0;'><b>Голос:</b> Сначала установите русскую модель "
-                "Vosk и укажите speech.vosk_model_path в config.toml.</p>"
-            )
             return
         if workflow_trigger is not None:
             trigger_labels = {
