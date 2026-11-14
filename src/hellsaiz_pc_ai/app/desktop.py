@@ -1654,6 +1654,16 @@ def main() -> int:
     stt_status.setStyleSheet("color:#929aa6;")
     settings_layout.addWidget(stt_status)
 
+    always_listen_check = QCheckBox(
+        "Hands-free: слушать имя помощника в фоне (локально через Vosk)"
+    )
+    always_listen_check.setChecked(bool(profile_data.get("always_listen", False)))
+    settings_layout.addWidget(always_listen_check)
+    wake_listener_status = QLabel("Фоновое прослушивание выключено.")
+    wake_listener_status.setWordWrap(True)
+    wake_listener_status.setStyleSheet("color:#929aa6;")
+    settings_layout.addWidget(wake_listener_status)
+
     def choose_vosk_model() -> None:
         selected = QFileDialog.getExistingDirectory(
             window, "Выбрать папку модели Vosk", vosk_model_edit.text()
@@ -1678,6 +1688,7 @@ def main() -> int:
             whisper_model_edit.setText(selected)
 
     def save_stt_profile() -> None:
+        stop_wake_listener()
         primary = str(stt_primary_combo.currentData())
         fallback = str(stt_fallback_combo.currentData())
         if primary == fallback:
@@ -1703,6 +1714,7 @@ def main() -> int:
             "whisper_cpp_executable": active_stt["whisper_cpp_executable"],
             "whisper_cpp_model": active_stt["whisper_cpp_model"],
             "recording_seconds": float(recording_duration_combo.currentData()),
+            "always_listen": always_listen_check.isChecked(),
         })
         profile_path = settings.workflows_path.parent / "ai_profile.json"
         try:
@@ -1716,13 +1728,84 @@ def main() -> int:
             stt_status.setText(
                 f"Настройки распознавания сохранены. Основной движок: {primary}; резервный: {fallback}."
             )
+            if always_listen_check.isChecked():
+                start_wake_listener()
+            else:
+                wake_listener_status.setText("Фоновое прослушивание выключено.")
         except OSError as exc:
             stt_status.setText(f"Не удалось сохранить настройки: {exc}")
+
+    def stop_wake_listener() -> None:
+        nonlocal wake_listener_worker
+        worker = wake_listener_worker
+        if worker is None:
+            return
+        worker.stop_listener()
+        if worker.isRunning():
+            worker.wait(3000)
+        if not worker.isRunning():
+            wake_listener_worker = None
+
+    def start_wake_listener() -> None:
+        nonlocal wake_listener_worker
+        if not always_listen_check.isChecked():
+            return
+        if workers:
+            QTimer.singleShot(500, start_wake_listener)
+            return
+        if wake_listener_worker is not None and wake_listener_worker.isRunning():
+            return
+        model_dir = Path(active_stt["vosk_model_path"]).expanduser()
+        if not model_dir.is_dir():
+            wake_listener_status.setText(
+                f"Для активации по имени нужна локальная модель Vosk: {model_dir}"
+            )
+            always_listen_check.blockSignals(True)
+            always_listen_check.setChecked(False)
+            always_listen_check.blockSignals(False)
+            profile_data["always_listen"] = False
+            return
+
+        worker = WakeListenerWorker(model_dir, settings.wake_aliases)
+        wake_listener_worker = worker
+
+        def on_wake_command(prompt: str) -> None:
+            if not prompt.strip():
+                return
+            if workers:
+                logging.info("Ignoring wake-word command because another action is running.")
+                return
+            stop_wake_listener()
+            start_worker(prompt)
+
+        def on_listener_failed(message: str) -> None:
+            wake_listener_status.setText(f"Фоновое прослушивание остановлено: {message}")
+            always_listen_check.blockSignals(True)
+            always_listen_check.setChecked(False)
+            always_listen_check.blockSignals(False)
+            profile_data["always_listen"] = False
+
+        worker.command.connect(on_wake_command)
+        worker.status.connect(wake_listener_status.setText)
+        worker.failed.connect(on_listener_failed)
+
+        def listener_finished() -> None:
+            nonlocal wake_listener_worker
+            if wake_listener_worker is worker:
+                wake_listener_worker = None
+
+        worker.finished.connect(listener_finished)
+        worker.start()
+
+    def resume_wake_listener() -> None:
+        if always_listen_check.isChecked():
+            QTimer.singleShot(350, start_wake_listener)
 
     choose_vosk_model_button.clicked.connect(choose_vosk_model)
     choose_whisper_executable_button.clicked.connect(choose_whisper_executable)
     choose_whisper_model_button.clicked.connect(choose_whisper_model)
     save_stt_button.clicked.connect(save_stt_profile)
+    always_listen_check.toggled.connect(lambda _checked: save_stt_profile())
 
     update_title = QLabel("ОБНОВЛЕНИЯ")
     update_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
@@ -2091,6 +2174,7 @@ def main() -> int:
     ) -> None:
         if workflow_trigger is None and not voice_input and not prompt.strip():
             return
+        stop_wake_listener()
         if workflow_trigger is not None:
             trigger_labels = {
                 "hotkey": "Горячая клавиша",
@@ -2135,6 +2219,7 @@ def main() -> int:
         worker.finished.connect(lambda: input_box.setEnabled(True))
         worker.finished.connect(lambda: workers.remove(worker) if worker in workers else None)
         worker.finished.connect(lambda: QTimer.singleShot(0, dispatch_pending_automations))
+        worker.finished.connect(lambda: QTimer.singleShot(350, resume_wake_listener))
         worker.start()
 
     def send() -> None:
@@ -2145,6 +2230,8 @@ def main() -> int:
     send_button.clicked.connect(send)
     input_box.returnPressed.connect(send)
     voice_button.clicked.connect(lambda: start_worker(voice_input=True))
+    if always_listen_check.isChecked():
+        QTimer.singleShot(900, start_wake_listener)
 
     def dispatch_hotkey(workflow_id: str, combo: str) -> None:
         if workers:
