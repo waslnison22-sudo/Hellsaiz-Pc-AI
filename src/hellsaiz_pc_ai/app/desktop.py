@@ -8,8 +8,17 @@ from html import escape
 from pathlib import Path
 from typing import Any
 
+from hellsaiz_pc_ai.app_catalog import (
+    AppCandidate,
+    add_candidate,
+    catalog_mappings,
+    discover_windows_apps,
+    load_user_catalog,
+)
 from hellsaiz_pc_ai.config import Settings, load_settings
 from hellsaiz_pc_ai.core.commands import CommandRouter
+from hellsaiz_pc_ai.secure_store import SecureStoreError, load_secret, save_secret
+from hellsaiz_pc_ai.update_client import UpdateCheckError, check_latest_release
 from hellsaiz_pc_ai.core.orchestrator import AssistantOrchestrator
 from hellsaiz_pc_ai.core.registry import ToolRegistry
 from hellsaiz_pc_ai.hotkeys import GlobalHotkeyService, HotkeyUnavailableError
@@ -29,23 +38,62 @@ from hellsaiz_pc_ai.workflows.scheduler import WorkflowScheduler
 def build_runtime(settings: Settings):
     registry = ToolRegistry()
     register_system_tools(registry)
-    register_windows_tools(registry, settings.allowed_apps, settings.allowed_processes)
+
+    catalog_path = settings.workflows_path.parent / "apps.json"
+    try:
+        custom_apps = load_user_catalog(catalog_path)
+    except ValueError as exc:
+        logging.warning("Saved app catalog is invalid: %s", exc)
+        custom_apps = []
+    discovered_allowed, discovered_aliases = catalog_mappings(custom_apps)
+    allowed_apps = dict(settings.allowed_apps)
+    allowed_apps.update(discovered_allowed)
+    app_aliases = dict(settings.app_aliases)
+    claimed_aliases = {
+        CommandRouter._normalize_phrase(alias): key
+        for key in allowed_apps
+        for alias in (key, *app_aliases.get(key, ()))
+    }
+    for key, aliases in discovered_aliases.items():
+        safe_aliases = []
+        for alias in aliases:
+            normalized = CommandRouter._normalize_phrase(alias)
+            owner = claimed_aliases.get(normalized)
+            if owner is None or owner == key:
+                claimed_aliases[normalized] = key
+                safe_aliases.append(alias)
+        app_aliases[key] = tuple(safe_aliases)
+
+    register_windows_tools(registry, allowed_apps, settings.allowed_processes)
     register_clipboard_tools(registry)
     reminder_store = ReminderStore(settings.database_path)
     register_reminder_tools(registry, reminder_store)
     router = CommandRouter(
         registry,
-        settings.allowed_apps,
+        allowed_apps,
         settings.allowed_processes,
-        settings.app_aliases,
+        app_aliases,
         settings.wake_aliases,
     )
 
+    profile_path = settings.workflows_path.parent / "ai_profile.json"
+    profile_data: dict[str, Any] = {}
+    if profile_path.is_file():
+        try:
+            loaded_profile = json.loads(profile_path.read_text(encoding="utf-8"))
+            if isinstance(loaded_profile, dict):
+                profile_data = loaded_profile
+        except (OSError, ValueError, json.JSONDecodeError):
+            logging.warning("Saved AI profile is invalid; using config.toml defaults.")
+
+    profile_enabled = bool(profile_data.get("enabled", settings.llm.enabled))
+    profile_base_url = str(profile_data.get("base_url") or settings.llm.base_url).rstrip("/")
+    profile_model = str(profile_data.get("model") or settings.llm.model)
     assistant = None
-    if settings.llm.enabled:
+    if profile_enabled:
         provider = OpenAICompatibleProvider(
-            settings.llm.base_url,
-            settings.llm.model,
+            profile_base_url,
+            profile_model,
             settings.llm.api_key,
             settings.llm.timeout_seconds,
             settings.allow_remote_llm,
@@ -59,18 +107,23 @@ def build_runtime(settings: Settings):
         assistant.history = store.recent_messages()
     workflow_library = WorkflowLibrary(settings.workflows_path)
     workflow_runner = WorkflowGraphRunner(registry)
-    return router, assistant, store, workflow_library, workflow_runner, registry, reminder_store
+    return (
+        router, assistant, store, workflow_library, workflow_runner,
+        registry, reminder_store, allowed_apps, profile_data
+    )
 
 
 def main() -> int:
     try:
-        from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal, Slot
-        from PySide6.QtGui import QFont
+        from PySide6.QtCore import QObject, QEasingCurve, QPropertyAnimation, Qt, QThread, QTimer, Signal, Slot
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices, QFont
         from PySide6.QtWidgets import (
             QApplication,
             QCheckBox,
             QComboBox,
             QFileDialog,
+            QFrame,
             QHBoxLayout,
             QLabel,
             QLineEdit,
@@ -98,13 +151,18 @@ def main() -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     settings = load_settings()
-    router, assistant, store, workflow_library, workflow_runner, registry, reminder_store = build_runtime(settings)
+    (
+        router, assistant, store, workflow_library, workflow_runner, registry,
+        reminder_store, allowed_apps, profile_data
+    ) = build_runtime(settings)
+    active_voice = {"name": str(profile_data.get("voice_name") or settings.speech.tts_voice_name)}
+    current_app_version = "0.1.0"
 
     app = QApplication.instance() or QApplication([])
     window = QMainWindow()
     window.setWindowTitle(settings.app_name)
-    window.resize(1240, 820)
-    window.setMinimumSize(900, 620)
+    window.resize(1080, 760)
+    window.setMinimumSize(860, 600)
 
     class ApprovalBroker(QObject):
         request = Signal(str, object, object)
@@ -229,7 +287,7 @@ def main() -> int:
                         from hellsaiz_pc_ai.speech.sapi5 import Sapi5Synthesizer
 
                         Sapi5Synthesizer(
-                            settings.speech.tts_voice_name,
+                            active_voice["name"],
                             settings.speech.tts_rate,
                             settings.speech.tts_volume,
                         ).speak(answer)
@@ -256,47 +314,249 @@ def main() -> int:
 
     home_page = QWidget()
     home_layout = QVBoxLayout(home_page)
-    home_layout.setContentsMargins(22, 20, 22, 18)
-    home_layout.setSpacing(14)
+    home_layout.setContentsMargins(28, 22, 28, 20)
+    home_layout.setSpacing(12)
 
     header = QLabel(
-        "<div style='font-size:11px; letter-spacing:3px; color:#8e949e;'>HELLSAIZ / LOCAL DESKTOP</div>"
-        "<div style='font-size:26px; font-weight:700; color:#f4f5f7;'>Hellsaiz PC AI</div>"
+        "<div style='font-size:10px; letter-spacing:3px; color:#858b95;'>HELLSAIZ</div>"
+        "<div style='font-size:21px; font-weight:650; color:#f1f2f5;'>Чат</div>"
     )
+    header.setStyleSheet("padding-bottom:5px;")
     home_layout.addWidget(header)
-
-    mode_text = "ЛОКАЛЬНЫЕ КОМАНДЫ · ИИ ВЫКЛЮЧЕН"
-    if settings.llm.enabled:
-        mode_text = f"ЛОКАЛЬНЫЕ КОМАНДЫ + LLM · {settings.llm.model}"
-    status = QLabel(mode_text)
-    status.setStyleSheet(
-        "QLabel { color:#aab0ba; background:#111419; border:1px solid #292e37; "
-        "border-radius:7px; padding:9px 12px; font-size:10px; letter-spacing:1.5px; }"
-    )
-    home_layout.addWidget(status)
 
     transcript = QTextEdit()
     transcript.setReadOnly(True)
-    transcript.setPlaceholderText("Команды, ответы и история будут отображаться здесь.")
-    transcript.append(
-        "<p style='color:#b8bdc6;'>Система запущена в локальном режиме. "
-        "Введите «помощь» для списка команд.</p>"
+    transcript.setAcceptRichText(True)
+    transcript.setPlaceholderText("Напишите сообщение или используйте голосовой ввод.")
+    transcript.setFrameShape(QFrame.Shape.NoFrame)
+    transcript.setStyleSheet(
+        "QTextEdit { background:transparent; border:0; padding:18px 10px; "
+        "font-size:14px; line-height:1.5; }"
     )
     home_layout.addWidget(transcript, 1)
 
-    controls = QHBoxLayout()
-    input_box = QLineEdit()
-    input_box.setPlaceholderText("Введите команду… например: открой блокнот")
-    send_button = QPushButton("Выполнить")
-    voice_button = QPushButton("Голос · 5 сек")
+    profile_panel = QFrame()
+    profile_panel.setObjectName("profilePanel")
+    profile_layout = QVBoxLayout(profile_panel)
+    profile_layout.setContentsMargins(16, 14, 16, 14)
+    profile_layout.setSpacing(10)
+
+    profile_heading = QLabel("ПРОФИЛЬ ИИ И ГОЛОСА")
+    profile_heading.setStyleSheet("color:#aeb4be; font-size:10px; letter-spacing:1.8px;")
+    profile_layout.addWidget(profile_heading)
+
+    provider_row = QHBoxLayout()
+    provider_label = QLabel("Провайдер")
+    provider_label.setMinimumWidth(95)
+    provider_combo = QComboBox()
+    provider_combo.addItem("LM Studio", "lm-studio")
+    provider_combo.addItem("Ollama", "ollama")
+    provider_combo.addItem("llama.cpp / другой", "custom")
+    provider_combo.setMinimumWidth(180)
+    endpoint_edit = QLineEdit()
+    endpoint_edit.setPlaceholderText("Адрес локального OpenAI-совместимого сервера")
+    endpoint_edit.setMinimumWidth(260)
+    provider_row.addWidget(provider_label)
+    provider_row.addWidget(provider_combo)
+    provider_row.addWidget(endpoint_edit, 1)
+    profile_layout.addLayout(provider_row)
+
+    model_row = QHBoxLayout()
+    model_label = QLabel("Модель")
+    model_label.setMinimumWidth(95)
+    model_edit = QLineEdit()
+    model_edit.setPlaceholderText("Имя модели на выбранном сервере")
+    ai_enabled_check = QCheckBox("Использовать ИИ как резерв для неизвестных фраз")
+    model_row.addWidget(model_label)
+    model_row.addWidget(model_edit, 1)
+    model_row.addWidget(ai_enabled_check)
+    profile_layout.addLayout(model_row)
+
+    voice_row = QHBoxLayout()
+    voice_label = QLabel("Голос ответа")
+    voice_label.setMinimumWidth(95)
+    voice_combo = QComboBox()
+    voice_combo.setMinimumWidth(220)
+    refresh_voices_button = QPushButton("Найти голоса")
+    test_voice_button = QPushButton("Проверить")
     speak_toggle = QCheckBox("Озвучивать ответы")
-    speak_toggle.setChecked(settings.speech.auto_speak)
+    voice_row.addWidget(voice_label)
+    voice_row.addWidget(voice_combo, 1)
+    voice_row.addWidget(refresh_voices_button)
+    voice_row.addWidget(test_voice_button)
+    voice_row.addWidget(speak_toggle)
+    profile_layout.addLayout(voice_row)
+
+    profile_footer = QHBoxLayout()
+    profile_status = QLabel("Параметры сохраняются локально.")
+    profile_status.setStyleSheet("color:#89919d; font-size:11px;")
+    profile_apply_button = QPushButton("Применить")
+    profile_footer.addWidget(profile_status, 1)
+    profile_footer.addWidget(profile_apply_button)
+    profile_layout.addLayout(profile_footer)
+
+    home_layout.addWidget(profile_panel)
+    profile_panel.setMaximumHeight(0)
+    profile_panel.setVisible(False)
+    profile_animation = QPropertyAnimation(profile_panel, b"maximumHeight", window)
+    profile_animation.setDuration(190)
+    profile_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+    profile_animation.finished.connect(
+        lambda: profile_panel.setVisible(False)
+        if profile_panel.maximumHeight() == 0 else None
+    )
+
+    controls = QHBoxLayout()
+    controls.setSpacing(8)
+    input_box = QLineEdit()
+    input_box.setObjectName("chatComposer")
+    input_box.setPlaceholderText("Спросите Hellsaiz…")
+    input_box.setMinimumHeight(48)
+    profile_button = QPushButton("ИИ / Голос  ⌃")
+    profile_button.setObjectName("profileButton")
+    profile_button.setMinimumHeight(46)
+    voice_button = QPushButton("Микрофон")
+    voice_button.setObjectName("voiceButton")
+    voice_button.setMinimumHeight(46)
+    send_button = QPushButton("Отправить")
+    send_button.setObjectName("sendButton")
+    send_button.setMinimumHeight(46)
     controls.addWidget(input_box, 1)
-    controls.addWidget(send_button)
     controls.addWidget(voice_button)
+    controls.addWidget(profile_button)
+    controls.addWidget(send_button)
     home_layout.addLayout(controls)
-    home_layout.addWidget(speak_toggle)
-    tabs.addTab(home_page, "Главная")
+
+    endpoint_defaults = {
+        "lm-studio": "http://127.0.0.1:1234/v1",
+        "ollama": "http://127.0.0.1:11434/v1",
+        "custom": settings.llm.base_url,
+    }
+    saved_provider = str(profile_data.get("provider") or "lm-studio")
+    provider_index = provider_combo.findData(saved_provider)
+    if provider_index >= 0:
+        provider_combo.setCurrentIndex(provider_index)
+    endpoint_edit.setText(str(profile_data.get("base_url") or settings.llm.base_url))
+    model_edit.setText(str(profile_data.get("model") or settings.llm.model))
+    ai_enabled_check.setChecked(bool(profile_data.get("enabled", settings.llm.enabled)))
+    speak_toggle.setChecked(bool(profile_data.get("auto_speak", settings.speech.auto_speak)))
+
+    def provider_changed() -> None:
+        provider = str(provider_combo.currentData() or "custom")
+        if provider != "custom":
+            endpoint_edit.setText(endpoint_defaults[provider])
+
+    provider_combo.currentIndexChanged.connect(provider_changed)
+
+    def toggle_profile_menu() -> None:
+        profile_animation.stop()
+        if not profile_panel.isVisible():
+            profile_panel.setVisible(True)
+            profile_panel.setMaximumHeight(0)
+            profile_animation.setStartValue(0)
+            profile_animation.setEndValue(profile_panel.sizeHint().height() + 12)
+            profile_animation.start()
+            profile_button.setText("ИИ / Голос  ⌄")
+        else:
+            profile_animation.setStartValue(profile_panel.height())
+            profile_animation.setEndValue(0)
+            profile_animation.start()
+            profile_button.setText("ИИ / Голос  ⌃")
+
+    profile_button.clicked.connect(toggle_profile_menu)
+
+    def refresh_voices() -> None:
+        try:
+            from hellsaiz_pc_ai.speech.sapi5 import Sapi5Synthesizer
+
+            selected = active_voice["name"]
+            voices = Sapi5Synthesizer().list_voices()
+            voice_combo.clear()
+            for voice in voices:
+                voice_combo.addItem(voice.name, voice.id)
+            index = voice_combo.findText(selected)
+            if index >= 0:
+                voice_combo.setCurrentIndex(index)
+            voice_status_text = f"Найдено голосов Windows: {len(voices)}."
+            if not voices:
+                voice_status_text = "В Windows пока не найдено доступных голосов SAPI5."
+            profile_status.setText(voice_status_text)
+        except Exception as exc:
+            profile_status.setText(f"Не удалось получить список SAPI5: {exc}")
+
+    def test_voice() -> None:
+        voice_name = voice_combo.currentText()
+        if not voice_name:
+            profile_status.setText("Сначала найди установленные голоса Windows.")
+            return
+        try:
+            from hellsaiz_pc_ai.speech.sapi5 import Sapi5Synthesizer
+
+            Sapi5Synthesizer(
+                voice_name, settings.speech.tts_rate, settings.speech.tts_volume
+            ).speak("Hellsaiz PC AI. Проверка локального голоса.")
+            profile_status.setText(f"Голос доступен: {voice_name}.")
+        except Exception as exc:
+            profile_status.setText(f"Не удалось воспроизвести голос: {exc}")
+
+    refresh_voices_button.clicked.connect(refresh_voices)
+    test_voice_button.clicked.connect(test_voice)
+
+    def apply_profile() -> None:
+        nonlocal assistant
+        endpoint = endpoint_edit.text().strip().rstrip("/")
+        model = model_edit.text().strip()
+        enabled = ai_enabled_check.isChecked()
+        if enabled and (not endpoint.startswith(("http://", "https://")) or not model):
+            profile_status.setText("Укажи корректный адрес сервера и имя модели.")
+            return
+        if enabled:
+            try:
+                provider = OpenAICompatibleProvider(
+                    endpoint,
+                    model,
+                    settings.llm.api_key,
+                    settings.llm.timeout_seconds,
+                    settings.allow_remote_llm,
+                )
+                assistant = AssistantOrchestrator(
+                    provider, registry, settings.llm.system_prompt, settings.llm.max_tool_rounds
+                )
+                assistant.history = store.recent_messages()
+            except Exception as exc:
+                profile_status.setText(f"Не удалось применить ИИ-профиль: {exc}")
+                return
+        else:
+            assistant = None
+
+        selected_voice = voice_combo.currentText()
+        if selected_voice:
+            active_voice["name"] = selected_voice
+        profile_data.update({
+            "provider": str(provider_combo.currentData() or "custom"),
+            "base_url": endpoint or settings.llm.base_url,
+            "model": model or settings.llm.model,
+            "enabled": enabled,
+            "voice_name": active_voice["name"],
+            "auto_speak": speak_toggle.isChecked(),
+        })
+        profile_path = settings.workflows_path.parent / "ai_profile.json"
+        try:
+            profile_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = profile_path.with_suffix(".json.tmp")
+            temporary.write_text(
+                json.dumps(profile_data, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            temporary.replace(profile_path)
+            profile_status.setText("Профиль сохранён. Настройки применены.")
+        except OSError as exc:
+            profile_status.setText(f"Профиль применён, но не сохранён: {exc}")
+
+    profile_apply_button.clicked.connect(apply_profile)
+    refresh_voices()
+
+    tabs.addTab(home_page, "Чат")
 
     reminder_page = QWidget()
     reminder_layout = QVBoxLayout(reminder_page)
@@ -849,187 +1109,292 @@ def main() -> int:
     refresh_scenario_list()
     tabs.addTab(scenario_page, "Сценарии")
 
-    companion_page = QWidget()
-    companion_layout = QVBoxLayout(companion_page)
-    companion_title = QLabel("3D-КОМПАНЬОН")
-    companion_title.setStyleSheet("font-size:18px; font-weight:650; color:#f1f2f4;")
-    companion_layout.addWidget(companion_title)
-    companion_status = QLabel(
-        "Основной персонаж закреплён по твоему референсу: тёмные волосы, чёрная маска, "
-        "белая рубашка и чёрные ремни. Случайные модели не подставляются."
+    apps_page = QWidget()
+    apps_layout = QVBoxLayout(apps_page)
+    apps_layout.setContentsMargins(22, 20, 22, 20)
+    apps_title = QLabel("ПРИЛОЖЕНИЯ")
+    apps_title.setStyleSheet("font-size:18px; font-weight:650; color:#f1f2f4;")
+    apps_layout.addWidget(apps_title)
+    apps_hint = QLabel(
+        "Автопоиск использует ярлыки меню «Пуск» и записи Windows. "
+        "Портативные приложения можно добавить вручную с любого диска. "
+        "Полный фоновый обход всех дисков не выполняется."
     )
-    companion_status.setWordWrap(True)
-    companion_status.setStyleSheet(
-        "background:#111419; border:1px solid #303641; border-radius:10px; "
-        "padding:18px; color:#c9cdd4;"
-    )
-    companion_layout.addWidget(companion_status)
-    companion_asset = QLabel("3D-файл пока не подключён. Рендерер VRM/Live2D ещё не добавлен.")
-    companion_asset.setWordWrap(True)
-    companion_layout.addWidget(companion_asset)
-    companion_pick = QPushButton("Выбрать файл модели…")
-    companion_layout.addWidget(companion_pick)
+    apps_hint.setWordWrap(True)
+    apps_hint.setStyleSheet("color:#929aa6;")
+    apps_layout.addWidget(apps_hint)
+    apps_list = QListWidget()
+    apps_layout.addWidget(apps_list, 1)
+    apps_buttons = QHBoxLayout()
+    detect_apps_button = QPushButton("Найти установленные")
+    add_executable_button = QPushButton("Добавить .exe / ярлык")
+    register_app_button = QPushButton("Добавить выбранное")
+    apps_buttons.addWidget(detect_apps_button)
+    apps_buttons.addWidget(add_executable_button)
+    apps_buttons.addWidget(register_app_button)
+    apps_layout.addLayout(apps_buttons)
+    apps_status = QLabel("Каталог приложений хранится локально.")
+    apps_status.setStyleSheet("color:#929aa6;")
+    apps_layout.addWidget(apps_status)
 
-    def choose_companion_asset() -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            window,
-            "Выбрать модель персонажа",
-            str(Path.home()),
-            "3D/Live2D models (*.vrm *.glb *.gltf *.model3.json)",
-        )
-        if not path:
-            return
-        selected = Path(path)
-        if not selected.is_file() or selected.stat().st_size > 250 * 1024 * 1024:
-            companion_asset.setText("Файл отсутствует или превышает 250 МБ.")
-            return
-        settings.workflows_path.parent.mkdir(parents=True, exist_ok=True)
-        companion_config = settings.workflows_path.parent / "companion.json"
-        companion_config.write_text(
-            json.dumps({"asset_path": str(selected)}, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-        companion_asset.setText(
-            f"Файл выбран: {selected.name}. Для отображения модели ещё нужен 3D-рендерер."
-        )
+    catalog_path = settings.workflows_path.parent / "apps.json"
+    discovered_candidates: list[AppCandidate] = []
 
-    companion_pick.clicked.connect(choose_companion_asset)
-    companion_layout.addStretch(1)
-    tabs.addTab(companion_page, "Компаньон")
-
-    voice_page = QWidget()
-    voice_layout = QVBoxLayout(voice_page)
-    voice_title = QLabel("ГОЛОС / OFFLINE STT + TTS")
-    voice_title.setStyleSheet("font-size:18px; font-weight:650; color:#f1f2f4;")
-    voice_layout.addWidget(voice_title)
-    voice_info = QLabel(
-        f"STT-модель Vosk: {settings.speech.vosk_model_path}\n"
-        f"Путь существует: {'да' if settings.speech.vosk_model_path.is_dir() else 'нет'}"
-    )
-    voice_info.setWordWrap(True)
-    voice_info.setStyleSheet("color:#b6bdc8;")
-    voice_layout.addWidget(voice_info)
-    voice_combo = QComboBox()
-    voice_combo.setMinimumWidth(300)
-    voice_layout.addWidget(voice_combo)
-    voice_buttons = QHBoxLayout()
-    refresh_voices_button = QPushButton("Найти голоса Windows")
-    test_voice_button = QPushButton("Проверить голос")
-    voice_buttons.addWidget(refresh_voices_button)
-    voice_buttons.addWidget(test_voice_button)
-    voice_layout.addLayout(voice_buttons)
-    voice_status = QLabel(
-        "Рекомендуемый голос: RHVoice Aleksandr через Windows SAPI5. "
-        "Голосовые команды распознаются через локальную модель Vosk."
-    )
-    voice_status.setWordWrap(True)
-    voice_status.setStyleSheet("color:#b6bdc8;")
-    voice_layout.addWidget(voice_status)
-    voice_layout.addStretch(1)
-
-    def refresh_voices() -> None:
+    def refresh_apps_list() -> None:
+        apps_list.clear()
         try:
-            from hellsaiz_pc_ai.speech.sapi5 import Sapi5Synthesizer
+            configured = load_user_catalog(catalog_path)
+        except ValueError as exc:
+            apps_status.setText(str(exc))
+            configured = []
+        for item in configured:
+            row = QListWidgetItem(f"✓  {item['name']}  ·  {item['path']}")
+            row.setData(Qt.ItemDataRole.UserRole, {"configured": True, "key": item["key"]})
+            apps_list.addItem(row)
+        for candidate in discovered_candidates:
+            row = QListWidgetItem(f"{candidate.name}  ·  {candidate.path}")
+            row.setData(Qt.ItemDataRole.UserRole, {
+                "configured": False,
+                "name": candidate.name,
+                "path": str(candidate.path),
+                "launch_kind": candidate.launch_kind,
+            })
+            apps_list.addItem(row)
+        apps_status.setText(
+            f"В каталоге: {len(configured)}. Найдено кандидатов: {len(discovered_candidates)}."
+        )
 
-            voices = Sapi5Synthesizer().list_voices()
-            voice_combo.clear()
-            for voice in voices:
-                voice_combo.addItem(voice.name, voice.id)
-            preferred = voice_combo.findText(settings.speech.tts_voice_name)
-            if preferred >= 0:
-                voice_combo.setCurrentIndex(preferred)
-            voice_status.setText(
-                f"Найдено голосов Windows: {len(voices)}. "
-                "Выбери установленный русский голос RHVoice."
+    def detect_apps() -> None:
+        nonlocal discovered_candidates
+        try:
+            discovered_candidates = discover_windows_apps()
+            refresh_apps_list()
+            if not discovered_candidates:
+                apps_status.setText(
+                    "Автопоиск не нашёл приложений. Добавь портативную программу через выбор файла."
+                )
+        except Exception as exc:
+            apps_status.setText(f"Не удалось выполнить поиск: {exc}")
+
+    def register_app_candidate(candidate: AppCandidate) -> None:
+        try:
+            existing = load_user_catalog(catalog_path)
+            entry = add_candidate(catalog_path, candidate, existing)
+            custom_apps = load_user_catalog(catalog_path)
+            custom_allowed, custom_aliases = catalog_mappings(custom_apps)
+            allowed_apps.update(custom_allowed)
+            router.allowed_apps.update(custom_allowed)
+            for key, phrases in custom_aliases.items():
+                for phrase in (key, *phrases):
+                    normalized = router._normalize_phrase(phrase)
+                    owner = router.app_alias_lookup.get(normalized)
+                    if owner is None or owner == key:
+                        router.app_alias_lookup[normalized] = key
+            refresh_apps_list()
+            apps_status.setText(
+                f"Добавлено: {entry['name']}. Теперь можно сказать «открой {entry['name']}»."
             )
-        except Exception as exc:
-            voice_status.setText(f"Не удалось получить список SAPI5: {exc}")
+        except (OSError, ValueError) as exc:
+            apps_status.setText(f"Не удалось добавить приложение: {exc}")
 
-    def test_voice() -> None:
-        voice_name = voice_combo.currentText()
-        if not voice_name:
-            voice_status.setText("Сначала найди установленные голоса Windows.")
+    def add_selected_app() -> None:
+        item = apps_list.currentItem()
+        if item is None:
+            apps_status.setText("Сначала выбери найденное приложение.")
+            return
+        data = item.data(Qt.ItemDataRole.UserRole) or {}
+        if data.get("configured"):
+            apps_status.setText("Это приложение уже добавлено.")
             return
         try:
-            from hellsaiz_pc_ai.speech.sapi5 import Sapi5Synthesizer
+            candidate = AppCandidate(
+                str(data["name"]), Path(str(data["path"])), str(data["launch_kind"])
+            )
+            register_app_candidate(candidate)
+        except (KeyError, ValueError) as exc:
+            apps_status.setText(f"Не удалось добавить приложение: {exc}")
 
-            Sapi5Synthesizer(
-                voice_name, settings.speech.tts_rate, settings.speech.tts_volume
-            ).speak("Hellsaiz PC AI. Проверка локального русского голоса.")
-            voice_status.setText(f"Проверка завершена: {voice_name}.")
-        except Exception as exc:
-            voice_status.setText(f"Не удалось воспроизвести голос: {exc}")
+    def browse_app() -> None:
+        selected, _ = QFileDialog.getOpenFileName(
+            window,
+            "Выбрать приложение с любого диска",
+            str(Path.home()),
+            "Приложения Windows (*.exe *.lnk)",
+        )
+        if not selected:
+            return
+        path = Path(selected)
+        kind = "shortcut" if path.suffix.casefold() == ".lnk" else "exe"
+        register_app_candidate(AppCandidate(path.stem, path, kind))
 
-    refresh_voices_button.clicked.connect(refresh_voices)
-    test_voice_button.clicked.connect(test_voice)
-    tabs.addTab(voice_page, "Голос")
-
-    commands_page = QWidget()
-    commands_layout = QVBoxLayout(commands_page)
-    commands_title = QLabel("ЗАРЕГИСТРИРОВАННЫЕ ИНСТРУМЕНТЫ")
-    commands_title.setStyleSheet("font-size:18px; font-weight:650; color:#f1f2f4;")
-    commands_layout.addWidget(commands_title)
-    tool_list = QListWidget()
-    for tool in registry.openai_schemas():
-        function = tool["function"]
-        tool_list.addItem(f"{function['name']} — {function['description']}")
-    commands_layout.addWidget(tool_list)
-    commands_hint = QLabel(
-        "Инструменты вызываются через локальные правила или сценарии. "
-        "Изменяющие действия всегда запрашивают подтверждение."
-    )
-    commands_hint.setWordWrap(True)
-    commands_hint.setStyleSheet("color:#aab0ba;")
-    commands_layout.addWidget(commands_hint)
-    tabs.addTab(commands_page, "Команды")
-
-    plugins_page = QWidget()
-    plugins_layout = QVBoxLayout(plugins_page)
-    plugins_title = QLabel("ПЛАГИНЫ")
-    plugins_title.setStyleSheet("font-size:18px; font-weight:650; color:#f1f2f4;")
-    plugins_layout.addWidget(plugins_title)
-    plugins_hint = QLabel(
-        "Система расширений проектируется на локальных модулях с явными разрешениями. "
-        "Загрузка произвольных Python-файлов отключена."
-    )
-    plugins_hint.setWordWrap(True)
-    plugins_hint.setStyleSheet("color:#b6bdc8;")
-    plugins_layout.addWidget(plugins_hint)
-    plugins_layout.addStretch(1)
-    tabs.addTab(plugins_page, "Плагины")
+    detect_apps_button.clicked.connect(detect_apps)
+    register_app_button.clicked.connect(add_selected_app)
+    add_executable_button.clicked.connect(browse_app)
+    refresh_apps_list()
+    tabs.addTab(apps_page, "Приложения")
 
     settings_page = QWidget()
     settings_layout = QVBoxLayout(settings_page)
+    settings_layout.setContentsMargins(22, 20, 22, 20)
+    settings_layout.setSpacing(12)
     settings_title = QLabel("НАСТРОЙКИ")
     settings_title.setStyleSheet("font-size:18px; font-weight:650; color:#f1f2f4;")
     settings_layout.addWidget(settings_title)
-    settings_layout.addWidget(QLabel("Цветовая схема: чёрный / графит / серый / белый."))
-    settings_layout.addWidget(QLabel(f"Локальная LLM: {'включена' if settings.llm.enabled else 'выключена'}"))
     settings_layout.addWidget(QLabel(f"История: {settings.database_path}"))
     settings_layout.addWidget(QLabel(f"Сценарии: {settings.workflows_path}"))
+
+    update_title = QLabel("ОБНОВЛЕНИЯ")
+    update_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
+    settings_layout.addWidget(update_title)
+    update_preferences_path = settings.workflows_path.parent / "updates.json"
+    update_preferences: dict[str, Any] = {"auto_check": True}
+    if update_preferences_path.is_file():
+        try:
+            saved_preferences = json.loads(update_preferences_path.read_text(encoding="utf-8"))
+            if isinstance(saved_preferences, dict):
+                update_preferences.update(saved_preferences)
+        except (OSError, ValueError, json.JSONDecodeError):
+            logging.warning("Update preferences are invalid; defaulting to automatic checks.")
+
+    auto_update_check = QCheckBox("Автоматически проверять обновления при запуске")
+    auto_update_check.setChecked(bool(update_preferences.get("auto_check", True)))
+    settings_layout.addWidget(auto_update_check)
+
+    update_key_row = QHBoxLayout()
+    update_key_input = QLineEdit()
+    update_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+    update_key_input.setPlaceholderText("Ключ доступа к приватному каналу обновлений")
+    save_update_key_button = QPushButton("Сохранить ключ")
+    update_key_row.addWidget(update_key_input, 1)
+    update_key_row.addWidget(save_update_key_button)
+    settings_layout.addLayout(update_key_row)
+
+    update_status = QLabel(f"Текущая версия: {current_app_version}.")
+    update_status.setWordWrap(True)
+    update_status.setStyleSheet("color:#929aa6;")
+    settings_layout.addWidget(update_status)
+    update_buttons = QHBoxLayout()
+    check_update_button = QPushButton("Проверить обновления")
+    open_release_button = QPushButton("Открыть релиз")
+    open_release_button.setEnabled(False)
+    update_buttons.addWidget(check_update_button)
+    update_buttons.addWidget(open_release_button)
+    settings_layout.addLayout(update_buttons)
     settings_layout.addStretch(1)
     tabs.addTab(settings_page, "Настройки")
 
+    update_workers: list[QThread] = []
+    latest_release_url = ""
+
+    class UpdateWorker(QThread):
+        checked = Signal(object)
+        failed = Signal(str)
+
+        def run(self) -> None:
+            try:
+                key_path = settings.workflows_path.parent / "update_key.dpapi"
+                access_key = load_secret(key_path)
+                result = check_latest_release(current_app_version, access_key)
+                self.checked.emit(result)
+            except (UpdateCheckError, SecureStoreError, OSError) as exc:
+                self.failed.emit(str(exc))
+            except Exception as exc:
+                logging.exception("Update check failed")
+                self.failed.emit(f"Ошибка проверки обновлений: {exc}")
+
+    def persist_update_preferences() -> None:
+        update_preferences["auto_check"] = auto_update_check.isChecked()
+        try:
+            update_preferences_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = update_preferences_path.with_suffix(".json.tmp")
+            temporary.write_text(
+                json.dumps(update_preferences, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            temporary.replace(update_preferences_path)
+        except OSError as exc:
+            update_status.setText(f"Не удалось сохранить настройки обновлений: {exc}")
+
+    def save_update_access_key() -> None:
+        key_path = settings.workflows_path.parent / "update_key.dpapi"
+        try:
+            save_secret(key_path, update_key_input.text())
+            update_key_input.clear()
+            update_status.setText("Ключ защищён DPAPI и сохранён для текущей учётной записи Windows.")
+        except SecureStoreError as exc:
+            update_status.setText(str(exc))
+
+    def check_for_updates(silent: bool = False) -> None:
+        if any(worker.isRunning() for worker in update_workers):
+            return
+        update_status.setText("Проверяю канал обновлений…")
+        worker = UpdateWorker()
+        update_workers.append(worker)
+
+        def on_checked(info: Any) -> None:
+            nonlocal latest_release_url
+            latest_release_url = info.release_url
+            open_release_button.setEnabled(bool(latest_release_url))
+            if info.update_available:
+                if info.package_url and info.package_sha256:
+                    update_status.setText(
+                        f"Доступна версия {info.latest_version}. Windows-пакет опубликован; "
+                        "доступна страница релиза для установки."
+                    )
+                else:
+                    update_status.setText(
+                        f"Доступна версия {info.latest_version}, но проверенный Windows-пакет "
+                        "ещё не прикреплён к релизу."
+                    )
+            else:
+                update_status.setText(f"Установлена последняя версия: {info.current_version}.")
+            if not silent:
+                logging.info("Update channel checked: latest=%s", info.latest_version)
+
+        def on_failed(message: str) -> None:
+            if not silent:
+                update_status.setText(message)
+            else:
+                logging.info("Automatic update check: %s", message)
+
+        worker.checked.connect(on_checked)
+        worker.failed.connect(on_failed)
+        worker.finished.connect(lambda: update_workers.remove(worker) if worker in update_workers else None)
+        worker.start()
+
+    auto_update_check.toggled.connect(lambda _: persist_update_preferences())
+    save_update_key_button.clicked.connect(save_update_access_key)
+    check_update_button.clicked.connect(lambda: check_for_updates(False))
+    open_release_button.clicked.connect(
+        lambda: QDesktopServices.openUrl(QUrl(latest_release_url)) if latest_release_url else None
+    )
+
     window.setCentralWidget(tabs)
     window.setStyleSheet(
-        "QMainWindow, QWidget { background:#08090c; color:#eceef2; font-family:'Segoe UI'; }"
-        "QTextEdit,QLineEdit,QPlainTextEdit,QComboBox,QListWidget { background:#101318; "
-        "color:#f0f1f4; border:1px solid #2b3039; border-radius:9px; padding:10px; "
-        "selection-background-color:#626a76; }"
-        "QTextEdit,QPlainTextEdit { font-size:13px; }"
+        "QMainWindow, QWidget { background:#090b0f; color:#e9ebef; font-family:'Segoe UI'; }"
+        "QTabWidget::pane { border:0; background:#090b0f; }"
+        "QTabBar::tab { background:transparent; color:#737b87; padding:10px 15px; "
+        "margin:0 4px; border:0; border-radius:9px; }"
+        "QTabBar::tab:selected { background:#191d24; color:#f4f5f7; }"
+        "QTextEdit,QLineEdit,QPlainTextEdit,QComboBox,QListWidget { background:#11151b; "
+        "color:#eef0f3; border:1px solid #252b34; border-radius:11px; padding:10px; "
+        "selection-background-color:#414955; }"
+        "QTextEdit { background:#0c0f14; border:0; padding:14px; }"
         "QLineEdit { min-height:24px; }"
-        "QPushButton { background:#e7e9ed; color:#111318; border:0; border-radius:8px; "
-        "padding:10px 16px; font-weight:600; }"
-        "QPushButton:hover { background:#ffffff; }"
-        "QPushButton:disabled { background:#40454d; color:#9298a2; }"
+        "QPushButton { background:#252a33; color:#e8ebef; border:1px solid #303743; "
+        "border-radius:10px; padding:10px 14px; font-weight:550; }"
+        "QPushButton:hover { background:#343b47; border-color:#46505f; }"
+        "QPushButton#sendButton { background:#eceef1; color:#101318; border:0; "
+        "font-weight:650; padding-left:18px; padding-right:18px; }"
+        "QPushButton#sendButton:hover { background:#ffffff; }"
+        "QPushButton#profileButton { background:#171b22; color:#c9ced6; border:1px solid #2c323c; }"
+        "QPushButton#voiceButton { background:#171b22; color:#c9ced6; border:1px solid #2c323c; }"
+        "QFrame#profilePanel { background:#11151b; border:1px solid #252b34; border-radius:13px; }"
+        "QLabel { color:#d4d8df; }"
         "QCheckBox { color:#c7cbd2; spacing:8px; }"
         "QCheckBox::indicator { width:16px; height:16px; border:1px solid #686f7a; "
         "border-radius:4px; background:#111419; }"
         "QCheckBox::indicator:checked { background:#e7e9ed; border-color:#e7e9ed; }"
-        "QTabWidget::pane { border:1px solid #292e37; border-radius:8px; }"
-        "QTabBar::tab { background:#111419; color:#9ea5b0; padding:11px 16px; "
-        "margin-right:3px; border-top-left-radius:7px; border-top-right-radius:7px; }"
-        "QTabBar::tab:selected { background:#252b34; color:#ffffff; }"
         "QSplitter::handle { background:#252b34; }"
     )
 
@@ -1064,6 +1429,7 @@ def main() -> int:
             transcript.append(f"<p><b>Вы:</b> {escape(prompt)}</p>")
         send_button.setEnabled(False)
         voice_button.setEnabled(False)
+        profile_button.setEnabled(False)
         input_box.setEnabled(False)
         worker = Worker(
             prompt,
@@ -1089,6 +1455,7 @@ def main() -> int:
         )
         worker.finished.connect(lambda: send_button.setEnabled(True))
         worker.finished.connect(lambda: voice_button.setEnabled(True))
+        worker.finished.connect(lambda: profile_button.setEnabled(True))
         worker.finished.connect(lambda: input_box.setEnabled(True))
         worker.finished.connect(lambda: workers.remove(worker) if worker in workers else None)
         worker.finished.connect(lambda: QTimer.singleShot(0, dispatch_pending_automations))
@@ -1238,6 +1605,8 @@ def main() -> int:
     window.show()
     QTimer.singleShot(0, poll_workflow_automations)
     QTimer.singleShot(0, poll_due_reminders)
+    if auto_update_check.isChecked():
+        QTimer.singleShot(1400, lambda: check_for_updates(True))
     workflow_timer.start()
     reminder_timer.start()
     return app.exec()

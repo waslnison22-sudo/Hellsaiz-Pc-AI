@@ -25,7 +25,13 @@ def register_windows_tools(
         if not command:
             options = ", ".join(sorted(allowed_apps)) or "список пуст"
             return ToolResult(False, f"'{alias}' не разрешено. Доступно: {options}.")
-        subprocess.Popen(list(command), shell=False, close_fds=True)
+        if len(command) == 2 and command[0] == "__shell_link__":
+            try:
+                os.startfile(command[1])
+            except OSError as exc:
+                return ToolResult(False, f"Не удалось открыть ярлык Windows: {exc}")
+        else:
+            subprocess.Popen(list(command), shell=False, close_fds=True)
         return ToolResult(True, f"Запущено приложение: {alias}")
 
     def open_url(arguments: dict[str, object]) -> ToolResult:

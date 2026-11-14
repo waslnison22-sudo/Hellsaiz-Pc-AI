@@ -43,6 +43,9 @@ This is the execution order for the next development cycle. Each stage depends o
 - Add UAC manifest and setup/update strategy.
 - Add Task Scheduler auto-start at interactive logon and single-instance behavior.
 - Publish workflow artifacts and tagged release assets.
+- Ship an onedir Windows package and a stable launcher path.
+- Complete the signed update manifest, changed-file download, staging, apply-after-exit helper and rollback.
+- Keep models, voice packs and optional modules outside the base package; install them on demand.
 
 ## P6 — network dependencies and Telegram (later)
 
