@@ -253,7 +253,7 @@ def main() -> int:
             if self.listener is not None:
                 self.listener.stop()
 
-    wake_listener_worker: WakeListenerWorker | None = None
+    wake_listener_state: dict[str, Any] = {"worker": None}
 
     class Worker(QThread):
         completed = Signal(str, str)
@@ -1737,24 +1737,23 @@ def main() -> int:
             stt_status.setText(f"Не удалось сохранить настройки: {exc}")
 
     def stop_wake_listener() -> None:
-        nonlocal wake_listener_worker
-        worker = wake_listener_worker
+        worker = wake_listener_state["worker"]
         if worker is None:
             return
         worker.stop_listener()
         if worker.isRunning():
             worker.wait(3000)
         if not worker.isRunning():
-            wake_listener_worker = None
+            wake_listener_state["worker"] = None
 
     def start_wake_listener() -> None:
-        nonlocal wake_listener_worker
         if not always_listen_check.isChecked():
             return
         if workers:
             QTimer.singleShot(500, start_wake_listener)
             return
-        if wake_listener_worker is not None and wake_listener_worker.isRunning():
+        current_worker = wake_listener_state["worker"]
+        if current_worker is not None and current_worker.isRunning():
             return
         model_dir = Path(active_stt["vosk_model_path"]).expanduser()
         if not model_dir.is_dir():
@@ -1779,7 +1778,7 @@ def main() -> int:
             return
 
         worker = WakeListenerWorker(model_dir, settings.wake_aliases)
-        wake_listener_worker = worker
+        wake_listener_state["worker"] = worker
 
         def on_wake_command(prompt: str) -> None:
             if not prompt.strip():
@@ -1813,9 +1812,8 @@ def main() -> int:
         worker.failed.connect(on_listener_failed)
 
         def listener_finished() -> None:
-            nonlocal wake_listener_worker
-            if wake_listener_worker is worker:
-                wake_listener_worker = None
+            if wake_listener_state["worker"] is worker:
+                wake_listener_state["worker"] = None
 
         worker.finished.connect(listener_finished)
         worker.start()
