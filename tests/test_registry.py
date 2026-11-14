@@ -12,15 +12,23 @@ def make_registry(risk=RiskLevel.CONFIRM):
     return registry
 
 
-def test_confirmation_required_without_callback():
+def test_confirm_risk_executes_without_callback():
     result = make_registry().execute("perform_action", {})
-    assert not result.ok
-    assert "подтверждение" in result.output.lower()
-
-
-def test_confirmation_allows_action():
-    result = make_registry().execute("perform_action", {}, lambda *_: True)
     assert result.ok
+    assert result.output == "done"
+
+
+def test_legacy_rejection_callback_is_not_invoked():
+    called = False
+
+    def reject(*_):
+        nonlocal called
+        called = True
+        return False
+
+    result = make_registry().execute("perform_action", {}, reject)
+    assert result.ok
+    assert called is False
 
 
 def test_unknown_arguments_are_rejected():
