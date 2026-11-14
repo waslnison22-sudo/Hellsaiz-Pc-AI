@@ -9,8 +9,8 @@ from typing import Any, Callable, Literal
 from hellsaiz_pc_ai.core.models import ToolResult
 from hellsaiz_pc_ai.core.registry import ConfirmCallback, ToolRegistry
 
-NodeKind = Literal["trigger.text", "trigger.hotkey", "condition.hour", "action.tool", "action.wait"]
-_ALLOWED_KINDS = {"trigger.text", "trigger.hotkey", "condition.hour", "action.tool", "action.wait"}
+NodeKind = Literal["trigger.text", "trigger.hotkey", "trigger.schedule", "trigger.startup", "condition.hour", "action.tool", "action.wait"]
+_ALLOWED_KINDS = {"trigger.text", "trigger.hotkey", "trigger.schedule", "trigger.startup", "condition.hour", "action.tool", "action.wait"}
 _ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
 _HOTKEY_RE = re.compile(
     r"^(?:(?:Ctrl|Alt|Shift|Win)\+){1,3}(?:[A-Z0-9]|F(?:[1-9]|1[0-2])|SPACE|ENTER|TAB)$",
@@ -103,6 +103,22 @@ class WorkflowGraph:
             hotkey = cfg.get("hotkey")
             if set(cfg) != {"hotkey"} or not isinstance(hotkey, str) or not _HOTKEY_RE.fullmatch(hotkey):
                 raise ValueError(f"Hotkey trigger '{node.id}' has an unsupported shortcut.")
+        elif node.kind == "trigger.schedule":
+            scheduled_time, days = cfg.get("time"), cfg.get("days")
+            if set(cfg) != {"time", "days"}:
+                raise ValueError(f"Schedule trigger '{node.id}' needs only time and days.")
+            if not isinstance(scheduled_time, str) or not re.fullmatch(r"(?:[01]\\d|2[0-3]):[0-5]\\d", scheduled_time):
+                raise ValueError(f"Schedule trigger '{node.id}' time must use HH:MM.")
+            if (
+                not isinstance(days, list)
+                or not days
+                or any(isinstance(day, bool) or not isinstance(day, int) or not 1 <= day <= 7 for day in days)
+                or len(set(days)) != len(days)
+            ):
+                raise ValueError(f"Schedule trigger '{node.id}' days must be unique ISO weekdays 1..7.")
+        elif node.kind == "trigger.startup":
+            if cfg:
+                raise ValueError(f"Startup trigger '{node.id}' does not accept configuration.")
         elif node.kind == "condition.hour":
             operator, value = cfg.get("operator"), cfg.get("value")
             if set(cfg) != {"operator", "value"} or operator not in {"eq", "lt", "lte", "gt", "gte"}:
@@ -180,7 +196,7 @@ class WorkflowGraph:
 
 @dataclass(frozen=True)
 class WorkflowTrigger:
-    kind: Literal["text", "hotkey"]
+    kind: Literal["text", "hotkey", "schedule", "startup"]
     value: str
 
 
@@ -226,12 +242,22 @@ class WorkflowGraphRunner:
         confirm: ConfirmCallback | None = None,
     ) -> WorkflowExecution:
         root = next(node for node in graph.nodes if node.kind.startswith("trigger."))
-        expected_kind = "text" if root.kind == "trigger.text" else "hotkey"
-        expected_value = root.config["phrase" if expected_kind == "text" else "hotkey"]
+        expected_kind = root.kind.removeprefix("trigger.")
+        if expected_kind == "text":
+            expected_value = root.config["phrase"]
+        elif expected_kind == "hotkey":
+            expected_value = root.config["hotkey"]
+        elif expected_kind == "schedule":
+            expected_value = root.config["time"]
+        else:
+            expected_value = ""
+
         if trigger.kind != expected_kind:
             return WorkflowExecution(False, False, (), "Trigger type does not match.")
         if expected_kind == "text":
             matches = self._normalize_phrase(trigger.value) == self._normalize_phrase(expected_value)
+        elif expected_kind == "startup":
+            matches = trigger.value == ""
         else:
             matches = trigger.value.casefold() == expected_value.casefold()
         if not matches:

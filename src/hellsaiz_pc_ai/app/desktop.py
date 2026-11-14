@@ -20,6 +20,7 @@ from hellsaiz_pc_ai.tools.windows import register_windows_tools
 from hellsaiz_pc_ai.workflows.builder import append_hour_condition, append_tool_action, append_wait_action, terminal_nodes
 from hellsaiz_pc_ai.workflows.graph import WorkflowGraph, WorkflowGraphRunner, WorkflowTrigger
 from hellsaiz_pc_ai.workflows.library import WorkflowLibrary
+from hellsaiz_pc_ai.workflows.scheduler import WorkflowScheduler
 
 
 def build_runtime(settings: Settings):
@@ -51,7 +52,7 @@ def build_runtime(settings: Settings):
 
 def main() -> int:
     try:
-        from PySide6.QtCore import QObject, Qt, QThread, Signal, Slot
+        from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal, Slot
         from PySide6.QtGui import QFont
         from PySide6.QtWidgets import (
             QApplication,
@@ -209,7 +210,7 @@ def main() -> int:
                 stored_prompt = (
                     prompt
                     if prompt
-                    else f"[hotkey {self.workflow_trigger.value}]"
+                    else f"[trigger {self.workflow_trigger.kind}: {self.workflow_trigger.value}]"
                 )
                 store.add_message("user", stored_prompt)
                 store.add_message("assistant", answer)
@@ -352,6 +353,8 @@ def main() -> int:
     scenario_buttons = QHBoxLayout()
     new_scenario_button = QPushButton("Новый")
     new_hotkey_scenario_button = QPushButton("Пример hotkey")
+    new_schedule_scenario_button = QPushButton("Пример расписания")
+    new_startup_scenario_button = QPushButton("Пример автозапуска")
     validate_scenario_button = QPushButton("Проверить граф")
     save_scenario_button = QPushButton("Сохранить")
     delete_scenario_button = QPushButton("Удалить")
@@ -361,6 +364,8 @@ def main() -> int:
     scenario_buttons.addWidget(reset_layout_button)
     scenario_buttons.addWidget(new_scenario_button)
     scenario_buttons.addWidget(new_hotkey_scenario_button)
+    scenario_buttons.addWidget(new_schedule_scenario_button)
+    scenario_buttons.addWidget(new_startup_scenario_button)
     scenario_buttons.addWidget(validate_scenario_button)
     scenario_buttons.addWidget(save_scenario_button)
     scenario_buttons.addWidget(delete_scenario_button)
@@ -429,6 +434,60 @@ def main() -> int:
             render_graph(example_graph)
             refresh_builder_sources(example_graph)
             scenario_status.setText("Пример создан. Проверь и сохрани его.")
+        except ValueError as exc:
+            scenario_status.setText(str(exc))
+
+    def create_schedule_scenario() -> None:
+        example = {
+            "name": "Ежедневная проверка времени",
+            "nodes": [
+                {
+                    "id": "start",
+                    "type": "trigger.schedule",
+                    "config": {"time": "09:00", "days": [1, 2, 3, 4, 5, 6, 7]},
+                },
+                {
+                    "id": "time",
+                    "type": "action.tool",
+                    "config": {"name": "get_local_time", "arguments": {}},
+                },
+            ],
+            "edges": [{"from": "start", "to": "time"}],
+        }
+        scenario_id.setText("daily-time-check")
+        graph_editor.setPlainText(json.dumps(example, ensure_ascii=False, indent=2))
+        try:
+            example_graph = WorkflowGraph.from_dict(example)
+            render_graph(example_graph)
+            refresh_builder_sources(example_graph)
+            scenario_status.setText(
+                "Пример расписания создан. Измени время и дни в JSON, затем сохрани."
+            )
+        except ValueError as exc:
+            scenario_status.setText(str(exc))
+
+    def create_startup_scenario() -> None:
+        example = {
+            "name": "Проверка при запуске",
+            "nodes": [
+                {"id": "start", "type": "trigger.startup", "config": {}},
+                {
+                    "id": "time",
+                    "type": "action.tool",
+                    "config": {"name": "get_local_time", "arguments": {}},
+                },
+            ],
+            "edges": [{"from": "start", "to": "time"}],
+        }
+        scenario_id.setText("startup-check")
+        graph_editor.setPlainText(json.dumps(example, ensure_ascii=False, indent=2))
+        try:
+            example_graph = WorkflowGraph.from_dict(example)
+            render_graph(example_graph)
+            refresh_builder_sources(example_graph)
+            scenario_status.setText(
+                "Пример автозапуска создан. Сохрани его; запуск произойдёт при старте приложения."
+            )
         except ValueError as exc:
             scenario_status.setText(str(exc))
 
@@ -576,6 +635,8 @@ def main() -> int:
 
     new_scenario_button.clicked.connect(create_scenario)
     new_hotkey_scenario_button.clicked.connect(create_hotkey_scenario)
+    new_schedule_scenario_button.clicked.connect(create_schedule_scenario)
+    new_startup_scenario_button.clicked.connect(create_startup_scenario)
     validate_scenario_button.clicked.connect(validate_scenario)
     save_scenario_button.clicked.connect(save_scenario)
     delete_scenario_button.clicked.connect(delete_scenario)
@@ -786,8 +847,14 @@ def main() -> int:
             )
             return
         if workflow_trigger is not None:
+            trigger_labels = {
+                "hotkey": "Горячая клавиша",
+                "schedule": "Расписание",
+                "startup": "Автозапуск",
+            }
+            label = trigger_labels.get(workflow_trigger.kind, workflow_trigger.kind)
             transcript.append(
-                f"<p><b>Горячая клавиша:</b> {escape(workflow_trigger.value)}</p>"
+                f"<p><b>{escape(label)}:</b> {escape(workflow_trigger.value or "при запуске")}</p>"
             )
         elif prompt:
             transcript.append(f"<p><b>Вы:</b> {escape(prompt)}</p>")
@@ -819,6 +886,7 @@ def main() -> int:
         worker.finished.connect(lambda: voice_button.setEnabled(True))
         worker.finished.connect(lambda: input_box.setEnabled(True))
         worker.finished.connect(lambda: workers.remove(worker) if worker in workers else None)
+        worker.finished.connect(lambda: QTimer.singleShot(0, dispatch_pending_automations))
         worker.start()
 
     def send() -> None:
@@ -891,5 +959,38 @@ def main() -> int:
         lambda: hotkey_service.stop() if hotkey_service is not None else None
     )
 
+    scheduler = WorkflowScheduler(
+        workflow_library,
+        settings.workflows_path.parent / "workflow_schedule_state.json",
+    )
+    pending_automations: list[WorkflowTrigger] = []
+
+    def dispatch_pending_automations() -> None:
+        if workers or not pending_automations:
+            return
+        next_trigger = pending_automations.pop(0)
+        start_worker(workflow_trigger=next_trigger)
+
+    def poll_workflow_automations() -> None:
+        try:
+            due = scheduler.poll()
+            for workflow_id, trigger in due:
+                pending_automations.append(trigger)
+                logging.info(
+                    "Queued workflow trigger %s for scenario %s",
+                    trigger.kind,
+                    workflow_id,
+                )
+            dispatch_pending_automations()
+        except (OSError, ValueError, json.JSONDecodeError):
+            logging.exception("Workflow schedule polling failed")
+
+    workflow_timer = QTimer(window)
+    workflow_timer.setInterval(1000)
+    workflow_timer.timeout.connect(poll_workflow_automations)
+
+    # Trigger startup workflows only after the main window enters the Qt event loop.
     window.show()
+    QTimer.singleShot(0, poll_workflow_automations)
+    workflow_timer.start()
     return app.exec()

@@ -94,3 +94,46 @@ def test_graph_rejects_python_or_shell_action():
 def test_graph_roundtrip():
     graph = build_graph()
     assert WorkflowGraph.from_dict(graph.to_dict()) == graph
+
+
+def make_trigger_graph(kind, config):
+    return WorkflowGraph.from_dict({
+        "name": "Trigger test",
+        "nodes": [
+            {"id": "start", "type": kind, "config": config},
+            {"id": "done", "type": "action.wait", "config": {"seconds": 0}},
+        ],
+        "edges": [{"from": "start", "to": "done"}],
+    })
+
+
+def test_schedule_trigger_validates_time_and_weekdays():
+    valid = make_trigger_graph(
+        "trigger.schedule", {"time": "07:45", "days": [1, 2, 3, 4, 5]}
+    )
+    assert valid.nodes[0].config["time"] == "07:45"
+
+    with pytest.raises(ValueError, match="HH:MM"):
+        make_trigger_graph("trigger.schedule", {"time": "25:00", "days": [1]})
+    with pytest.raises(ValueError, match="weekdays"):
+        make_trigger_graph("trigger.schedule", {"time": "07:45", "days": [1, 1]})
+
+
+def test_startup_trigger_rejects_config():
+    with pytest.raises(ValueError, match="does not accept configuration"):
+        make_trigger_graph("trigger.startup", {"delay": 1})
+
+
+def test_runner_accepts_startup_and_schedule_events():
+    startup = make_trigger_graph("trigger.startup", {})
+    schedule = make_trigger_graph(
+        "trigger.schedule", {"time": "07:45", "days": [1, 2, 3, 4, 5, 6, 7]}
+    )
+    startup_result = WorkflowGraphRunner(registry()).run(
+        startup, WorkflowTrigger("startup", "")
+    )
+    schedule_result = WorkflowGraphRunner(registry()).run(
+        schedule, WorkflowTrigger("schedule", "07:45")
+    )
+    assert startup_result.started and startup_result.completed
+    assert schedule_result.started and schedule_result.completed
