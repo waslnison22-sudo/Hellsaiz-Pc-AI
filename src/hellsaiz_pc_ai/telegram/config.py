@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from hellsaiz_pc_ai.secure_store import load_secret, save_secret, delete_secret
+
 
 SCHEMA_VERSION = 1
 MAX_ALLOWED_IDS = 100
@@ -24,6 +26,7 @@ class TelegramSettings:
     allowed_user_ids: list[int] = field(default_factory=list)
     allowed_chat_ids: list[int] = field(default_factory=list)
     allowed_tools: list[str] = field(default_factory=list)
+    token: str = ""
 
 
 def validate_bot_token(token: str) -> str:
@@ -61,13 +64,16 @@ def _normalize_settings(raw: Any) -> TelegramSettings:
 
 
 def load_settings(path: Path) -> TelegramSettings:
+    token_path = path.with_name("telegram_token.dpapi")
     if not path.is_file():
-        return TelegramSettings()
+        return TelegramSettings(token=load_secret(token_path))
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise ValueError(f"Не удалось прочитать настройки Telegram: {exc}") from exc
-    return _normalize_settings(raw)
+    normalized = _normalize_settings(raw)
+    normalized.token = load_secret(token_path)
+    return normalized
 
 
 def save_settings(path: Path, settings: TelegramSettings) -> None:
@@ -91,6 +97,11 @@ def save_settings(path: Path, settings: TelegramSettings) -> None:
         encoding="utf-8",
     )
     os.replace(temporary, path)
+    token_path = path.with_name("telegram_token.dpapi")
+    if settings.token.strip():
+        save_secret(token_path, validate_bot_token(settings.token))
+    else:
+        delete_secret(token_path)
     settings.enabled = normalized.enabled
     settings.allowed_user_ids[:] = normalized.allowed_user_ids
     settings.allowed_chat_ids[:] = normalized.allowed_chat_ids
