@@ -143,3 +143,25 @@ def test_engine_uses_cyrillic_recognition_and_cpu_onnx(monkeypatch, tmp_path: Pa
 def test_model_download_limits_timeout(tmp_path: Path):
     with pytest.raises(ValueError, match="от 5 до 300"):
         ocr_models.download_russian_ocr_models(tmp_path, timeout_seconds=301)
+
+
+def test_official_model_manifest_paths_and_hashes_are_stable():
+    expected = {
+        "det": (
+            "ch_PP-OCRv5_det_mobile.onnx",
+            "4d97c44a20d30a81aad087d6a396b08f786c4635742afc391f6621f5c6ae78ae",
+        ),
+        "cls": (
+            "ch_PP-LCNet_x0_25_textline_ori_cls_mobile.onnx",
+            "54379ae5174d026780215fc748a7f31910dee36818e63d49e17dc598ecc82df7",
+        ),
+        "rec": (
+            "cyrillic_PP-OCRv5_rec_mobile.onnx",
+            "90f761b4bfcce0c8c561c0cb5c887b0971d3ec01c32164bdf7374a35b0982711",
+        ),
+    }
+    for key, (filename, sha256) in expected.items():
+        item = ocr_models.RUSSIAN_OCR_MODELS[key]
+        assert item["filename"] == filename
+        assert item["sha256"] == sha256
+        assert item["url"].startswith("https://www.modelscope.cn/models/RapidAI/RapidOCR/")
