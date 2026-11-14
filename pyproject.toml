@@ -15,6 +15,7 @@ dependencies = ["PySide6>=6.7,<7"]
 voice = ["sounddevice>=0.4.6", "numpy>=1.26", "pyttsx3>=2.90", "vosk>=0.3.45"]
 windows = ["psutil>=7.0", "pycaw>=20260921", "pynput>=1.7.7"]
 dev = ["pytest>=8.0", "ruff>=0.5"]
+build = ["pyinstaller>=6.10", "cryptography>=43"]
 
 [project.scripts]
 hellsaiz-pc-ai = "hellsaiz_pc_ai.app.desktop:main"

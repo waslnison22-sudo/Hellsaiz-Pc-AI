@@ -18,7 +18,15 @@ from hellsaiz_pc_ai.app_catalog import (
 from hellsaiz_pc_ai.config import Settings, load_settings
 from hellsaiz_pc_ai.core.commands import CommandRouter
 from hellsaiz_pc_ai.secure_store import SecureStoreError, load_secret, save_secret
-from hellsaiz_pc_ai.update_client import UpdateCheckError, check_latest_release
+from hellsaiz_pc_ai.update_client import (
+    PreparedUpdate,
+    UpdateCheckError,
+    UpdateInfo,
+    check_latest_release,
+    download_update,
+)
+from hellsaiz_pc_ai.install_layout import installed_app_root, installed_version
+from hellsaiz_pc_ai.version import APP_VERSION
 from hellsaiz_pc_ai.core.orchestrator import AssistantOrchestrator
 from hellsaiz_pc_ai.core.registry import ToolRegistry
 from hellsaiz_pc_ai.hotkeys import GlobalHotkeyService, HotkeyUnavailableError
@@ -156,7 +164,7 @@ def main() -> int:
         reminder_store, allowed_apps, profile_data
     ) = build_runtime(settings)
     active_voice = {"name": str(profile_data.get("voice_name") or settings.speech.tts_voice_name)}
-    current_app_version = "0.1.0"
+    install_root = installed_app_root()\n    current_app_version = installed_version(install_root, APP_VERSION)
 
     app = QApplication.instance() or QApplication([])
     window = QMainWindow()
@@ -1288,7 +1296,12 @@ def main() -> int:
 
     class UpdateWorker(QThread):
         checked = Signal(object)
+        downloaded = Signal(object)
         failed = Signal(str)
+
+        def __init__(self, download: bool = False) -> None:
+            super().__init__()
+            self.download = download
 
         def run(self) -> None:
             try:
@@ -1296,11 +1309,16 @@ def main() -> int:
                 access_key = load_secret(key_path)
                 result = check_latest_release(current_app_version, access_key)
                 self.checked.emit(result)
+                if self.download and result.update_available:
+                    if install_root is None:
+                        raise UpdateCheckError("Установочная папка не определена.")
+                    prepared = download_update(result, access_key, install_root)
+                    self.downloaded.emit(prepared)
             except (UpdateCheckError, SecureStoreError, OSError) as exc:
                 self.failed.emit(str(exc))
             except Exception as exc:
-                logging.exception("Update check failed")
-                self.failed.emit(f"Ошибка проверки обновлений: {exc}")
+                logging.exception("Update operation failed")
+                self.failed.emit(f"Ошибка обновления: {exc}")
 
     def persist_update_preferences() -> None:
         update_preferences["auto_check"] = auto_update_check.isChecked()
@@ -1332,20 +1350,19 @@ def main() -> int:
         update_workers.append(worker)
 
         def on_checked(info: Any) -> None:
-            nonlocal latest_release_url
+            nonlocal latest_release_url, latest_update_info
+            latest_update_info = info if info.update_available else None
             latest_release_url = info.release_url
             open_release_button.setEnabled(bool(latest_release_url))
+            install_update_button.setEnabled(
+                bool(info.update_available and install_root is not None and info.package_asset_id)
+            )
             if info.update_available:
-                if info.package_url and info.package_sha256:
-                    update_status.setText(
-                        f"Доступна версия {info.latest_version}. Windows-пакет опубликован; "
-                        "доступна страница релиза для установки."
-                    )
-                else:
-                    update_status.setText(
-                        f"Доступна версия {info.latest_version}, но проверенный Windows-пакет "
-                        "ещё не прикреплён к релизу."
-                    )
+                package_kind = "дельта-пакет" if info.package_mode == "delta" else "полный пакет"
+                update_status.setText(
+                    f"Доступна версия {info.latest_version}. Подпись проверена. "
+                    f"Подготовлен {package_kind}; можно установить."
+                )
             else:
                 update_status.setText(f"Установлена последняя версия: {info.current_version}.")
             if not silent:
@@ -1364,7 +1381,48 @@ def main() -> int:
 
     auto_update_check.toggled.connect(lambda _: persist_update_preferences())
     save_update_key_button.clicked.connect(save_update_access_key)
+    def install_update() -> None:
+        if install_root is None or latest_update_info is None:
+            return
+        if any(worker.isRunning() for worker in update_workers):
+            return
+        update_status.setText("Скачиваю и проверяю файлы обновления…")
+        worker = UpdateWorker(download=True)
+        update_workers.append(worker)
+
+        def on_downloaded(prepared: PreparedUpdate) -> None:
+            updater = install_root / "HellsaizUpdater.exe"
+            if not updater.is_file():
+                update_status.setText("Не найден помощник обновления. Переустанови приложение.")
+                return
+            import os
+            import subprocess
+            subprocess.Popen(
+                [
+                    str(updater), "--install",
+                    "--install-root", str(install_root),
+                    "--archive", str(prepared.archive_path),
+                    "--manifest", str(prepared.manifest_path),
+                    "--signature", str(prepared.signature_path),
+                    "--mode", prepared.mode,
+                    "--from-version", prepared.from_version,
+                    "--parent-pid", str(os.getpid()),
+                ],
+                cwd=str(install_root),
+                close_fds=True,
+            )
+            app.quit()
+
+        def on_download_failed(message: str) -> None:
+            update_status.setText(message)
+
+        worker.downloaded.connect(on_downloaded)
+        worker.failed.connect(on_download_failed)
+        worker.finished.connect(lambda: update_workers.remove(worker) if worker in update_workers else None)
+        worker.start()
+
     check_update_button.clicked.connect(lambda: check_for_updates(False))
+    install_update_button.clicked.connect(install_update)
     open_release_button.clicked.connect(
         lambda: QDesktopServices.openUrl(QUrl(latest_release_url)) if latest_release_url else None
     )
@@ -1603,6 +1661,13 @@ def main() -> int:
 
     # Restore overdue reminders and startup workflows after the main window enters the event loop.
     window.show()
+    if install_root is not None:
+        try:
+            marker = install_root / "health" / f"{current_app_version}.ok"
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            marker.write_text("ok", encoding="ascii")
+        except OSError:
+            logging.exception("Could not write update health marker")
     QTimer.singleShot(0, poll_workflow_automations)
     QTimer.singleShot(0, poll_due_reminders)
     if auto_update_check.isChecked():

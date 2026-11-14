@@ -1,0 +1,41 @@
+param(
+    [Parameter(Mandatory = $true)]
+    [string]$Version
+)
+
+$ErrorActionPreference = "Stop"
+Set-Location (Join-Path $PSScriptRoot "..")
+
+$Version = $Version.TrimStart("v")
+python scripts/set_version.py $Version
+if ($LASTEXITCODE -ne 0) { throw "Could not set the application version." }
+
+python -m pip install --upgrade pip
+if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed." }
+python -m pip install -e ".[build,windows,voice]"
+if ($LASTEXITCODE -ne 0) { throw "Application dependencies could not be installed." }
+
+Remove-Item -Recurse -Force dist, build -ErrorAction SilentlyContinue
+
+pyinstaller --noconfirm --clean --onedir --windowed --uac-admin --name HellsaizPC_AI --distpath dist/app --workpath build/app --collect-all vosk --collect-all sounddevice --collect-all pycaw --collect-all pynput src/hellsaiz_pc_ai/__main__.py
+if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed to build the desktop application." }
+
+pyinstaller --noconfirm --clean --onefile --windowed --uac-admin --name HellsaizLauncher --distpath dist/tools --workpath build/launcher src/hellsaiz_pc_ai/launcher.py
+if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed to build the launcher." }
+
+pyinstaller --noconfirm --clean --onefile --windowed --uac-admin --name HellsaizUpdater --distpath dist/tools --workpath build/updater --collect-all cryptography src/hellsaiz_pc_ai/updater.py
+if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed to build the update helper." }
+
+python scripts/package_release.py --version $Version --app-dir dist/app/HellsaizPC_AI --launcher dist/tools/HellsaizLauncher.exe --updater dist/tools/HellsaizUpdater.exe
+if ($LASTEXITCODE -ne 0) { throw "Release package generation failed." }
+
+$setupCompiler = Join-Path $env:ProgramFiles(x86) "Inno Setup 6\ISCC.exe"
+if (-not (Test-Path $setupCompiler)) {
+    choco install innosetup --yes --no-progress
+    if ($LASTEXITCODE -ne 0) { throw "Inno Setup installation failed." }
+}
+if (-not (Test-Path $setupCompiler)) { throw "Inno Setup compiler was not found." }
+& $setupCompiler "/DAppVersion=$Version" "installer/HellsaizPC_AI.iss"
+if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed to compile the installer." }
+
+Write-Host "Windows installer and release assets are ready in dist/."

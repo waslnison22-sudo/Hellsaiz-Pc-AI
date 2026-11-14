@@ -1,0 +1,116 @@
+name: Windows Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --yes --no-progress
+
+      - name: Build Windows application
+        shell: pwsh
+        env:
+          HELLSAIZ_UPDATE_SIGNING_KEY: ${{ secrets.HELLSAIZ_UPDATE_SIGNING_KEY }}
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart("v")
+          python scripts/set_version.py $version
+          if ($LASTEXITCODE -ne 0) { throw "Version setup failed." }
+
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[build,windows,voice]"
+          if ($LASTEXITCODE -ne 0) { throw "Dependency installation failed." }
+
+          pyinstaller --noconfirm --clean --onedir --windowed --uac-admin --name HellsaizPC_AI --distpath dist/app --workpath build/app --collect-all vosk --collect-all sounddevice --collect-all pycaw --collect-all pynput src/hellsaiz_pc_ai/__main__.py
+          if ($LASTEXITCODE -ne 0) { throw "Desktop build failed." }
+
+          pyinstaller --noconfirm --clean --onefile --windowed --uac-admin --name HellsaizLauncher --distpath dist/tools --workpath build/launcher src/hellsaiz_pc_ai/launcher.py
+          if ($LASTEXITCODE -ne 0) { throw "Launcher build failed." }
+
+          pyinstaller --noconfirm --clean --onefile --windowed --uac-admin --name HellsaizUpdater --distpath dist/tools --workpath build/updater --collect-all cryptography src/hellsaiz_pc_ai/updater.py
+          if ($LASTEXITCODE -ne 0) { throw "Updater build failed." }
+
+      - name: Download previous release manifest for delta build
+        id: previous
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $currentTag = $env:GITHUB_REF_NAME
+          $releases = gh release list --limit 100 --json tagName,isDraft,isPrerelease | ConvertFrom-Json
+          $previous = $releases | Where-Object {
+            $_.tagName -ne $currentTag -and -not $_.isDraft -and -not $_.isPrerelease
+          } | Select-Object -First 1
+
+          if ($null -ne $previous) {
+            $directory = Join-Path $env:RUNNER_TEMP "hellsaiz-previous-release"
+            New-Item -ItemType Directory -Force -Path $directory | Out-Null
+            gh release download $previous.tagName --pattern "HellsaizPC_AI-update-manifest.json" --pattern "HellsaizPC_AI-update-manifest.sig" --dir $directory
+            if ($LASTEXITCODE -eq 0) {
+              "tag=$($previous.tagName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+              "manifest=$directory\HellsaizPC_AI-update-manifest.json" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+              "signature=$directory\HellsaizPC_AI-update-manifest.sig" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            }
+          }
+
+      - name: Assemble full and delta packages and installer
+        shell: pwsh
+        env:
+          HELLSAIZ_UPDATE_SIGNING_KEY: ${{ secrets.HELLSAIZ_UPDATE_SIGNING_KEY }}
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart("v")
+          $arguments = @(
+            "scripts/package_release.py",
+            "--version", $version,
+            "--app-dir", "dist/app/HellsaizPC_AI",
+            "--launcher", "dist/tools/HellsaizLauncher.exe",
+            "--updater", "dist/tools/HellsaizUpdater.exe"
+          )
+          if (" ${{ steps.previous.outputs.manifest }}" -ne "") {
+            $arguments += @(
+              "--previous-manifest", "${{ steps.previous.outputs.manifest }}",
+              "--previous-signature", "${{ steps.previous.outputs.signature }}"
+            )
+          }
+          python @arguments
+          if ($LASTEXITCODE -ne 0) { throw "Package or signature generation failed." }
+
+          $compiler = Join-Path $env:ProgramFiles(x86) "Inno Setup 6\ISCC.exe"
+          & $compiler "/DAppVersion=$version" "installer/HellsaizPC_AI.iss"
+          if ($LASTEXITCODE -ne 0) { throw "Installer compilation failed." }
+
+      - name: Upload release assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $assets = @(
+            Get-ChildItem "dist/release-assets/*" -File | ForEach-Object { $_.FullName }
+            "dist/HellsaizPC_AI_Setup.exe"
+          )
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag @assets --clobber
+          } else {
+            gh release create $tag @assets --title "Hellsaiz PC AI $tag" --generate-notes
+          }
+          if ($LASTEXITCODE -ne 0) { throw "Could not publish the GitHub release." }

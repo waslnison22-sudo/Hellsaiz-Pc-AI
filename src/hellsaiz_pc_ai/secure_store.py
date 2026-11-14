@@ -35,7 +35,7 @@ def protect_text(value: str) -> bytes:
     kernel32.LocalFree.restype = ctypes.c_void_p
     if not crypt32.CryptProtectData(
         ctypes.byref(source), "Hellsaiz PC AI update credential", None,
-        None, None, 0x1, ctypes.byref(destination)
+        None, None, 0, ctypes.byref(destination)
     ):
         raise SecureStoreError(f"Windows DPAPI не смогла защитить ключ (код {ctypes.get_last_error()}).")
     try:
