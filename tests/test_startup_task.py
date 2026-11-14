@@ -15,7 +15,7 @@ class FakeResult:
 
 
 def test_register_startup_task_uses_launcher_logon_and_highest(tmp_path: Path, monkeypatch):
-    monkeypatch.setattr(startup_task.os, "name", "nt")
+    monkeypatch.setattr(startup_task.sys, "platform", "win32")
     launcher = tmp_path / "HellsaizLauncher.exe"
     launcher.write_bytes(b"launcher")
     calls = []
@@ -71,6 +71,6 @@ def test_startup_status_uses_schtasks_query(monkeypatch):
 
 
 def test_non_windows_startup_registration_is_rejected(monkeypatch, tmp_path: Path):
-    monkeypatch.setattr(startup_task.os, "name", "posix")
+    monkeypatch.setattr(startup_task.sys, "platform", "linux")
     with pytest.raises(startup_task.StartupTaskError):
         startup_task.register_startup_task(tmp_path / "HellsaizLauncher.exe")
