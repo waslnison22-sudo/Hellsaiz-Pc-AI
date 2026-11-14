@@ -17,7 +17,9 @@ def main() -> int:
     root = Path(sys.executable).resolve().parent
     try:
         active = json.loads((root / "active.json").read_text(encoding="utf-8"))
-        version = active["active_version"]
+        if not isinstance(active, dict):
+            raise ValueError("Файл active.json имеет неверный формат.")
+        version = active.get("active_version")
         if not isinstance(version, str) or not version:
             raise ValueError("В active.json отсутствует active_version.")
         target = (root / "versions" / version / "HellsaizPC_AI.exe").resolve()
@@ -30,7 +32,7 @@ def main() -> int:
             close_fds=True,
         )
         return 0
-    except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+    except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
         _show_error(
             f"Не удалось запустить Hellsaiz PC AI.\n\n{exc}\n\n"
             "Запустите установщик ещё раз или восстановите приложение."

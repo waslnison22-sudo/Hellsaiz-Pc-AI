@@ -175,7 +175,10 @@ def load_settings(path: Path | None = None) -> Settings:
     db_path = Path(db_value).expanduser() if db_value else user_data_dir() / "history.sqlite3"
     model_value = speech_data.get("vosk_model_path", "")
     model_path = Path(model_value).expanduser() if model_value else speech_defaults.vosk_model_path
-    timeout_seconds = int(llm_data.get("timeout_seconds", defaults.timeout_seconds))
+    raw_timeout = llm_data.get("timeout_seconds", defaults.timeout_seconds)
+    if isinstance(raw_timeout, bool) or not isinstance(raw_timeout, int):
+        raise ValueError("[llm].timeout_seconds must be an integer")
+    timeout_seconds = raw_timeout
     if not 1 <= timeout_seconds <= 600:
         raise ValueError("[llm].timeout_seconds must be between 1 and 600")
     rate = int(speech_data.get("tts_rate", speech_defaults.tts_rate))

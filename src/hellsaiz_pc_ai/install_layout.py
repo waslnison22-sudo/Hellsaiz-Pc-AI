@@ -25,6 +25,8 @@ def installed_version(root: Path | None, fallback: str = "0.1.0") -> str:
         return fallback
     try:
         data = json.loads((root / "active.json").read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return fallback
         version = data.get("active_version")
         if isinstance(version, str) and version:
             return version
