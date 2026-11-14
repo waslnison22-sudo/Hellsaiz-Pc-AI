@@ -2761,6 +2761,7 @@ def main() -> int:
     def release_speech_runtime() -> None:
         stop_wake_listener()
         worker_groups = (
+            [wake_listener_state["worker"]],
             workers,
             update_workers,
             voice_download_workers,
@@ -2771,6 +2772,8 @@ def main() -> int:
         seen: set[int] = set()
         for group in worker_groups:
             for worker in tuple(group):
+                if worker is None:
+                    continue
                 worker_id = id(worker)
                 if worker_id in seen:
                     continue
