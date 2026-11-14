@@ -22,6 +22,17 @@ The update process requires the root-level `HellsaizLauncher.exe` and `HellsaizU
 
 The updater verifies the pinned Ed25519 manifest signature, file paths, sizes and SHA-256 digests before activating the staged version. The active build remains intact until validation succeeds. A failed health start restores the previous version; one previous version is retained. User data is stored separately under LocalAppData and is not removed by updates. Download and installation are manual user actions; automatic checks only report availability.
 
+## Release acceptance test
+
+Before uploading a new release, the Windows workflow downloads the previous stable portable package and runs its own launcher/updater against the newly signed full ZIP. For the current 0.1.4 baseline this is an actual 0.1.3 → 0.1.4 update, not a mocked updater call. The workflow verifies:
+
+- the previous 0.1.3 launcher and updater can stage and activate the new version;
+- the new application writes `health/0.1.4.ok` after creating its main window;
+- `active.json` selects 0.1.4 and the 0.1.3 folder remains available for rollback;
+- a separate LocalAppData sentinel remains byte-for-byte unchanged.
+
+Release publication is blocked if any of those checks fail. The previous 0.1.3 portable package is therefore a required release input, not merely a convenience download.
+
 ## Private update channel
 
 For a private repository, enter a fine-grained GitHub Personal Access Token with read-only **Contents** permission for the repository. The token is protected with Windows DPAPI for the current Windows account and is not written to ordinary `config.toml` or chat history. Keep it separate from the release signing key.
