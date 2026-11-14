@@ -1,9 +1,10 @@
+import pytest
 from hellsaiz_pc_ai.core.commands import CommandRouter
 from hellsaiz_pc_ai.core.models import RiskLevel, ToolResult
 from hellsaiz_pc_ai.core.registry import ToolRegistry, ToolSpec
 
 
-def make_router():
+def make_router(allowed_apps=None, app_aliases=None, wake_aliases=None):
     registry = ToolRegistry()
     registry.register(ToolSpec(
         "get_local_time", "time",
@@ -82,8 +83,12 @@ def make_router():
     ))
     return CommandRouter(
         registry,
-        {"notepad": ("notepad.exe",), "calculator": ("calc.exe",)},
+        allowed_apps
+        if allowed_apps is not None
+        else {"notepad": ("notepad.exe",), "calculator": ("calc.exe",)},
         {"discord": "Discord.exe"},
+        app_aliases,
+        wake_aliases,
     )
 
 
@@ -180,3 +185,64 @@ def test_list_and_dismiss_reminders_are_explicit():
     assert router.route("мои напоминания") == "Готово. no reminders"
     assert router.route("удали напоминание 12", deny).startswith("Не выполнено.")
     assert router.route("удали напоминание 12", approve) == "Готово. dismissed 12"
+
+
+
+def test_multiple_wake_names_are_normalized_before_routing():
+    router = make_router()
+
+    for phrase in (
+        "Хелл, который час?",
+        "Хеллсайз, который час?",
+        "Хелсайз, который час?",
+        "Hell, который час?",
+        "Hellsaiz, который час?",
+    ):
+        assert router.route(phrase) == "Готово. 13.11.2026 12:00"
+
+
+def test_many_launch_verbs_resolve_to_the_same_allowed_app():
+    router = make_router()
+
+    for phrase in (
+        "открой блокнот",
+        "запусти блокнот",
+        "включи блокнот",
+        "вруби блокнот",
+        "стартуй блокнот",
+        "открой мне блокнот",
+    ):
+        assert router.route(phrase, approve) == "Готово. opened notepad"
+
+
+def test_user_app_aliases_resolve_to_one_canonical_game_or_client():
+    router = make_router(
+        allowed_apps={"steam": ("steam.exe",), "cs2": ("cs2.exe",)},
+        app_aliases={
+            "steam": ("стим", "игровой клиент"),
+            "cs2": ("кс2", "кс 2", "контр страйк 2"),
+        },
+    )
+
+    assert router.route("Хелл, открой стим", approve) == "Готово. opened steam"
+    assert router.route("запусти игровой клиент", approve) == "Готово. opened steam"
+    assert router.route("запусти кс 2", approve) == "Готово. opened cs2"
+    assert router.route("включи контр страйк 2", approve) == "Готово. opened cs2"
+
+
+def test_user_app_aliases_reject_ambiguous_mapping():
+    with pytest.raises(ValueError, match="Ambiguous"):
+        make_router(
+            allowed_apps={"steam": ("steam.exe",), "cs2": ("cs2.exe",)},
+            app_aliases={"steam": ("игра",), "cs2": ("игра",)},
+        )
+
+
+def test_unknown_application_alias_is_not_guessed():
+    router = make_router(
+        allowed_apps={"steam": ("steam.exe",)},
+        app_aliases={"steam": ("стим",)},
+    )
+
+    response = router.route("запусти кску", approve)
+    assert "не добавлено" in response.casefold()
