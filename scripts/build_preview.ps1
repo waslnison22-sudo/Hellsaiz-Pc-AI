@@ -32,10 +32,42 @@ foreach ($path in $required) {
     }
 }
 
-$metadataDir = "dist/preview"
-New-Item -ItemType Directory -Force -Path $metadataDir | Out-Null
 $version = python -c 'from hellsaiz_pc_ai.version import APP_VERSION; print(APP_VERSION)'
 if ($LASTEXITCODE -ne 0) { throw "Could not read the embedded application version." }
+
+$installRoot = "dist/install"
+$versionRoot = Join-Path $installRoot "versions/$version"
+New-Item -ItemType Directory -Force -Path $versionRoot | Out-Null
+Copy-Item "dist/app/HellsaizPC_AI/*" $versionRoot -Recurse -Force
+Copy-Item "dist/tools/HellsaizLauncher.exe" $installRoot -Force
+Copy-Item "dist/tools/HellsaizUpdater.exe" $installRoot -Force
+$activeJson = @{
+    schema_version = 1
+    active_version = $version
+    previous_version = $null
+} | ConvertTo-Json
+[System.IO.File]::WriteAllText(
+    (Join-Path $installRoot "active.json"),
+    $activeJson,
+    [System.Text.UTF8Encoding]::new($false)
+)
+
+$innoCompiler = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6/ISCC.exe"
+if (-not (Test-Path $innoCompiler)) {
+    choco install innosetup --yes --no-progress
+    if ($LASTEXITCODE -ne 0) { throw "Inno Setup installation failed." }
+}
+if (-not (Test-Path $innoCompiler)) {
+    throw "Inno Setup compiler ISCC.exe was not found."
+}
+& $innoCompiler "/DAppVersion=$version" "installer/HellsaizPC_AI.iss"
+if ($LASTEXITCODE -ne 0) { throw "Inno Setup installer compilation failed." }
+if (-not (Test-Path "dist/HellsaizPC_AI_Setup.exe" -PathType Leaf)) {
+    throw "The Windows installer executable was not created."
+}
+
+$metadataDir = "dist/preview"
+New-Item -ItemType Directory -Force -Path $metadataDir | Out-Null
 $metadata = @(
     "Build type: non-release preview",
     "Version: $version",
@@ -52,6 +84,7 @@ Compress-Archive -Path @(
     "dist/app/HellsaizPC_AI",
     "dist/tools/HellsaizLauncher.exe",
     "dist/tools/HellsaizUpdater.exe",
+    "dist/HellsaizPC_AI_Setup.exe",
     "dist/preview/BUILD-METADATA.txt"
 ) -DestinationPath "dist/preview/HellsaizPC_AI-windows-x64-preview.zip" -CompressionLevel Optimal -Force
 
