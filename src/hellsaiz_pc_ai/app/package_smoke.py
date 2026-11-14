@@ -29,7 +29,6 @@ PACKAGED_RUNTIME_MODULES = (
     "sounddevice",
     "vosk",
     "piper",
-    "onnxruntime",
     "pyttsx3",
     "psutil",
     "pycaw.pycaw",
