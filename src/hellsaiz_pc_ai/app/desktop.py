@@ -26,6 +26,7 @@ from hellsaiz_pc_ai.update_client import (
     download_update,
 )
 from hellsaiz_pc_ai.install_layout import installed_app_root, installed_version
+from hellsaiz_pc_ai import startup_task
 from hellsaiz_pc_ai.version import APP_VERSION
 from hellsaiz_pc_ai.core.orchestrator import AssistantOrchestrator
 from hellsaiz_pc_ai.core.registry import ToolRegistry
@@ -2572,6 +2573,89 @@ def main() -> int:
     always_listen_check.toggled.connect(lambda _checked: save_stt_profile())
     refresh_microphone_devices()
 
+    startup_title = QLabel("АВТОЗАПУСК WINDOWS")
+    startup_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
+    settings_layout.addWidget(startup_title)
+    startup_check = QCheckBox("Запускать помощника при входе в Windows")
+    startup_status = QLabel("Проверяю состояние Планировщика заданий…")
+    startup_status.setWordWrap(True)
+    startup_status.setStyleSheet("color:#929aa6;")
+    settings_layout.addWidget(startup_check)
+    settings_layout.addWidget(startup_status)
+    launcher_path = install_root / "HellsaizLauncher.exe" if install_root is not None else None
+    if launcher_path is None or not launcher_path.is_file():
+        startup_check.setEnabled(False)
+        startup_status.setText(
+            "Автозапуск доступен только при запуске установленного приложения через HellsaizLauncher.exe."
+        )
+    else:
+        try:
+            startup_check.setChecked(startup_task.is_registered())
+            startup_status.setText(
+                "Планировщик заданий Windows управляет автозапуском. Уровень запуска: HIGHEST."
+            )
+        except startup_task.StartupTaskError as exc:
+            startup_check.setEnabled(False)
+            startup_status.setText(str(exc))
+
+    startup_workers: list[QThread] = []
+
+    class StartupTaskWorker(QThread):
+        completed = Signal(bool, str)
+
+        def __init__(self, enabled: bool, target: Path) -> None:
+            super().__init__()
+            self.enabled = enabled
+            self.target = target
+
+        def run(self) -> None:
+            try:
+                if self.enabled:
+                    startup_task.register_startup_task(self.target)
+                else:
+                    startup_task.unregister_startup_task()
+                registered = startup_task.is_registered()
+                if registered != self.enabled:
+                    raise startup_task.StartupTaskError(
+                        "Планировщик не подтвердил запрошенное состояние автозапуска."
+                    )
+                self.completed.emit(
+                    registered,
+                    "Автозапуск включён при входе в Windows."
+                    if registered else "Автозапуск отключён."
+                )
+            except startup_task.StartupTaskError as exc:
+                self.completed.emit(not self.enabled, str(exc))
+
+    def change_startup_task(enabled: bool) -> None:
+        if launcher_path is None:
+            startup_check.blockSignals(True)
+            startup_check.setChecked(False)
+            startup_check.blockSignals(False)
+            startup_status.setText("Не найден стабильный HellsaizLauncher.exe.")
+            return
+        if any(worker.isRunning() for worker in startup_workers):
+            return
+        startup_check.setEnabled(False)
+        startup_status.setText("Обновляю задачу Планировщика Windows…")
+        worker = StartupTaskWorker(enabled, launcher_path)
+        startup_workers.append(worker)
+
+        def on_startup_completed(actual_state: bool, message: str) -> None:
+            startup_check.blockSignals(True)
+            startup_check.setChecked(actual_state)
+            startup_check.blockSignals(False)
+            startup_check.setEnabled(True)
+            startup_status.setText(message)
+
+        worker.completed.connect(on_startup_completed)
+        worker.finished.connect(
+            lambda: startup_workers.remove(worker) if worker in startup_workers else None
+        )
+        worker.start()
+
+    startup_check.toggled.connect(change_startup_task)
+
     update_title = QLabel("ОБНОВЛЕНИЯ")
     update_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
     settings_layout.addWidget(update_title)
@@ -3077,6 +3161,7 @@ def main() -> int:
             workers,
             update_workers,
             provider_health_workers,
+            startup_workers,
             voice_download_workers,
             vosk_model_download_workers,
             _BACKGROUND_VOICE_WORKERS["tests"],
