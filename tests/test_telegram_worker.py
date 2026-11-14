@@ -161,6 +161,8 @@ def test_worker_does_not_run_poll_without_required_proxy():
     worker = make_worker(
         network_checker=lambda *_args: type("Health", (), {"ok": False, "latency_ms": 0})(),
         status_callback=statuses.append,
+        network_retry_seconds=0,
     )
+    worker.stop()
     worker.run()
     assert any("ожидает" in item for item in statuses)
