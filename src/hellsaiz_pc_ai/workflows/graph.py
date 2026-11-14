@@ -10,7 +10,7 @@ from hellsaiz_pc_ai.core.models import ToolResult
 from hellsaiz_pc_ai.core.registry import ConfirmCallback, ToolRegistry
 
 NodeKind = Literal["trigger.text", "trigger.hotkey", "trigger.schedule", "trigger.startup", "condition.hour", "condition.weekday", "action.tool", "action.repeat", "action.wait"]
-_ALLOWED_KINDS = {"trigger.text", "trigger.hotkey", "trigger.schedule", "trigger.startup", "condition.hour", "action.tool", "action.repeat", "action.wait"}
+_ALLOWED_KINDS = {"trigger.text", "trigger.hotkey", "trigger.schedule", "trigger.startup", "condition.hour", "condition.weekday", "action.tool", "action.repeat", "action.wait"}
 _ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
 _HOTKEY_RE = re.compile(
     r"^(?:(?:Ctrl|Alt|Shift|Win)\+){1,3}(?:[A-Z0-9]|F(?:[1-9]|1[0-2])|SPACE|ENTER|TAB)$",
