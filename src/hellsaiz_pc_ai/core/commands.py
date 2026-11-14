@@ -34,6 +34,12 @@ class CommandRouter:
         "проводник": "explorer",
         "файловый менеджер": "explorer",
         "explorer": "explorer",
+        "steam": "steam",
+        "стим": "steam",
+        "cs2": "cs2",
+        "кс2": "cs2",
+        "кс 2": "cs2",
+        "контр страйк 2": "cs2",
     }
     PROCESS_SYNONYMS = {
         "дискорд": "discord",
@@ -41,27 +47,63 @@ class CommandRouter:
         "spotify": "spotify",
         "спотифай": "spotify",
     }
-    OPEN_PREFIXES = ("открой ", "открыть ", "запусти ", "запустить ", "open ", "launch ")
+    OPEN_PREFIXES = (
+        "открой мне ", "открыть мне ", "запусти мне ", "запустить мне ",
+        "открой ", "открыть ", "запусти ", "запустить ", "запускай ",
+        "включи ", "включить ", "вруби ", "стартуй ", "старт ", "подними ",
+        "загрузи ", "open ", "launch ", "start ", "run ",
+    )
 
     def __init__(
         self,
         registry: ToolRegistry,
         allowed_apps: dict[str, tuple[str, ...]],
         allowed_processes: dict[str, str] | None = None,
+        app_aliases: dict[str, tuple[str, ...]] | None = None,
+        wake_aliases: tuple[str, ...] | list[str] | None = None,
     ) -> None:
         self.registry = registry
         self.allowed_apps = {name.casefold(): command for name, command in allowed_apps.items()}
+        aliases = wake_aliases or ("Хеллсайз", "Хелсайз", "Хелл", "Hellsaiz", "Hell")
+        self.wake_aliases = tuple(
+            sorted({self._normalize_phrase(alias) for alias in aliases if alias.strip()}, key=len, reverse=True)
+        )
+        self.app_alias_lookup: dict[str, str] = {}
+        for canonical, phrases in (app_aliases or {}).items():
+            canonical_key = canonical.casefold()
+            if canonical_key not in self.allowed_apps:
+                raise ValueError(
+                    f"Application aliases refer to an app outside the allowlist: {canonical_key}"
+                )
+            for phrase in (canonical_key, *phrases):
+                normalized = self._normalize_phrase(phrase)
+                owner = self.app_alias_lookup.get(normalized)
+                if owner is not None and owner != canonical_key:
+                    raise ValueError(f"Ambiguous application alias: {phrase}")
+                self.app_alias_lookup[normalized] = canonical_key
         self.allowed_processes = {
             name.casefold(): executable for name, executable in (allowed_processes or {}).items()
         }
 
     @staticmethod
-    def normalize(text: str) -> str:
-        value = re.sub(r"[\s.,!?;:]+", " ", text.casefold()).strip()
-        for wake_word in ("хеллсайз ", "hellsaiz ", "хелсайз "):
-            if value.startswith(wake_word):
-                value = value[len(wake_word):].strip()
+    def _normalize_phrase(text: str) -> str:
+        return re.sub(r"\s+", " ", text.casefold()).strip()
+
+    def strip_wake_name(self, text: str) -> str:
+        value = text.strip()
+        for wake_name in self.wake_aliases:
+            match = re.match(
+                rf"^{re.escape(wake_name)}(?=$|[\s,.:;!?-])",
+                value,
+                flags=re.IGNORECASE,
+            )
+            if match:
+                return value[match.end():].lstrip(" \t,.:;!?-")
         return value
+
+    def normalize(self, text: str) -> str:
+        value = self.strip_wake_name(text)
+        return re.sub(r"[\s.,!?;:]+", " ", value.casefold()).strip()
 
     def route(self, text: str, confirm: ConfirmCallback | None = None) -> str | None:
         command = self.normalize(text)
@@ -81,10 +123,9 @@ class CommandRouter:
             )
 
         reminder_match = re.match(
-            r"^\s*(?:(?:хеллсайз|hellsaiz|хелсайз)\b[\s,.:;!?-]*)?"
-            r"напомни(?: мне)?\s+через\s+(\d{1,5})\s+"
+            r"^напомни(?: мне)?\s+через\s+(\d{1,5})\s+"
             r"(секунд(?:у|ы|а)?|сек|минут(?:у|ы|а)?|мин|час(?:а|ов)?|ч)\s+(.+?)\s*$",
-            text,
+            command,
             flags=re.IGNORECASE | re.DOTALL,
         )
         if reminder_match:
@@ -113,9 +154,8 @@ class CommandRouter:
             return self._execute("read_clipboard", {}, confirm)
 
         copy_match = re.match(
-            r"^\s*(?:(?:хеллсайз|hellsaiz|хелсайз)\b[\s,.:;!?-]*)?"
-            r"скопируй(?:\s*[:,\-]\s*|\s+)([\s\S]+?)\s*$",
-            text,
+            r"^\s*скопируй(?:\s*[:,\-]\s*|\s+)([\s\S]+?)\s*$",
+            self.strip_wake_name(text),
             flags=re.IGNORECASE,
         )
         if copy_match:
@@ -168,7 +208,11 @@ class CommandRouter:
                     return self._execute("open_url", {"url": target[7:].strip()}, confirm)
                 if target in {"youtube", "ютуб"}:
                     return self._execute("open_url", {"url": "https://www.youtube.com"}, confirm)
-                alias = self.APP_SYNONYMS.get(target, target)
+                normalized_target = self._normalize_phrase(target)
+                alias = self.app_alias_lookup.get(
+                    normalized_target,
+                    self.APP_SYNONYMS.get(normalized_target, normalized_target),
+                )
                 if alias not in self.allowed_apps:
                     options = ", ".join(sorted(self.allowed_apps)) or "нет разрешённых приложений"
                     return f"Приложение «{target}» не добавлено в список разрешённых. Доступно: {options}."
