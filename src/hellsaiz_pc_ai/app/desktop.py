@@ -286,6 +286,8 @@ def main() -> int:
             QWidget,
         )
         from hellsaiz_pc_ai.workflows.qt_canvas import WorkflowCanvas
+        from hellsaiz_pc_ai.telegram.config import TelegramSettings, load_settings as load_telegram_settings, save_settings as save_telegram_settings, validate_bot_token
+        from hellsaiz_pc_ai.telegram.worker import TelegramBotWorker
     except ImportError:
         print("PySide6 is missing. Run: pip install -e .")
         return 2
@@ -335,6 +337,14 @@ def main() -> int:
             "require_proxy_for_telegram": True,
             "launch_on_start": False,
         }
+    telegram_settings_path = settings.workflows_path.parent / "telegram.json"
+    try:
+        telegram_settings = load_telegram_settings(telegram_settings_path)
+    except ValueError as exc:
+        logging.warning("Telegram settings are invalid; Telegram remains disabled: %s", exc)
+        telegram_settings = TelegramSettings()
+    if not telegram_settings.allowed_user_ids or not telegram_settings.allowed_chat_ids:
+        telegram_settings.enabled = False
     raw_tts_rate = profile_data.get("tts_rate", settings.speech.tts_rate)
     tts_rate = (
         int(raw_tts_rate)
@@ -3296,6 +3306,153 @@ def main() -> int:
     download_ocr_models_button.clicked.connect(download_ocr_models)
     verify_ocr_models_button.clicked.connect(verify_ocr_models)
     vision_ocr_check.toggled.connect(persist_vision_settings)
+
+    telegram_title = QLabel("TELEGRAM WORKER")
+    telegram_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
+    settings_layout.addWidget(telegram_title)
+    telegram_help = QLabel(
+        "Дополнительный способ управления без ИИ. Команды доступны только разрешённым user ID "
+        "и chat ID. По умолчанию выключен; разрешены только чтение времени, системы и напоминаний. "
+        "Токен хранится отдельно через Windows DPAPI."
+    )
+    telegram_help.setWordWrap(True)
+    telegram_help.setStyleSheet("color:#929aa6;")
+    settings_layout.addWidget(telegram_help)
+
+    telegram_enabled_check = QCheckBox("Включить Telegram worker")
+    telegram_enabled_check.setChecked(telegram_settings.enabled)
+    telegram_token_edit = QLineEdit(telegram_settings.token)
+    telegram_token_edit.setEchoMode(QLineEdit.Password)
+    telegram_token_edit.setPlaceholderText("Токен бота из BotFather")
+    telegram_users_edit = QLineEdit(", ".join(map(str, telegram_settings.allowed_user_ids)))
+    telegram_users_edit.setPlaceholderText("Разрешённые Telegram user ID через запятую")
+    telegram_chats_edit = QLineEdit(", ".join(map(str, telegram_settings.allowed_chat_ids)))
+    telegram_chats_edit.setPlaceholderText("Разрешённые Telegram chat ID через запятую")
+    telegram_tools_row = QHBoxLayout()
+    telegram_time_check = QCheckBox("Время")
+    telegram_system_check = QCheckBox("Система")
+    telegram_reminders_check = QCheckBox("Напоминания")
+    telegram_time_check.setChecked("get_local_time" in telegram_settings.allowed_tools)
+    telegram_system_check.setChecked("get_system_info" in telegram_settings.allowed_tools)
+    telegram_reminders_check.setChecked("list_reminders" in telegram_settings.allowed_tools)
+    for widget in (telegram_time_check, telegram_system_check, telegram_reminders_check):
+        telegram_tools_row.addWidget(widget)
+    settings_layout.addWidget(telegram_enabled_check)
+    settings_layout.addWidget(telegram_token_edit)
+    settings_layout.addWidget(telegram_users_edit)
+    settings_layout.addWidget(telegram_chats_edit)
+    settings_layout.addLayout(telegram_tools_row)
+
+    telegram_buttons = QHBoxLayout()
+    telegram_save_button = QPushButton("Сохранить Telegram")
+    telegram_start_button = QPushButton("Запустить")
+    telegram_stop_button = QPushButton("Остановить")
+    telegram_buttons.addWidget(telegram_save_button)
+    telegram_buttons.addWidget(telegram_start_button)
+    telegram_buttons.addWidget(telegram_stop_button)
+    settings_layout.addLayout(telegram_buttons)
+    telegram_status = QLabel("Telegram worker выключен.")
+    telegram_status.setWordWrap(True)
+    telegram_status.setStyleSheet("color:#929aa6;")
+    settings_layout.addWidget(telegram_status)
+
+    telegram_worker_state: dict[str, Any] = {"worker": None}
+
+    def parse_telegram_ids(value: str) -> list[int]:
+        items: list[int] = []
+        for token in (part.strip() for part in value.split(",")):
+            if not token:
+                continue
+            if not token.isdecimal() or int(token) <= 0:
+                raise ValueError("Telegram ID должны быть положительными числовыми значениями.")
+            parsed = int(token)
+            if parsed in items:
+                raise ValueError("Telegram ID не должны повторяться.")
+            items.append(parsed)
+        if len(items) > 100:
+            raise ValueError("Можно добавить не более 100 Telegram ID.")
+        return items
+
+    def persist_telegram_settings() -> bool:
+        try:
+            telegram_settings.token = (
+                validate_bot_token(telegram_token_edit.text())
+                if telegram_token_edit.text().strip() else telegram_settings.token
+            )
+            telegram_settings.enabled = telegram_enabled_check.isChecked()
+            telegram_settings.allowed_user_ids[:] = parse_telegram_ids(telegram_users_edit.text())
+            telegram_settings.allowed_chat_ids[:] = parse_telegram_ids(telegram_chats_edit.text())
+            telegram_settings.allowed_tools[:] = [
+                tool_name for tool_name, enabled in (
+                    ("get_local_time", telegram_time_check.isChecked()),
+                    ("get_system_info", telegram_system_check.isChecked()),
+                    ("list_reminders", telegram_reminders_check.isChecked()),
+                ) if enabled
+            ]
+            if telegram_settings.enabled and (
+                not telegram_settings.allowed_user_ids or not telegram_settings.allowed_chat_ids
+            ):
+                raise ValueError("Укажи хотя бы один разрешённый user ID и chat ID.")
+            save_telegram_settings(telegram_settings_path, telegram_settings)
+            telegram_status.setText("Настройки сохранены. Токен защищён через DPAPI.")
+            return True
+        except (ValueError, OSError, SecureStoreError) as exc:
+            telegram_status.setText(f"Не удалось сохранить Telegram: {exc}")
+            return False
+
+    def start_telegram_worker() -> None:
+        if not persist_telegram_settings():
+            return
+        if not telegram_settings.enabled:
+            telegram_status.setText("Сначала включи Telegram worker.")
+            return
+        if not telegram_settings.allowed_tools:
+            telegram_status.setText("Разреши хотя бы одну безопасную команду.")
+            return
+        existing = telegram_worker_state.get("worker")
+        if existing is not None and existing.is_alive():
+            telegram_status.setText("Telegram worker уже работает.")
+            return
+        proxy = str(network_settings.get("proxy_url") or "")
+        require_proxy = bool(network_settings.get("require_proxy_for_telegram", True))
+        if require_proxy and not proxy:
+            telegram_status.setText("Сначала настрой локальный HTTP-прокси v2RayTun.")
+            return
+        try:
+            worker = TelegramBotWorker(
+                telegram_settings.token,
+                registry,
+                allowed_user_ids=telegram_settings.allowed_user_ids,
+                allowed_chat_ids=telegram_settings.allowed_chat_ids,
+                allowed_tools=telegram_settings.allowed_tools,
+                proxy_url=proxy,
+                require_proxy=require_proxy,
+                health_url=str(network_settings.get("health_url") or v2raytun.DEFAULT_HEALTH_URL),
+                app_version=current_app_version,
+                status_callback=lambda text: QTimer.singleShot(0, lambda: telegram_status.setText(text)),
+            )
+            telegram_worker_state["worker"] = worker
+            worker.start()
+            telegram_status.setText("Telegram worker запускается; проверяю доступ через настроенный прокси.")
+        except (ValueError, SecureStoreError) as exc:
+            telegram_status.setText(f"Telegram worker не запущен: {exc}")
+
+    def stop_telegram_worker() -> None:
+        worker = telegram_worker_state.get("worker")
+        if worker is not None:
+            worker.stop()
+            if worker.is_alive():
+                worker.join(timeout=3)
+            if not worker.is_alive():
+                telegram_worker_state["worker"] = None
+                telegram_status.setText("Telegram worker остановлен.")
+            else:
+                telegram_status.setText("Telegram worker завершает сетевой запрос.")
+
+    telegram_save_button.clicked.connect(persist_telegram_settings)
+    telegram_start_button.clicked.connect(start_telegram_worker)
+    telegram_stop_button.clicked.connect(stop_telegram_worker)
+    telegram_enabled_check.toggled.connect(lambda _checked: persist_telegram_settings())
 
     startup_title = QLabel("АВТОЗАПУСК WINDOWS")
     startup_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
