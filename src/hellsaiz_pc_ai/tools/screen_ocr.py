@@ -6,6 +6,7 @@ from typing import Any
 
 from hellsaiz_pc_ai.core.models import RiskLevel, ToolResult
 from hellsaiz_pc_ai.core.registry import ToolRegistry, ToolSpec
+from hellsaiz_pc_ai.tools.ocr_models import OcrModelError, check_russian_ocr_models, model_path
 
 
 MAX_IMAGE_EDGE = 2560
@@ -91,11 +92,12 @@ def _extract_text(result: Any) -> list[str]:
 def read_primary_screen_text(
     *,
     capture: Callable[[], Any] = _capture_primary_monitor,
-    engine_factory: Callable[[], Any] = _get_engine,
+    engine_factory: Callable[[], Any] | None = None,
+    model_root: Any | None = None,
 ) -> ToolResult:
     try:
+        engine = engine_factory() if engine_factory is not None else _get_engine(model_root)
         image = capture()
-        engine = engine_factory()
         output = engine(image)
         lines = _extract_text(output)
         if not lines:
