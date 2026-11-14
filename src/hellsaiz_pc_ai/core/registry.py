@@ -44,6 +44,10 @@ class ToolRegistry:
             raise ValueError("Tool arguments schema must have type='object'.")
         self._tools[spec.name] = spec
 
+    def get_spec(self, name: str) -> ToolSpec | None:
+        """Return immutable tool metadata for host-side permission checks."""
+        return self._tools.get(name)
+
     def openai_schemas(self) -> list[dict[str, Any]]:
         return [spec.as_openai_tool() for spec in self._tools.values()]
 
