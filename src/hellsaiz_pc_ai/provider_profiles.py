@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -207,3 +208,10 @@ def active_profile(store: dict[str, Any]) -> dict[str, Any]:
         for item in normalized["profiles"]
         if item["name"] == normalized["active_profile"]
     )
+
+
+def provider_credential_path(user_data_root: Path, profile_name: str) -> Path:
+    """Return a stable opaque path; raw profile names are never used as filenames."""
+    normalized = profile_name.casefold().strip().encode("utf-8")
+    digest = hashlib.sha256(normalized).hexdigest()[:24]
+    return Path(user_data_root) / "provider_credentials" / f"{digest}.dpapi"
