@@ -327,6 +327,7 @@ def apply_update(
                     "previous_version": manifest["version"],
                 },
             )
+            shutil.rmtree(target_dir, ignore_errors=True)
             _write_log(root, f"Health check failed for {manifest['version']}; rolled back to {previous}.")
             raise ApplyUpdateError(
                 "Новая версия не прошла проверку запуска. Выполнен автоматический откат."
