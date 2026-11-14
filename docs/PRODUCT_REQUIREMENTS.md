@@ -40,7 +40,7 @@ The command pipeline should be layered:
 2. Resolve a known intent from phrase aliases and patterns.
 3. Resolve the entity from a user-editable catalog (applications, games, folders, sites and workflow profiles).
 4. Validate arguments against the host tool schema.
-5. Apply the risk policy and request confirmation when required.
+5. Apply explicit permission policy and execute only user-requested, allowlisted actions. Do not show per-action confirmation dialogs.
 6. Execute through the registered tool; display what was understood and what was done.
 7. Use an enabled LLM as a fallback for ambiguous/unmapped language, not as permission to execute arbitrary code.
 
@@ -85,7 +85,7 @@ Required capabilities, added incrementally and through typed tools:
 - use Win32 and controlled mouse/keyboard automation as a fallback when accessibility metadata is unavailable;
 - take a screenshot and use local OCR/vision only when the user has enabled the relevant provider;
 - manage files and folders through typed operations with path validation and preview;
-- expose clear confirmation for destructive actions (delete, overwrite, terminate process, system settings).
+- keep destructive capabilities disabled by default unless they have strict path scoping, typed arguments and explicit permission policy; do not rely on modal confirmation dialogs.
 
 "Control any app" is a best-effort product goal, not a promise to bypass Windows security boundaries. Applications with custom rendering, anti-cheat, protected processes, secure desktop/UAC prompts, locked sessions or inaccessible controls may reject automation. Report the limitation instead of faking success.
 
@@ -93,7 +93,7 @@ Required capabilities, added incrementally and through typed tools:
 
 The requested Windows release should declare requestedExecutionLevel=requireAdministrator, so Windows displays its normal UAC consent/credential prompt when required. The program must never bypass UAC, self-elevate silently or modify UAC policy.
 
-Run-level elevation is not equivalent to unlimited system control. Keep explicit action permissions and confirmations even when elevated. Do not set uiAccess=true unless a separately signed and installed accessibility component meets Microsoft's UIAccess requirements; do not claim that an elevated process can automate the secure desktop or protected UI.
+Run-level elevation is not equivalent to unlimited system control. Keep explicit action permissions, allowlists and strict argument validation even when elevated. Do not set uiAccess=true unless a separately signed and installed accessibility component meets Microsoft's UIAccess requirements; do not claim that an elevated process can automate the secure desktop or protected UI.
 
 ## 8. EXE, release and startup
 
