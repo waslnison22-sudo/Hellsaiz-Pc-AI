@@ -294,7 +294,7 @@ class CommandRouter:
             return value
 
         list_files_match = re.fullmatch(
-            r"(?:покажи файлы в папке|список файлов в папке|что находится в папке)\\s+(.+)",
+            r"(?:покажи файлы в папке|список файлов в папке|что находится в папке)\s+(.+)",
             raw_command,
             flags=re.IGNORECASE,
         )
@@ -321,7 +321,7 @@ class CommandRouter:
             )
 
         read_file_match = re.fullmatch(
-            r"(?:прочитай файл|прочитай содержимое файла)\\s+(.+)",
+            r"(?:прочитай файл|прочитай содержимое файла)\s+(.+)",
             raw_command,
             flags=re.IGNORECASE,
         )
@@ -333,7 +333,7 @@ class CommandRouter:
             )
 
         open_path_match = re.fullmatch(
-            r"открой (?:файл|папку|документ)\\s+(.+)",
+            r"открой (?:файл|папку|документ)\s+(.+)",
             raw_command,
             flags=re.IGNORECASE,
         )
