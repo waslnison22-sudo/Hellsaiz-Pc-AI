@@ -226,6 +226,7 @@ class CommandRouter:
             "минимизируй окно": "minimize_active_window",
             "сверни текущее окно": "minimize_active_window",
             "разверни окно": "maximize_active_window",
+            "разверни текущее окно": "maximize_active_window",
             "развернуть окно": "maximize_active_window",
             "максимизируй окно": "maximize_active_window",
             "восстанови окно": "restore_active_window",
