@@ -1,15 +1,32 @@
 name: CI
+
 on:
   push:
     branches: [main, "dev/**"]
   pull_request:
+
 jobs:
   test:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest]
-        python-version: ["3.11", "3.12"]
+        include:
+          - os: ubuntu-latest
+            python-version: "3.11"
+            extras: "dev"
+            group: core-linux
+          - os: ubuntu-latest
+            python-version: "3.12"
+            extras: "dev"
+            group: core-linux
+          - os: windows-latest
+            python-version: "3.11"
+            extras: "dev,windows,voice,vision"
+            group: full-windows
+          - os: windows-latest
+            python-version: "3.12"
+            extras: "dev,windows,voice,vision"
+            group: full-windows
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -17,96 +34,82 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-      - name: Install test dependencies
+
+      - name: Install dependencies
         shell: bash
         run: |
-          set +e
-          python -m pip install --upgrade pip > pip-install-report.txt 2>&1
-          first_status=$?
-          python -m pip install -e ".[dev,windows,voice,vision]" >> pip-install-report.txt 2>&1
-          install_status=$?
-          cat pip-install-report.txt
-          {
-            echo "## Dependency installation · ${{ matrix.os }} · Python ${{ matrix.python-version }}"
-            cat pip-install-report.txt
-          } >> "$GITHUB_STEP_SUMMARY"
-          if [ "$first_status" -ne 0 ] || [ "$install_status" -ne 0 ]; then exit 1; fi
-      - name: Diagnose imports and lint before tests
+          set -o pipefail
+          python -m pip install --upgrade pip 2>&1 | tee pip-bootstrap.txt
+          python -m pip install -e ".[${{ matrix.extras }}]" 2>&1 | tee pip-install.txt
+
+      - name: Run import diagnostics
         shell: bash
         run: |
-          set +e
-          python - <<'PY' > diagnostics.txt 2>&1
+          python - <<'PY' | tee import-report.txt
           import importlib
+          import sys
+
           modules = [
-              "PySide6.QtCore", "PySide6.QtWidgets",
-              "hellsaiz_pc_ai.app.desktop", "hellsaiz_pc_ai.telegram.config",
-              "hellsaiz_pc_ai.telegram.worker", "hellsaiz_pc_ai.network.v2raytun",
-              "hellsaiz_pc_ai.tools.file_system", "hellsaiz_pc_ai.tools.ui_automation",
-              "hellsaiz_pc_ai.companion.controller", "hellsaiz_pc_ai.companion.model_manifest",
-              "hellsaiz_pc_ai.startup_task", "hellsaiz_pc_ai.app.file_access",
-              "hellsaiz_pc_ai.tools.screen_ocr", "hellsaiz_pc_ai.tools.ocr_models",
-              "rapidocr", "onnxruntime", "mss", "pywinauto", "comtypes",
-              "vosk", "piper", "sounddevice", "numpy", "psutil", "pycaw", "pynput",
+              "hellsaiz_pc_ai.core.commands",
+              "hellsaiz_pc_ai.core.registry",
+              "hellsaiz_pc_ai.telegram.config",
+              "hellsaiz_pc_ai.telegram.worker",
+              "hellsaiz_pc_ai.network.v2raytun",
+              "hellsaiz_pc_ai.tools.file_system",
+              "hellsaiz_pc_ai.companion.controller",
+              "hellsaiz_pc_ai.companion.model_manifest",
+              "hellsaiz_pc_ai.startup_task",
+              "hellsaiz_pc_ai.app.file_access",
           ]
-          failed = []
-          for name in modules:
+          if sys.platform == "win32":
+              modules += [
+                  "PySide6.QtCore", "PySide6.QtWidgets",
+                  "hellsaiz_pc_ai.app.desktop",
+                  "hellsaiz_pc_ai.tools.ui_automation",
+                  "hellsaiz_pc_ai.tools.screen_ocr",
+                  "hellsaiz_pc_ai.tools.ocr_models",
+                  "rapidocr", "onnxruntime", "mss", "pywinauto", "comtypes",
+                  "vosk", "piper", "sounddevice", "numpy", "psutil", "pycaw", "pynput",
+              ]
+          errors = []
+          for module in modules:
               try:
-                  importlib.import_module(name)
-                  print("OK", name)
-              except Exception as exc:
-                  failed.append(name)
-                  print("FAILED", name, type(exc).__name__, str(exc))
-          raise SystemExit(1 if failed else 0)
+                  importlib.import_module(module)
+                  print("OK", module)
+              except Exception as error:
+                  errors.append((module, type(error).__name__, str(error)))
+                  print("FAILED", module, type(error).__name__, str(error))
+          if errors:
+              raise SystemExit(1)
           PY
-          import_status=$?
-          cat diagnostics.txt
-          ruff check . --output-format=full > ruff-diagnostics.txt 2>&1
-          ruff_status=$?
-          cat ruff-diagnostics.txt
-          {
-            echo "## Pre-test diagnostics · ${{ matrix.os }} · Python ${{ matrix.python-version }}"
-            echo '### Imports'
-            cat diagnostics.txt
-            echo '### Ruff'
-            cat ruff-diagnostics.txt
-          } >> "$GITHUB_STEP_SUMMARY"
-          if [ "$import_status" -ne 0 ] || [ "$ruff_status" -ne 0 ]; then exit 1; fi
-      - name: Run pytest and publish summary
+
+      - name: Run Ruff
         shell: bash
-        run: |
-          set +e
-          pytest -q --junitxml=pytest-results.xml > pytest-report.txt 2>&1
-          status=$?
-          cat pytest-report.txt
-          {
-            echo "## Pytest · ${{ matrix.os }} · Python ${{ matrix.python-version }}"
-            echo
-            tail -n 100 pytest-report.txt
-          } >> "$GITHUB_STEP_SUMMARY"
-          exit "$status"
-      - name: Run Ruff and publish summary
-        if: always()
+        run: ruff check . --output-format=full
+
+      - name: Run core tests
+        if: matrix.group == 'core-linux'
         shell: bash
+        run: pytest -q --junitxml=pytest-core.xml
+
+      - name: Run full Windows test suite
+        if: matrix.group == 'full-windows'
+        shell: pwsh
         run: |
-          set +e
-          ruff check . --output-format=full > ruff-report.txt 2>&1
-          status=$?
-          cat ruff-report.txt
-          {
-            echo "## Ruff · ${{ matrix.os }} · Python ${{ matrix.python-version }}"
-            echo
-            cat ruff-report.txt
-          } >> "$GITHUB_STEP_SUMMARY"
-          exit "$status"
+          python -m pytest -q --junitxml=pytest-windows.xml
+          if ($LASTEXITCODE -ne 0) { throw "Windows pytest suite failed." }
+
       - name: Upload test diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-diagnostics-${{ matrix.os }}-py${{ matrix.python-version }}
+          name: test-diagnostics-${{ matrix.group }}-py${{ matrix.python-version }}
           path: |
-            pytest-report.txt
-            pytest-results.xml
-            ruff-report.txt
+            pip-bootstrap.txt
+            pip-install.txt
+            import-report.txt
+            pytest-core.xml
+            pytest-windows.xml
           if-no-files-found: warn
           retention-days: 7
 
@@ -116,22 +119,11 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
-
-      - name: Build application, launcher and updater
+      - name: Build and verify Windows package
         shell: pwsh
         run: ./scripts/build_preview.ps1
-
-      - name: Verify preview installer output
-        shell: pwsh
-        run: |
-          if (-not (Test-Path "dist/HellsaizPC_AI_Setup.exe" -PathType Leaf)) { throw "Setup installer is missing." }
-          if ((Get-Item "dist/HellsaizPC_AI_Setup.exe").Length -le 0) { throw "Setup installer is empty." }
-          Write-Host "Windows executable and installer build verified."
