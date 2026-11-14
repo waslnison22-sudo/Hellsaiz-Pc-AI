@@ -17,3 +17,12 @@ The internal full and delta update ZIPs are a separate format: they contain only
 The update settings support checking the configured GitHub release channel. An optional access token is protected with Windows DPAPI and is never written to ordinary TOML settings or chat history. Checking for updates does not install them. Download and installation require an explicit user action. The updater verifies the signed manifest, file paths, sizes and hashes before activation; it retains the current build until the new version passes its health start and keeps one previous version for rollback.
 
 The base package contains the desktop runtime only. LLM weights, speech models, voices, and optional plug-ins are installed separately and stored in user-selected locations.
+
+
+## 0.1.4 — personal glass HUD
+
+- Navigation is a permanent graphite glass sidebar; the Windows title bar remains native.
+- The workspace uses a pure black background by default. Optional static images and GIFs are copied to the per-user local data directory; no external URL wallpaper loading is supported.
+- The "Обои" page selects local wallpapers and restores black on reset.
+- The "Голоса" page manages Piper ONNX models, downloads each model with its JSON config and MODEL_CARD, and can select Piper or Windows SAPI5 for speech output.
+- The 3D companion is deliberately postponed until the command and voice foundation is stable.

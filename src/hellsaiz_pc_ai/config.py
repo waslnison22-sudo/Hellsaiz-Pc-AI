@@ -14,6 +14,8 @@ DEFAULT_WAKE_ALIASES = (
     "Хелл",
     "Hellsaiz",
     "Hell",
+    "Хелп",
+    "Help",
 )
 
 

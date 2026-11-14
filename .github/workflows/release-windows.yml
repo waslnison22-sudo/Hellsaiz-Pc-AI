@@ -35,7 +35,7 @@ jobs:
           python -m pip install -e ".[build,windows,voice]"
           if ($LASTEXITCODE -ne 0) { throw "Dependency installation failed." }
 
-          pyinstaller --noconfirm --clean --onedir --windowed --uac-admin --name HellsaizPC_AI --distpath dist/app --workpath build/app --collect-all vosk --collect-all sounddevice --collect-all pycaw --collect-all pynput src/hellsaiz_pc_ai/__main__.py
+          pyinstaller --noconfirm --clean --onedir --windowed --uac-admin --name HellsaizPC_AI --distpath dist/app --workpath build/app --collect-all vosk --collect-all sounddevice --collect-all pycaw --collect-all pynput --collect-all piper --collect-all onnxruntime src/hellsaiz_pc_ai/__main__.py
           if ($LASTEXITCODE -ne 0) { throw "Desktop build failed." }
 
           pyinstaller --noconfirm --clean --onefile --windowed --uac-admin --name HellsaizLauncher --distpath dist/tools --workpath build/launcher src/hellsaiz_pc_ai/launcher.py

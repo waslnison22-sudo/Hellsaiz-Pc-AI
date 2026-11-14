@@ -140,3 +140,13 @@ Telegram bot (later milestone):
 - Test v2RayTun detection/proxy health using mocks; never require a VPN in CI.
 - Continue running pytest and ruff check . on Windows/Linux and Python 3.11/3.12.
 - A feature is complete only when the UI, persistence, error/fallback path, tests and documentation are present.
+
+
+## 12. Personal HUD and media library (0.1.4)
+
+- This is a private, single-user Windows application. No public marketplace, user accounts, telemetry, or shared voice/wallpaper uploads are part of the design.
+- Main window: Windows-native title bar, permanent glass sidebar, transparent graphite workspace surfaces, cool white controls and an optional user-owned wallpaper. The default background is plain black.
+- Wallpapers: import local PNG/JPG/WEBP/BMP/GIF, store a private copy under the user data directory, validate the format and size, and support GIF playback. Reset restores pure black.
+- Voices: Windows SAPI5 remains available. Piper is an optional offline neural TTS backend. The app downloads model, config and MODEL_CARD into local user storage, displays model-card license, and allows model selection and playback testing.
+- The 3D assistant character is postponed. It is not required for the 0.1.4 core.
+- Natural-language command handling follows an intent-and-slot design inspired by voice-assistant skill systems: classify the request first, then extract parameters and invoke a deterministic local skill or an explicitly online information skill.

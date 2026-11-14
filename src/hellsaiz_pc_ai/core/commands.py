@@ -4,6 +4,7 @@ import re
 from typing import Any
 
 from hellsaiz_pc_ai.core.models import ToolResult
+from hellsaiz_pc_ai.core.intent_engine import build_default_intent_engine
 from hellsaiz_pc_ai.core.registry import ConfirmCallback, ToolRegistry
 
 
@@ -15,6 +16,8 @@ HELP_TEXT = (
     "• «прочитай буфер обмена», «скопируй текст»\n"
     "• «напомни через 5 минут…», «мои напоминания»\n"
     "• «открой сайт example.com»\n"
+    "• «найди в интернете…», «поищи информацию о…»\n"
+    "• «погода в Москве», «курс доллара к рублю»\n"
     "• «который час», «какая дата», «информация о системе»\n"
     "• «заблокируй компьютер»\n"
     "• «помощь» или «список команд»\n\n"
@@ -64,7 +67,7 @@ class CommandRouter:
     ) -> None:
         self.registry = registry
         self.allowed_apps = {name.casefold(): command for name, command in allowed_apps.items()}
-        aliases = wake_aliases or ("Хеллсайз", "Хелсайз", "Хелл", "Hellsaiz", "Hell")
+        aliases = wake_aliases or ("Хеллсайз", "Хелсайз", "Хелл", "Hellsaiz", "Hell", "Хелп", "Help")
         self.wake_aliases = tuple(
             sorted({self._normalize_phrase(alias) for alias in aliases if alias.strip()}, key=len, reverse=True)
         )
@@ -87,6 +90,7 @@ class CommandRouter:
         self.allowed_processes = {
             name.casefold(): executable for name, executable in (allowed_processes or {}).items()
         }
+        self.intent_engine = build_default_intent_engine()
 
     @staticmethod
     def _normalize_phrase(text: str) -> str:
@@ -112,6 +116,35 @@ class CommandRouter:
         command = self.normalize(text)
         if not command:
             return "Скажите или напишите команду. Для списка возможностей введите «помощь»."
+
+
+        # Resolve the utterance to an intent and extract typed slots before execution.
+        intent = self.intent_engine.resolve(command)
+        if intent is not None:
+            if intent.name == "web_search":
+                query = intent.slots.get("query", "").strip()
+                return self._execute("web_search", {"query": query}, confirm) if query else (
+                    "Что именно нужно найти в интернете?"
+                )
+            if intent.name == "weather":
+                city = re.sub(r"\s+(?:сейчас|сегодня)$", "", intent.slots.get("city", "")).strip()
+                if not city:
+                    return "Для какого города узнать погоду?"
+                return self._execute("get_weather", {"city": city}, confirm)
+            if intent.name == "exchange_rate":
+                currency_names = {
+                    "доллар": "USD", "доллара": "USD", "доллары": "USD", "usd": "USD",
+                    "евро": "EUR", "eur": "EUR", "юань": "CNY", "юаня": "CNY", "cny": "CNY",
+                    "рубль": "RUB", "рубля": "RUB", "рублю": "RUB", "rub": "RUB",
+                    "фунт": "GBP", "фунта": "GBP", "gbp": "GBP",
+                }
+                base = currency_names[intent.slots["base"]]
+                quote_currency = currency_names.get(intent.slots.get("quote", "рубль"), "RUB")
+                return self._execute(
+                    "get_exchange_rate",
+                    {"base": base, "quote_currency": quote_currency},
+                    confirm,
+                )
 
         if command in {"помощь", "команды", "список команд", "что умеешь", "help", "/help"}:
             return HELP_TEXT

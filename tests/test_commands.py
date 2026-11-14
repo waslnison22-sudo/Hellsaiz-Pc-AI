@@ -1,6 +1,7 @@
 import pytest
 from hellsaiz_pc_ai.core.commands import CommandRouter
 from hellsaiz_pc_ai.core.models import RiskLevel, ToolResult
+from hellsaiz_pc_ai.core.intent_engine import build_default_intent_engine
 from hellsaiz_pc_ai.core.registry import ToolRegistry, ToolSpec
 
 
@@ -30,6 +31,27 @@ def make_router(allowed_apps=None, app_aliases=None, wake_aliases=None):
         "close_process", "close",
         {"type": "object", "properties": {"process": {"type": "string"}}, "required": ["process"]},
         RiskLevel.CONFIRM, lambda args: ToolResult(True, f"closed {args['process']}"),
+    ))
+    registry.register(ToolSpec(
+        "web_search", "web search",
+        {"type": "object", "properties": {"query": {"type": "string", "minLength": 2}},
+         "required": ["query"], "additionalProperties": False},
+        RiskLevel.SAFE, lambda args: ToolResult(True, f"search: {args['query']}"),
+    ))
+    registry.register(ToolSpec(
+        "get_weather", "weather",
+        {"type": "object", "properties": {"city": {"type": "string"}},
+         "required": ["city"], "additionalProperties": False},
+        RiskLevel.SAFE, lambda args: ToolResult(True, f"weather: {args['city']}"),
+    ))
+    registry.register(ToolSpec(
+        "get_exchange_rate", "rate",
+        {"type": "object", "properties": {
+            "base": {"type": "string"}, "quote_currency": {"type": "string"}},
+         "required": ["base", "quote_currency"], "additionalProperties": False},
+        RiskLevel.SAFE, lambda args: ToolResult(
+            True, f"rate: {args['base']}/{args['quote_currency']}"
+        ),
     ))
     clipboard_content = {"value": ""}
     registry.register(ToolSpec(
@@ -255,3 +277,45 @@ def test_user_alias_cannot_shadow_another_canonical_app_id():
             allowed_apps={"steam": ("steam.exe",), "cs2": ("cs2.exe",)},
             app_aliases={"steam": ("cs2",)},
         )
+
+
+
+def test_alice_style_search_phrasings_resolve_to_one_skill():
+    router = make_router()
+    phrases = (
+        "Хелп, найди в интернете локальные нейросети",
+        "поищи в сети локальные нейросети",
+        "загугли локальные нейросети",
+        "что известно про локальные нейросети",
+    )
+    for phrase in phrases:
+        assert router.route(phrase) == "Готово. search: локальные нейросети"
+
+
+def test_weather_skill_extracts_city_and_asks_when_missing():
+    router = make_router()
+    assert router.route("какая погода в Москве") == "Готово. weather: москва"
+    assert "для какого города" in router.route("Хелп, погода").casefold()
+
+
+def test_currency_skill_extracts_base_and_quote_currency():
+    router = make_router()
+    assert router.route("курс доллара к рублю") == "Готово. rate: USD/RUB"
+    assert router.route("сколько стоит евро") == "Готово. rate: EUR/RUB"
+
+
+
+def test_intent_engine_extracts_named_slots():
+    engine = build_default_intent_engine()
+
+    search = engine.resolve("найди в интернете как устроен onnx")
+    weather = engine.resolve("погода в Белграде сегодня")
+    rate = engine.resolve("курс евро к доллару")
+
+    assert search.name == "web_search"
+    assert search.slots["query"] == "как устроен onnx"
+    assert weather.name == "weather"
+    assert weather.slots["city"] == "белграде сегодня"
+    assert rate.name == "exchange_rate"
+    assert rate.slots["base"] == "евро"
+    assert rate.slots["quote"] == "доллар"

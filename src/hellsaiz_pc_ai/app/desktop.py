@@ -36,6 +36,12 @@ from hellsaiz_pc_ai.storage.sqlite_store import ChatStore
 from hellsaiz_pc_ai.tools.clipboard import register_clipboard_tools
 from hellsaiz_pc_ai.tools.reminders import register_reminder_tools
 from hellsaiz_pc_ai.tools.system import register_system_tools
+from hellsaiz_pc_ai.tools.public_info import register_public_info_tools
+from hellsaiz_pc_ai.app.wallpaper import WallpaperError, WallpaperStore
+from hellsaiz_pc_ai.speech.voice_library import (
+    VoiceLibraryError, download_voice, list_installed_voices,
+)
+from hellsaiz_pc_ai.speech.piper import PiperSynthesizer
 from hellsaiz_pc_ai.tools.windows import register_windows_tools
 from hellsaiz_pc_ai.workflows.builder import append_hour_condition, append_repeat_action, append_tool_action, append_wait_action, append_weekday_condition, terminal_nodes
 from hellsaiz_pc_ai.workflows.graph import WorkflowGraph, WorkflowGraphRunner, WorkflowTrigger
@@ -46,6 +52,7 @@ from hellsaiz_pc_ai.workflows.scheduler import WorkflowScheduler
 def build_runtime(settings: Settings):
     registry = ToolRegistry()
     register_system_tools(registry)
+    register_public_info_tools(registry)
 
     catalog_path = settings.workflows_path.parent / "apps.json"
     try:
@@ -125,7 +132,7 @@ def main() -> int:
     try:
         from PySide6.QtCore import QObject, QEasingCurve, QPropertyAnimation, Qt, QThread, QTimer, Signal, Slot
         from PySide6.QtCore import QUrl
-        from PySide6.QtGui import QDesktopServices, QFont
+        from PySide6.QtGui import QDesktopServices, QFont, QMovie, QPixmap
         from PySide6.QtWidgets import (
             QApplication,
             QCheckBox,
@@ -142,6 +149,8 @@ def main() -> int:
             QPlainTextEdit,
             QPushButton,
             QSplitter,
+            QStackedLayout,
+            QStackedWidget,
             QStyle,
             QSystemTrayIcon,
             QTabWidget,
@@ -170,8 +179,11 @@ def main() -> int:
     app = QApplication.instance() or QApplication([])
     window = QMainWindow()
     window.setWindowTitle(settings.app_name)
-    window.resize(1080, 760)
-    window.setMinimumSize(860, 600)
+    window.resize(1240, 820)
+    window.setMinimumSize(900, 640)
+    wallpaper_store = WallpaperStore(settings.workflows_path.parent)
+    wallpaper_movie = None
+    wallpaper_layer = None
 
     class ApprovalBroker(QObject):
         request = Signal(str, object, object)
@@ -293,16 +305,31 @@ def main() -> int:
 
                 if self.speak_reply:
                     try:
-                        from hellsaiz_pc_ai.speech.sapi5 import Sapi5Synthesizer
+                        if profile_data.get("tts_engine") == "piper":
+                            voice_id = str(profile_data.get("piper_voice_id") or "")
+                            voice_models = list_installed_voices(
+                                settings.workflows_path.parent / "voices"
+                            )
+                            selected_model = next(
+                                (voice for voice in voice_models if voice.voice_id == voice_id),
+                                None,
+                            )
+                            if selected_model is None:
+                                raise RuntimeError(
+                                    "Выбранная модель Piper не установлена. Открой раздел «Голоса»."
+                                )
+                            PiperSynthesizer(selected_model.model_path).speak(answer)
+                        else:
+                            from hellsaiz_pc_ai.speech.sapi5 import Sapi5Synthesizer
 
-                        Sapi5Synthesizer(
-                            active_voice["name"],
-                            settings.speech.tts_rate,
-                            settings.speech.tts_volume,
-                        ).speak(answer)
+                            Sapi5Synthesizer(
+                                active_voice["name"],
+                                settings.speech.tts_rate,
+                                settings.speech.tts_volume,
+                            ).speak(answer)
                     except Exception as exc:
                         logging.warning("Speech output unavailable: %s", exc)
-                        answer += "\n\n[Голос недоступен: установите RHVoice и пакет voice.]"
+                        answer += "\n\n[Не удалось воспроизвести голос. Проверь выбранный движок и модель.]"
 
                 stored_prompt = (
                     prompt
@@ -1242,6 +1269,264 @@ def main() -> int:
     refresh_apps_list()
     tabs.addTab(apps_page, "Приложения")
 
+
+    # Personal wallpaper library: no selected file means a completely black background.
+    wallpaper_page = QWidget()
+    wallpaper_layout = QVBoxLayout(wallpaper_page)
+    wallpaper_layout.setContentsMargins(28, 24, 28, 24)
+    wallpaper_layout.setSpacing(14)
+    wallpaper_title = QLabel("ОБОИ")
+    wallpaper_title.setStyleSheet("font-size:24px; font-weight:650; color:#eef2f7;")
+    wallpaper_layout.addWidget(wallpaper_title)
+    wallpaper_description = QLabel(
+        "Выбери статичное изображение или GIF для фона приложения. "
+        "Файл хранится только на этом компьютере. По умолчанию используется чистый чёрный фон."
+    )
+    wallpaper_description.setWordWrap(True)
+    wallpaper_description.setStyleSheet("color:#aab3c0;")
+    wallpaper_layout.addWidget(wallpaper_description)
+
+    wallpaper_preview = QFrame()
+    wallpaper_preview.setObjectName("wallpaperPreview")
+    wallpaper_preview.setMinimumHeight(210)
+    wallpaper_preview_layout = QVBoxLayout(wallpaper_preview)
+    wallpaper_preview_layout.setContentsMargins(22, 20, 22, 20)
+    wallpaper_preview_title = QLabel("ПРЕДПРОСМОТР")
+    wallpaper_preview_title.setStyleSheet("color:#aeb7c4; font-size:10px; letter-spacing:1.8px;")
+    wallpaper_preview_layout.addWidget(wallpaper_preview_title)
+    wallpaper_status = QLabel("Используется чистый чёрный фон.")
+    wallpaper_status.setWordWrap(True)
+    wallpaper_status.setStyleSheet("color:#e6ecf4; font-size:15px;")
+    wallpaper_preview_layout.addWidget(wallpaper_status)
+    wallpaper_preview_layout.addStretch(1)
+    wallpaper_layout.addWidget(wallpaper_preview)
+    wallpaper_actions = QHBoxLayout()
+    choose_wallpaper_button = QPushButton("Выбрать изображение / GIF")
+    choose_wallpaper_button.setObjectName("primaryButton")
+    clear_wallpaper_button = QPushButton("Сбросить на чёрный фон")
+    wallpaper_actions.addWidget(choose_wallpaper_button)
+    wallpaper_actions.addWidget(clear_wallpaper_button)
+    wallpaper_layout.addLayout(wallpaper_actions)
+    wallpaper_limit = QLabel("Форматы: PNG, JPG, WEBP, BMP, GIF · максимум 100 МБ")
+    wallpaper_limit.setStyleSheet("color:#8e98a6; font-size:11px;")
+    wallpaper_layout.addWidget(wallpaper_limit)
+
+    def persist_wallpaper_status() -> None:
+        selected_wallpaper = wallpaper_store.active_wallpaper()
+        if selected_wallpaper is None:
+            wallpaper_status.setText("Используется чистый чёрный фон.")
+        else:
+            kind = "Анимированные GIF-обои" if selected_wallpaper.suffix.lower() == ".gif" else "Статичные обои"
+            wallpaper_status.setText(
+                f"{kind}: {selected_wallpaper.name}\n"
+                f"Размер: {selected_wallpaper.stat().st_size / (1024 * 1024):.1f} МБ"
+            )
+
+    def choose_wallpaper() -> None:
+        selected, _ = QFileDialog.getOpenFileName(
+            window,
+            "Выбрать фон Hellsaiz PC AI",
+            str(Path.home()),
+            "Изображения и анимация (*.png *.jpg *.jpeg *.webp *.bmp *.gif)",
+        )
+        if not selected:
+            return
+        try:
+            wallpaper_store.import_wallpaper(Path(selected))
+            apply_wallpaper()
+            persist_wallpaper_status()
+        except (OSError, ValueError, WallpaperError) as exc:
+            QMessageBox.warning(window, "Не удалось установить обои", str(exc))
+
+    def clear_wallpaper() -> None:
+        try:
+            wallpaper_store.clear()
+            apply_wallpaper()
+            persist_wallpaper_status()
+        except OSError as exc:
+            QMessageBox.warning(window, "Не удалось сбросить обои", str(exc))
+
+    choose_wallpaper_button.clicked.connect(choose_wallpaper)
+    clear_wallpaper_button.clicked.connect(clear_wallpaper)
+    persist_wallpaper_status()
+    tabs.addTab(wallpaper_page, "Обои")
+
+    # Piper voice library. Downloads happen in a worker thread and remain local.
+    voices_page = QWidget()
+    voices_layout = QVBoxLayout(voices_page)
+    voices_layout.setContentsMargins(28, 24, 28, 24)
+    voices_layout.setSpacing(12)
+    voices_title = QLabel("БИБЛИОТЕКА ГОЛОСОВ")
+    voices_title.setStyleSheet("font-size:24px; font-weight:650; color:#eef2f7;")
+    voices_layout.addWidget(voices_title)
+    voices_description = QLabel(
+        "Локальные нейросетевые голоса Piper. Скачанная модель работает без интернета. "
+        "Условия лицензии отличаются у разных голосов — перед использованием открой MODEL_CARD."
+    )
+    voices_description.setWordWrap(True)
+    voices_description.setStyleSheet("color:#aab3c0;")
+    voices_layout.addWidget(voices_description)
+
+    voice_library_dir = settings.workflows_path.parent / "voices"
+    voice_catalog = QComboBox()
+    voice_catalog.addItem("Русский · Denis · medium", "ru_RU-denis-medium")
+    voice_catalog.addItem("Русский · Dmitri · medium", "ru_RU-dmitri-medium")
+    voice_catalog.addItem("Русский · Irina · medium (лицензия уточняется)", "ru_RU-irina-medium")
+    voice_catalog.addItem("Русский · Ruslan · medium (CC BY-NC-SA 4.0)", "ru_RU-ruslan-medium")
+    voice_catalog.setEditable(True)
+    voice_catalog.setCurrentIndex(0)
+    voice_download_row = QHBoxLayout()
+    voice_download_row.addWidget(voice_catalog, 1)
+    download_voice_button = QPushButton("Загрузить голос")
+    download_voice_button.setObjectName("primaryButton")
+    voice_download_row.addWidget(download_voice_button)
+    voices_layout.addLayout(voice_download_row)
+
+    installed_voices_list = QListWidget()
+    voices_layout.addWidget(installed_voices_list, 1)
+    voice_actions = QHBoxLayout()
+    use_voice_button = QPushButton("Использовать для помощника")
+    use_voice_button.setObjectName("primaryButton")
+    test_piper_voice_button = QPushButton("Прослушать")
+    use_system_voice_button = QPushButton("Использовать голос Windows")
+    voice_actions.addWidget(use_voice_button)
+    voice_actions.addWidget(test_piper_voice_button)
+    voice_actions.addWidget(use_system_voice_button)
+    voices_layout.addLayout(voice_actions)
+    voices_status = QLabel(
+        "Голоса ещё не загружены. Русские модели medium обычно занимают около 60–70 МБ."
+    )
+    voices_status.setWordWrap(True)
+    voices_status.setStyleSheet("color:#9ca7b5;")
+    voices_layout.addWidget(voices_status)
+
+    voice_download_workers: list[QThread] = []
+
+    class VoiceDownloadWorker(QThread):
+        completed = Signal(object)
+        failed = Signal(str)
+
+        def __init__(self, voice_id: str) -> None:
+            super().__init__()
+            self.voice_id = voice_id
+
+        def run(self) -> None:
+            try:
+                result = download_voice(self.voice_id, voice_library_dir)
+                self.completed.emit(result)
+            except (VoiceLibraryError, OSError, ValueError) as exc:
+                self.failed.emit(str(exc))
+            except Exception as exc:
+                logging.exception("Piper voice download failed")
+                self.failed.emit(f"Ошибка загрузки голоса: {exc}")
+
+    def refresh_voice_library() -> None:
+        installed_voices_list.clear()
+        for voice in list_installed_voices(voice_library_dir):
+            item = QListWidgetItem(
+                f"{voice.voice_id}  ·  {voice.language}  ·  лицензия: {voice.license}"
+            )
+            item.setData(Qt.ItemDataRole.UserRole, voice.voice_id)
+            installed_voices_list.addItem(item)
+        selected_id = str(profile_data.get("piper_voice_id") or "")
+        for index in range(installed_voices_list.count()):
+            item = installed_voices_list.item(index)
+            if item.data(Qt.ItemDataRole.UserRole) == selected_id:
+                installed_voices_list.setCurrentItem(item)
+                break
+        if installed_voices_list.count() == 0:
+            voices_status.setText("Библиотека пуста. Выбери русский голос выше и нажми «Загрузить голос».")
+        else:
+            voices_status.setText(
+                f"Установлено голосов: {installed_voices_list.count()}. "
+                "Модели доступны локально после загрузки."
+            )
+
+    def download_selected_voice() -> None:
+        voice_id = str(voice_catalog.currentData() or voice_catalog.currentText()).strip()
+        if not voice_id:
+            voices_status.setText("Выбери идентификатор голоса.")
+            return
+        if any(worker.isRunning() for worker in voice_download_workers):
+            voices_status.setText("Дождись завершения текущей загрузки.")
+            return
+        download_voice_button.setEnabled(False)
+        voices_status.setText(f"Загружаю {voice_id}: модель, конфигурацию и MODEL_CARD…")
+        worker = VoiceDownloadWorker(voice_id)
+        voice_download_workers.append(worker)
+
+        def downloaded(voice: Any) -> None:
+            refresh_voice_library()
+            voices_status.setText(
+                f"Голос {voice.voice_id} установлен. Лицензия в MODEL_CARD: {voice.license}"
+            )
+
+        def failed(message: str) -> None:
+            voices_status.setText(message)
+
+        worker.completed.connect(downloaded)
+        worker.failed.connect(failed)
+        worker.finished.connect(lambda: download_voice_button.setEnabled(True))
+        worker.finished.connect(
+            lambda: voice_download_workers.remove(worker)
+            if worker in voice_download_workers else None
+        )
+        worker.start()
+
+    def save_voice_profile(engine: str, voice_id: str | None = None) -> None:
+        profile_data["tts_engine"] = engine
+        if voice_id:
+            profile_data["piper_voice_id"] = voice_id
+        profile_path = settings.workflows_path.parent / "ai_profile.json"
+        profile_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = profile_path.with_suffix(".json.tmp")
+        temporary.write_text(
+            json.dumps(profile_data, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        temporary.replace(profile_path)
+
+    def use_selected_piper_voice() -> None:
+        item = installed_voices_list.currentItem()
+        if item is None:
+            voices_status.setText("Сначала выбери установленную модель.")
+            return
+        voice_id = str(item.data(Qt.ItemDataRole.UserRole))
+        try:
+            save_voice_profile("piper", voice_id)
+            voices_status.setText(f"Для ответов помощника выбран Piper: {voice_id}.")
+        except OSError as exc:
+            voices_status.setText(f"Не удалось сохранить голос: {exc}")
+
+    def test_selected_piper_voice() -> None:
+        item = installed_voices_list.currentItem()
+        if item is None:
+            voices_status.setText("Сначала выбери установленную модель.")
+            return
+        voice_id = str(item.data(Qt.ItemDataRole.UserRole))
+        model = voice_library_dir / f"{voice_id}.onnx"
+        try:
+            PiperSynthesizer(model).speak(
+                "Привет. Я Хеллсайз. Проверка установленного голоса завершена."
+            )
+            voices_status.setText(f"Голос {voice_id} воспроизведён.")
+        except Exception as exc:
+            voices_status.setText(f"Не удалось проверить голос: {exc}")
+
+    def use_windows_voice() -> None:
+        try:
+            save_voice_profile("sapi5")
+            voices_status.setText("Для ответов помощника выбран системный голос Windows SAPI5.")
+        except OSError as exc:
+            voices_status.setText(f"Не удалось сохранить настройку: {exc}")
+
+    download_voice_button.clicked.connect(download_selected_voice)
+    use_voice_button.clicked.connect(use_selected_piper_voice)
+    test_piper_voice_button.clicked.connect(test_selected_piper_voice)
+    use_system_voice_button.clicked.connect(use_windows_voice)
+    refresh_voice_library()
+    tabs.addTab(voices_page, "Голоса")
+
     settings_page = QWidget()
     settings_layout = QVBoxLayout(settings_page)
     settings_layout.setContentsMargins(22, 20, 22, 20)
@@ -1482,33 +1767,132 @@ def main() -> int:
         lambda: QDesktopServices.openUrl(QUrl(latest_release_url)) if latest_release_url else None
     )
 
-    window.setCentralWidget(tabs)
+    # Convert the working pages into a persistent left navigation.
+    page_stack = QStackedWidget()
+    navigation = QListWidget()
+    navigation.setObjectName("mainNavigation")
+    navigation.setFixedWidth(194)
+    navigation.setSpacing(5)
+    page_titles = []
+    while tabs.count():
+        page_titles.append(tabs.tabText(0))
+        page = tabs.widget(0)
+        tabs.removeTab(0)
+        page_stack.addWidget(page)
+    for title in page_titles:
+        navigation.addItem(QListWidgetItem(title))
+    navigation.currentRowChanged.connect(page_stack.setCurrentIndex)
+    navigation.setCurrentRow(0)
+
+    root = QWidget()
+    root.setObjectName("appRoot")
+    root_layout = QStackedLayout(root)
+    root_layout.setContentsMargins(0, 0, 0, 0)
+    root_layout.setStackingMode(QStackedLayout.StackingMode.StackAll)
+    wallpaper_layer = QLabel()
+    wallpaper_layer.setObjectName("wallpaperLayer")
+    wallpaper_layer.setScaledContents(True)
+    wallpaper_layer.setStyleSheet("background:#080b11;")
+    shell = QWidget()
+    shell.setObjectName("appShell")
+    shell_layout = QHBoxLayout(shell)
+    shell_layout.setContentsMargins(14, 14, 14, 14)
+    shell_layout.setSpacing(12)
+
+    sidebar = QFrame()
+    sidebar.setObjectName("sidebar")
+    sidebar.setFixedWidth(218)
+    sidebar_layout = QVBoxLayout(sidebar)
+    sidebar_layout.setContentsMargins(16, 18, 16, 16)
+    sidebar_layout.setSpacing(13)
+    brand_row = QHBoxLayout()
+    brand_mark = QLabel("H")
+    brand_mark.setObjectName("brandMark")
+    brand_mark.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    brand_mark.setFixedSize(42, 42)
+    brand_name = QLabel("Hellsaiz PC AI")
+    brand_name.setStyleSheet("font-size:15px; font-weight:650; color:#f0f4f9;")
+    brand_row.addWidget(brand_mark)
+    brand_row.addWidget(brand_name, 1)
+    sidebar_layout.addLayout(brand_row)
+    sidebar_caption = QLabel("PERSONAL ASSISTANT")
+    sidebar_caption.setStyleSheet("font-size:9px; letter-spacing:1.7px; color:#788391;")
+    sidebar_layout.addWidget(sidebar_caption)
+    sidebar_layout.addWidget(navigation, 1)
+    sidebar_divider = QFrame()
+    sidebar_divider.setFrameShape(QFrame.Shape.HLine)
+    sidebar_divider.setObjectName("softDivider")
+    sidebar_layout.addWidget(sidebar_divider)
+    sidebar_footer = QLabel(f"Локальный режим\nВерсия {current_app_version}")
+    sidebar_footer.setStyleSheet("font-size:11px; color:#9ba5b2;")
+    sidebar_layout.addWidget(sidebar_footer)
+
+    content_frame = QFrame()
+    content_frame.setObjectName("contentFrame")
+    content_layout = QVBoxLayout(content_frame)
+    content_layout.setContentsMargins(10, 8, 10, 8)
+    content_layout.addWidget(page_stack)
+    shell_layout.addWidget(sidebar)
+    shell_layout.addWidget(content_frame, 1)
+    root_layout.addWidget(wallpaper_layer)
+    root_layout.addWidget(shell)
+    root_layout.setCurrentIndex(1)
+    window.setCentralWidget(root)
+
+    def apply_wallpaper() -> None:
+        nonlocal wallpaper_movie
+        if wallpaper_movie is not None:
+            wallpaper_movie.stop()
+            wallpaper_movie.deleteLater()
+            wallpaper_movie = None
+        wallpaper_layer.setPixmap(QPixmap())
+        path = wallpaper_store.active_wallpaper()
+        if path is None:
+            wallpaper_layer.setStyleSheet("background:#080b11;")
+            return
+        wallpaper_layer.setStyleSheet("background:#080b11;")
+        if path.suffix.casefold() == ".gif":
+            movie = QMovie(str(path))
+            if movie.isValid():
+                wallpaper_movie = movie
+                wallpaper_layer.setMovie(movie)
+                movie.start()
+                return
+        pixmap = QPixmap(str(path))
+        if not pixmap.isNull():
+            wallpaper_layer.setPixmap(pixmap)
+        else:
+            wallpaper_layer.setStyleSheet("background:#080b11;")
+
+    apply_wallpaper()
     window.setStyleSheet(
-        "QMainWindow, QWidget { background:#090b0f; color:#e9ebef; font-family:'Segoe UI'; }"
-        "QTabWidget::pane { border:0; background:#090b0f; }"
-        "QTabBar::tab { background:transparent; color:#737b87; padding:10px 15px; "
-        "margin:0 4px; border:0; border-radius:9px; }"
-        "QTabBar::tab:selected { background:#191d24; color:#f4f5f7; }"
-        "QTextEdit,QLineEdit,QPlainTextEdit,QComboBox,QListWidget { background:#11151b; "
-        "color:#eef0f3; border:1px solid #252b34; border-radius:11px; padding:10px; "
-        "selection-background-color:#414955; }"
-        "QTextEdit { background:#0c0f14; border:0; padding:14px; }"
+        "QMainWindow, QWidget { background:transparent; color:#e8edf4; font-family:'Segoe UI'; }"
+        "QFrame#sidebar { background:rgba(10,14,20,224); border:1px solid rgba(218,230,246,42); border-radius:20px; }"
+        "QFrame#contentFrame { background:rgba(7,10,15,190); border:1px solid rgba(218,230,246,35); border-radius:20px; }"
+        "QFrame#wallpaperPreview, QFrame#profilePanel { background:rgba(24,30,39,196); border:1px solid rgba(215,228,245,55); border-radius:16px; }"
+        "QFrame#softDivider { background:rgba(210,225,245,30); border:0; max-height:1px; }"
+        "QLabel#brandMark { background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 rgba(248,251,255,245),stop:1 rgba(126,139,158,200)); color:#111722; border-radius:12px; font-size:23px; font-weight:800; }"
+        "QListWidget#mainNavigation { background:transparent; border:0; padding:0; outline:0; }"
+        "QListWidget#mainNavigation::item { color:#aab4c1; padding:12px 12px; border-radius:11px; margin:2px 0; }"
+        "QListWidget#mainNavigation::item:hover { background:rgba(218,230,246,24); color:#f4f7fb; }"
+        "QListWidget#mainNavigation::item:selected { background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 rgba(215,228,245,50),stop:1 rgba(145,159,180,28)); color:#f5f8fc; border:1px solid rgba(221,233,250,70); }"
+        "QTextEdit,QLineEdit,QPlainTextEdit,QComboBox,QListWidget { background:rgba(15,20,28,224); color:#edf2f8; border:1px solid rgba(204,219,239,48); border-radius:12px; padding:10px; selection-background-color:#465265; }"
+        "QTextEdit { background:rgba(9,13,19,155); border:1px solid rgba(211,225,244,25); padding:14px; }"
         "QLineEdit { min-height:24px; }"
-        "QPushButton { background:#252a33; color:#e8ebef; border:1px solid #303743; "
-        "border-radius:10px; padding:10px 14px; font-weight:550; }"
-        "QPushButton:hover { background:#343b47; border-color:#46505f; }"
-        "QPushButton#sendButton { background:#eceef1; color:#101318; border:0; "
-        "font-weight:650; padding-left:18px; padding-right:18px; }"
-        "QPushButton#sendButton:hover { background:#ffffff; }"
-        "QPushButton#profileButton { background:#171b22; color:#c9ced6; border:1px solid #2c323c; }"
-        "QPushButton#voiceButton { background:#171b22; color:#c9ced6; border:1px solid #2c323c; }"
-        "QFrame#profilePanel { background:#11151b; border:1px solid #252b34; border-radius:13px; }"
-        "QLabel { color:#d4d8df; }"
-        "QCheckBox { color:#c7cbd2; spacing:8px; }"
-        "QCheckBox::indicator { width:16px; height:16px; border:1px solid #686f7a; "
-        "border-radius:4px; background:#111419; }"
-        "QCheckBox::indicator:checked { background:#e7e9ed; border-color:#e7e9ed; }"
-        "QSplitter::handle { background:#252b34; }"
+        "QPushButton { background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 rgba(48,57,70,224),stop:1 rgba(27,34,44,238)); color:#e8edf4; border:1px solid rgba(211,225,244,55); border-radius:11px; padding:10px 15px; font-weight:550; }"
+        "QPushButton:hover { background:rgba(91,105,126,210); border-color:rgba(233,241,251,120); }"
+        "QPushButton:disabled { color:#6f7a89; background:rgba(28,34,43,150); border-color:rgba(155,169,188,25); }"
+        "QPushButton#sendButton, QPushButton#primaryButton { background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #f7f9fc,stop:1 #c8d1de); color:#101721; border:1px solid #ffffff; font-weight:700; }"
+        "QPushButton#sendButton:hover, QPushButton#primaryButton:hover { background:#ffffff; }"
+        "QPushButton#profileButton, QPushButton#voiceButton { background:rgba(24,30,39,222); color:#d5deea; border:1px solid rgba(213,226,244,54); }"
+        "QComboBox::drop-down { border:0; width:24px; }"
+        "QListWidget::item { padding:9px 10px; border-radius:9px; }"
+        "QListWidget::item:selected { background:rgba(207,222,243,42); color:#ffffff; }"
+        "QLabel { color:#d7e0eb; background:transparent; }"
+        "QCheckBox { color:#d2dbe7; spacing:8px; }"
+        "QCheckBox::indicator { width:16px; height:16px; border:1px solid #8793a3; border-radius:5px; background:rgba(16,21,29,230); }"
+        "QCheckBox::indicator:checked { background:#e7edf5; border-color:#e7edf5; }"
+        "QSplitter::handle { background:rgba(190,207,229,70); }"
     )
 
     broker = ApprovalBroker()
