@@ -253,3 +253,53 @@ def test_weekday_condition_rejects_invalid_values():
                     {"from": "day", "to": "no", "when": "false"},
                 ],
             })
+
+
+
+def test_text_trigger_accepts_multiple_alias_phrases():
+    graph = WorkflowGraph.from_dict({
+        "name": "Gaming",
+        "nodes": [
+            {
+                "id": "start",
+                "type": "trigger.text",
+                "config": {"phrases": ["игровой режим", "открой игры", "запусти стим"]},
+            },
+            {"id": "end", "type": "action.wait", "config": {"seconds": 0}},
+        ],
+        "edges": [{"from": "start", "to": "end"}],
+    })
+    runner = WorkflowGraphRunner(registry())
+
+    for phrase in ("игровой режим", "открой игры", "запусти стим"):
+        result = runner.run(graph, WorkflowTrigger("text", phrase))
+        assert result.started and result.completed
+
+
+def test_text_trigger_rejects_duplicate_or_oversized_alias_lists():
+    for phrases in ([], ["same", "same"], ["x" * 129], ["one"] * 17):
+        with pytest.raises(ValueError, match="phrases|duplicate"):
+            WorkflowGraph.from_dict({
+                "name": "Invalid text trigger",
+                "nodes": [
+                    {"id": "start", "type": "trigger.text", "config": {"phrases": phrases}},
+                    {"id": "end", "type": "action.wait", "config": {"seconds": 0}},
+                ],
+                "edges": [{"from": "start", "to": "end"}],
+            })
+
+
+def test_text_trigger_does_not_accept_phrase_and_phrases_together():
+    with pytest.raises(ValueError, match="phrase or phrases"):
+        WorkflowGraph.from_dict({
+            "name": "Invalid trigger schema",
+            "nodes": [
+                {
+                    "id": "start",
+                    "type": "trigger.text",
+                    "config": {"phrase": "start", "phrases": ["start", "go"]},
+                },
+                {"id": "end", "type": "action.wait", "config": {"seconds": 0}},
+            ],
+            "edges": [{"from": "start", "to": "end"}],
+        })
