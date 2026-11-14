@@ -48,6 +48,11 @@ from hellsaiz_pc_ai.tools.reminders import register_reminder_tools
 from hellsaiz_pc_ai.tools.system import register_system_tools
 from hellsaiz_pc_ai.tools.public_info import register_public_info_tools
 from hellsaiz_pc_ai.app.wallpaper import WallpaperError, WallpaperStore
+from hellsaiz_pc_ai.app.file_access import (
+    FileAccessSettings,
+    load_file_access_settings,
+    save_file_access_settings,
+)
 from hellsaiz_pc_ai.app.shortcuts import ensure_desktop_shortcut
 from hellsaiz_pc_ai.app.single_instance import SingleInstanceLock
 from hellsaiz_pc_ai.speech.voice_library import (
@@ -56,6 +61,7 @@ from hellsaiz_pc_ai.speech.voice_library import (
 from hellsaiz_pc_ai.speech.piper import PiperSynthesizer
 from hellsaiz_pc_ai.tools.windows import register_windows_tools
 from hellsaiz_pc_ai.tools.window_control import register_window_tools
+from hellsaiz_pc_ai.tools.file_system import register_file_system_tools
 from hellsaiz_pc_ai.tools.ui_automation import register_ui_automation_tools
 from hellsaiz_pc_ai.workflows.builder import append_hour_condition, append_repeat_action, append_tool_action, append_wait_action, append_weekday_condition, terminal_nodes
 from hellsaiz_pc_ai.workflows.graph import WorkflowGraph, WorkflowGraphRunner, WorkflowTrigger
@@ -103,6 +109,21 @@ def build_runtime(settings: Settings):
     register_window_tools(registry)
     register_ui_automation_tools(registry)
     register_clipboard_tools(registry)
+
+    file_access_path = settings.workflows_path.parent / "file_access.json"
+    try:
+        file_access_settings = load_file_access_settings(file_access_path)
+    except ValueError as exc:
+        logging.warning("File access settings are invalid; using safe default folders: %s", exc)
+        from hellsaiz_pc_ai.tools.file_system import default_allowed_roots
+
+        file_access_settings = FileAccessSettings(list(default_allowed_roots()), False)
+    register_file_system_tools(
+        registry,
+        lambda: tuple(file_access_settings.roots),
+        allow_writes=lambda: file_access_settings.allow_writes,
+    )
+
     reminder_store = ReminderStore(settings.database_path)
     register_reminder_tools(registry, reminder_store)
     router = CommandRouter(
@@ -193,7 +214,7 @@ def build_runtime(settings: Settings):
     workflow_runner = WorkflowGraphRunner(registry)
     return (
         router, assistant, store, workflow_library, workflow_runner,
-        registry, reminder_store, allowed_apps, profile_data
+        registry, reminder_store, allowed_apps, profile_data, file_access_settings
     )
 
 
@@ -251,7 +272,7 @@ def main() -> int:
 
     (
         router, assistant, store, workflow_library, workflow_runner, registry,
-        reminder_store, allowed_apps, profile_data
+        reminder_store, allowed_apps, profile_data, file_access_settings
     ) = build_runtime(settings)
     active_voice = {"name": str(profile_data.get("voice_name") or settings.speech.tts_voice_name)}
     raw_tts_rate = profile_data.get("tts_rate", settings.speech.tts_rate)
