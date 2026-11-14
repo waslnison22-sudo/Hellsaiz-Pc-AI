@@ -67,6 +67,32 @@ jobs:
             }
           }
 
+      - name: Smoke-test frozen desktop, launcher and updater
+        shell: pwsh
+        run: |
+          $tests = @(
+            @{ Path = "dist/app/HellsaizPC_AI/HellsaizPC_AI.exe"; Working = "dist/app/HellsaizPC_AI"; Label = "Desktop" },
+            @{ Path = "dist/tools/HellsaizLauncher.exe"; Working = "dist/tools"; Label = "Launcher" },
+            @{ Path = "dist/tools/HellsaizUpdater.exe"; Working = "dist/tools"; Label = "Updater" }
+          )
+          foreach ($test in $tests) {
+            $exe = (Resolve-Path $test.Path).Path
+            $working = (Resolve-Path $test.Working).Path
+            $process = Start-Process -FilePath $exe -ArgumentList "--self-test" -WorkingDirectory $working -PassThru
+            if (-not $process.WaitForExit(300000)) {
+              Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+              throw "$($test.Label) package self-test timed out."
+            }
+            if ($process.ExitCode -ne 0) {
+              $diagnostic = Join-Path $env:TEMP "HellsaizPC_AI-package-self-test.log"
+              if ($test.Label -eq "Desktop" -and (Test-Path $diagnostic)) {
+                Get-Content $diagnostic -Tail 80
+              }
+              throw "$($test.Label) package self-test failed with exit code $($process.ExitCode)."
+            }
+            Write-Host "$($test.Label) package self-test passed."
+          }
+
       - name: Assemble and validate ZIP packages
         shell: pwsh
         env:
