@@ -93,7 +93,9 @@ jobs:
           python @arguments
           if ($LASTEXITCODE -ne 0) { throw "Package or signature generation failed." }
 
-          $compiler = Join-Path $env:ProgramFiles(x86) "Inno Setup 6\ISCC.exe"
+          $programFilesX86 = [Environment]::GetFolderPath("ProgramFilesX86")
+          $compiler = Join-Path $programFilesX86 "Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $compiler)) { throw "Inno Setup compiler not found: $compiler" }
           & $compiler "/DAppVersion=$version" "installer/HellsaizPC_AI.iss"
           if ($LASTEXITCODE -ne 0) { throw "Installer compilation failed." }
 
