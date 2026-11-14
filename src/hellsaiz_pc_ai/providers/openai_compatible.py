@@ -59,6 +59,51 @@ class OpenAICompatibleProvider:
             raise ValueError("Remote LLM endpoints must use HTTPS to protect credentials.")
         self.timeout_seconds = timeout_seconds
 
+    def list_models(self) -> list[str]:
+        request = Request(
+            f"{self.base_url}/models",
+            headers={
+                "Accept": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+            },
+            method="GET",
+        )
+        try:
+            with urlopen(request, timeout=self.timeout_seconds) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            raise ProviderError(f"Model discovery failed with HTTP {exc.code}.") from exc
+        except (URLError, TimeoutError, OSError) as exc:
+            raise ProviderError(
+                f"Не удалось получить список моделей ({type(exc).__name__})."
+            ) from exc
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ProviderError("Сервер моделей вернул некорректный JSON/UTF-8.") from exc
+        if not isinstance(payload, dict) or not isinstance(payload.get("data"), list):
+            raise ProviderError("Сервер моделей вернул неподдерживаемый формат /models.")
+        return [
+            item["id"]
+            for item in payload["data"]
+            if isinstance(item, dict) and isinstance(item.get("id"), str)
+        ]
+
+    def health_check(self) -> dict[str, Any]:
+        models = self.list_models()
+        return {
+            "ok": True,
+            "provider": "openai-compatible",
+            "model": self.model,
+            "model_available": self.model in models,
+            "models": models,
+            "capabilities": {
+                "chat_completions": True,
+                "function_calling": "model-dependent",
+                "streaming": "not-probed",
+                "vision": "not-probed",
+                "json_mode": "not-probed",
+            },
+        }
+
     def complete(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> dict[str, Any]:
         payload: dict[str, Any] = {"model": self.model, "messages": messages, "temperature": 0.3}
         if tools:
