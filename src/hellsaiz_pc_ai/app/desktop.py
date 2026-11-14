@@ -3720,17 +3720,6 @@ def main() -> int:
 
     def release_speech_runtime() -> None:
         stop_wake_listener()
-        telegram_thread = telegram_worker_state.get("worker")
-        if telegram_thread is not None:
-            try:
-                telegram_thread.stop()
-                telegram_thread.join(timeout=5)
-                if telegram_thread.is_alive():
-                    logging.warning("Telegram worker did not stop within five seconds.")
-                else:
-                    telegram_worker_state["worker"] = None
-            except Exception:
-                logging.exception("Could not stop Telegram worker during shutdown")
         worker_groups = (
             [wake_listener_state["worker"]],
             workers,
