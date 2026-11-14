@@ -107,7 +107,7 @@ class WorkflowGraph:
             scheduled_time, days = cfg.get("time"), cfg.get("days")
             if set(cfg) != {"time", "days"}:
                 raise ValueError(f"Schedule trigger '{node.id}' needs only time and days.")
-            if not isinstance(scheduled_time, str) or not re.fullmatch(r"(?:[01]\\d|2[0-3]):[0-5]\\d", scheduled_time):
+            if not isinstance(scheduled_time, str) or not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", scheduled_time):
                 raise ValueError(f"Schedule trigger '{node.id}' time must use HH:MM.")
             if (
                 not isinstance(days, list)

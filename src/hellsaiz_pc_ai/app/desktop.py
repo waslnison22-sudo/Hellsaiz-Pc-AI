@@ -853,8 +853,9 @@ def main() -> int:
                 "startup": "Автозапуск",
             }
             label = trigger_labels.get(workflow_trigger.kind, workflow_trigger.kind)
+            trigger_value = workflow_trigger.value or "при запуске"
             transcript.append(
-                f"<p><b>{escape(label)}:</b> {escape(workflow_trigger.value or "при запуске")}</p>"
+                f"<p><b>{escape(label)}:</b> {escape(trigger_value)}</p>"
             )
         elif prompt:
             transcript.append(f"<p><b>Вы:</b> {escape(prompt)}</p>")
