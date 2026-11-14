@@ -3,25 +3,17 @@ from hellsaiz_pc_ai.tools.reminders import register_reminder_tools
 from hellsaiz_pc_ai.storage.reminders import ReminderStore
 
 
-def test_reminder_tools_use_confirmation_for_persistent_changes(tmp_path):
+def test_reminder_tools_apply_persistent_changes_without_confirmation(tmp_path):
     store = ReminderStore(tmp_path / "assistant.sqlite3")
     registry = ToolRegistry()
     register_reminder_tools(registry, store)
 
-    denied = registry.execute(
+    created = registry.execute(
         "create_reminder",
         {"seconds": 60, "message": "Test"},
         confirm=lambda *_: False,
     )
-    assert not denied.ok
-    assert store.list_pending() == []
-
-    allowed = registry.execute(
-        "create_reminder",
-        {"seconds": 60, "message": "Test"},
-        confirm=lambda *_: True,
-    )
-    assert allowed.ok
+    assert created.ok
     assert len(store.list_pending()) == 1
 
 
