@@ -1265,6 +1265,15 @@ def main() -> int:
         except (OSError, ValueError, json.JSONDecodeError):
             logging.warning("Update preferences are invalid; defaulting to automatic checks.")
 
+    update_help = QLabel(
+        "Репозиторий обновлений приватный. Один раз добавь Fine-grained GitHub Token "
+        "с правом Contents: Read для этого репозитория. Ключ хранится через Windows DPAPI. "
+        "Автопроверка только сообщает о новой версии — установка запускается вручную."
+    )
+    update_help.setWordWrap(True)
+    update_help.setStyleSheet("color:#929aa6;")
+    settings_layout.addWidget(update_help)
+
     auto_update_check = QCheckBox("Автоматически проверять обновления при запуске")
     auto_update_check.setChecked(bool(update_preferences.get("auto_check", True)))
     settings_layout.addWidget(auto_update_check)
@@ -1272,7 +1281,7 @@ def main() -> int:
     update_key_row = QHBoxLayout()
     update_key_input = QLineEdit()
     update_key_input.setEchoMode(QLineEdit.EchoMode.Password)
-    update_key_input.setPlaceholderText("Ключ доступа к приватному каналу обновлений")
+    update_key_input.setPlaceholderText("Fine-grained GitHub Token · Contents: Read")
     save_update_key_button = QPushButton("Сохранить ключ")
     update_key_row.addWidget(update_key_input, 1)
     update_key_row.addWidget(save_update_key_button)
@@ -1294,8 +1303,8 @@ def main() -> int:
     settings_layout.addLayout(update_buttons)
     if install_root is None:
         update_status.setText(
-            f"Текущая версия: {current_app_version}. Автообновление доступно только "
-            "в установленной Windows-сборке."
+            f"Текущая версия: {current_app_version}. Автообновление недоступно при прямом "
+            "запуске EXE. Распакуй portable ZIP и запускай HellsaizLauncher.exe из его корня."
         )
     settings_layout.addStretch(1)
     tabs.addTab(settings_page, "Настройки")
@@ -1317,6 +1326,12 @@ def main() -> int:
             try:
                 key_path = settings.workflows_path.parent / "update_key.dpapi"
                 access_key = load_secret(key_path)
+                if not access_key.strip():
+                    raise UpdateCheckError(
+                        "Не сохранён GitHub Token. Создай Fine-grained token для "
+                        "waslnison22-sudo/Hellsaiz-Pc-AI с правом Contents: Read "
+                        "и сохрани его в этом разделе."
+                    )
                 result = check_latest_release(current_app_version, access_key)
                 self.checked.emit(result)
                 if self.download and result.update_available:
@@ -1345,22 +1360,36 @@ def main() -> int:
 
     def save_update_access_key() -> None:
         key_path = settings.workflows_path.parent / "update_key.dpapi"
+        value = update_key_input.text().strip()
         try:
-            save_secret(key_path, update_key_input.text())
+            save_secret(key_path, value)
             update_key_input.clear()
-            update_status.setText("Ключ защищён DPAPI и сохранён для текущей учётной записи Windows.")
+            if value:
+                update_status.setText(
+                    "GitHub Token защищён DPAPI и сохранён для текущей учётной записи Windows. "
+                    "Теперь нажми «Проверить обновления»."
+                )
+            else:
+                update_status.setText(
+                    "GitHub Token удалён. Для приватного канала проверка обновлений будет недоступна."
+                )
         except SecureStoreError as exc:
             update_status.setText(str(exc))
 
     def check_for_updates(silent: bool = False) -> None:
+        nonlocal latest_update_info
         if any(worker.isRunning() for worker in update_workers):
             return
+        latest_update_info = None
+        check_update_button.setEnabled(False)
+        install_update_button.setEnabled(False)
         update_status.setText("Проверяю канал обновлений…")
         worker = UpdateWorker()
         update_workers.append(worker)
 
         def on_checked(info: Any) -> None:
             nonlocal latest_release_url, latest_update_info
+            check_update_button.setEnabled(True)
             latest_update_info = info if info.update_available else None
             latest_release_url = info.release_url
             open_release_button.setEnabled(bool(latest_release_url))
@@ -1379,10 +1408,15 @@ def main() -> int:
                 logging.info("Update channel checked: latest=%s", info.latest_version)
 
         def on_failed(message: str) -> None:
-            if not silent:
-                update_status.setText(message)
-            else:
+            nonlocal latest_update_info
+            latest_update_info = None
+            check_update_button.setEnabled(True)
+            install_update_button.setEnabled(False)
+            if silent:
+                update_status.setText(f"Автоматическая проверка не выполнена: {message}")
                 logging.info("Automatic update check: %s", message)
+            else:
+                update_status.setText(f"Ошибка проверки обновлений: {message}")
 
         worker.checked.connect(on_checked)
         worker.failed.connect(on_failed)
@@ -1407,20 +1441,25 @@ def main() -> int:
                 return
             import os
             import subprocess
-            subprocess.Popen(
-                [
-                    str(updater), "--install",
-                    "--install-root", str(install_root),
-                    "--archive", str(prepared.archive_path),
-                    "--manifest", str(prepared.manifest_path),
-                    "--signature", str(prepared.signature_path),
-                    "--mode", prepared.mode,
-                    "--from-version", prepared.from_version,
-                    "--parent-pid", str(os.getpid()),
-                ],
-                cwd=str(install_root),
-                close_fds=True,
-            )
+            try:
+                subprocess.Popen(
+                    [
+                        str(updater), "--install",
+                        "--install-root", str(install_root),
+                        "--archive", str(prepared.archive_path),
+                        "--manifest", str(prepared.manifest_path),
+                        "--signature", str(prepared.signature_path),
+                        "--mode", prepared.mode,
+                        "--from-version", prepared.from_version,
+                        "--parent-pid", str(os.getpid()),
+                    ],
+                    cwd=str(install_root),
+                    close_fds=True,
+                )
+            except OSError as exc:
+                update_status.setText(f"Не удалось запустить помощник обновления: {exc}")
+                return
+            update_status.setText("Обновление передано помощнику. Приложение закрывается…")
             app.quit()
 
         def on_download_failed(message: str) -> None:
