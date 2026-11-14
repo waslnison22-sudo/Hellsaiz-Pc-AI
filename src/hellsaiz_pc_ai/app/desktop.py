@@ -2542,6 +2542,17 @@ def main() -> int:
         lambda: hotkey_service.stop() if hotkey_service is not None else None
     )
 
+    def release_speech_runtime() -> None:
+        stop_wake_listener()
+        try:
+            from hellsaiz_pc_ai.speech.vosk import VoskTranscriber
+
+            VoskTranscriber.clear_model_cache()
+        except Exception:
+            logging.exception("Could not release cached Vosk models during shutdown")
+
+    app.aboutToQuit.connect(release_speech_runtime)
+
     scheduler = WorkflowScheduler(
         workflow_library,
         settings.workflows_path.parent / "workflow_schedule_state.json",
