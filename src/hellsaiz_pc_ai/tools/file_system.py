@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import stat
+import sys
 from pathlib import Path
 from collections.abc import Callable
 from typing import Any
@@ -23,7 +24,7 @@ TEXT_EXTENSIONS = {
 BLOCKED_OPEN_EXTENSIONS = {
     ".exe", ".com", ".bat", ".cmd", ".msi", ".msp", ".ps1", ".psm1",
     ".vbs", ".vbe", ".js", ".jse", ".wsf", ".wsh", ".scr", ".lnk",
-    ".url", ".reg", ".hta",
+    ".url", ".reg", ".hta", ".py", ".pyw", ".pyc", ".jar", ".sh", ".dll", ".sys", ".cpl", ".msc",
 }
 
 
@@ -198,7 +199,7 @@ def _open_path(
         if path.is_file() and path.suffix.casefold() in BLOCKED_OPEN_EXTENSIONS:
             return ToolResult(False, "Запуск исполняемых файлов и скриптов через файловый инструмент запрещён.")
         if opener is None:
-            if os.name != "nt":
+            if sys.platform != "win32":
                 return ToolResult(False, "Открытие файлов через Проводник поддерживается только в Windows.")
             opener = os.startfile
         opener(str(path))
