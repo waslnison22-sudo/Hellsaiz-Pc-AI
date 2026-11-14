@@ -70,6 +70,7 @@ from hellsaiz_pc_ai.tools.windows import register_windows_tools
 from hellsaiz_pc_ai.tools.window_control import register_window_tools
 from hellsaiz_pc_ai.tools.file_system import register_file_system_tools
 from hellsaiz_pc_ai.tools.ui_automation import register_ui_automation_tools
+from hellsaiz_pc_ai.tools.screen_ocr import register_screen_ocr_tools
 from hellsaiz_pc_ai.workflows.builder import append_hour_condition, append_repeat_action, append_tool_action, append_wait_action, append_weekday_condition, terminal_nodes
 from hellsaiz_pc_ai.workflows.graph import WorkflowGraph, WorkflowGraphRunner, WorkflowTrigger
 from hellsaiz_pc_ai.workflows.library import WorkflowLibrary
@@ -129,6 +130,23 @@ def build_runtime(settings: Settings):
         registry,
         lambda: tuple(file_access_settings.roots),
         allow_writes=lambda: file_access_settings.allow_writes,
+    )
+
+    vision_settings_path = settings.workflows_path.parent / "vision.json"
+    vision_settings: dict[str, Any] = {"ocr_enabled": False}
+    if vision_settings_path.is_file():
+        try:
+            saved_vision_settings = json.loads(vision_settings_path.read_text(encoding="utf-8"))
+            if (
+                isinstance(saved_vision_settings, dict)
+                and isinstance(saved_vision_settings.get("ocr_enabled", False), bool)
+            ):
+                vision_settings["ocr_enabled"] = saved_vision_settings.get("ocr_enabled", False)
+        except (OSError, UnicodeError, ValueError, json.JSONDecodeError):
+            logging.warning("Vision settings are invalid; local OCR will stay disabled.")
+    register_screen_ocr_tools(
+        registry,
+        enabled=lambda: bool(vision_settings["ocr_enabled"]),
     )
 
     reminder_store = ReminderStore(settings.database_path)
@@ -221,7 +239,8 @@ def build_runtime(settings: Settings):
     workflow_runner = WorkflowGraphRunner(registry)
     return (
         router, assistant, store, workflow_library, workflow_runner,
-        registry, reminder_store, allowed_apps, profile_data, file_access_settings
+        registry, reminder_store, allowed_apps, profile_data, file_access_settings,
+        vision_settings
     )
 
 
@@ -279,9 +298,11 @@ def main() -> int:
 
     (
         router, assistant, store, workflow_library, workflow_runner, registry,
-        reminder_store, allowed_apps, profile_data, file_access_settings
+        reminder_store, allowed_apps, profile_data, file_access_settings,
+        vision_settings
     ) = build_runtime(settings)
     file_access_path = settings.workflows_path.parent / "file_access.json"
+    vision_settings_path = settings.workflows_path.parent / "vision.json"
     active_voice = {"name": str(profile_data.get("voice_name") or settings.speech.tts_voice_name)}
     telegram_config_path = settings.workflows_path.parent / "telegram.json"
     telegram_token_path = settings.workflows_path.parent / "telegram_token.dpapi"
@@ -3099,6 +3120,47 @@ def main() -> int:
     telegram_enable_check.toggled.connect(toggle_telegram_worker)
     telegram_poll_timer.timeout.connect(reap_telegram_worker)
     telegram_poll_timer.start()
+
+    vision_title = QLabel("ЛОКАЛЬНОЕ РАСПОЗНАВАНИЕ ЭКРАНА")
+    vision_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
+    settings_layout.addWidget(vision_title)
+    vision_ocr_check = QCheckBox("Разрешить локальный OCR основного монитора")
+    vision_ocr_check.setChecked(bool(vision_settings.get("ocr_enabled", False)))
+    vision_ocr_help = QLabel(
+        "Снимок экрана делается только по явной команде «прочитай текст на экране». "
+        "Изображение остаётся в памяти, не сохраняется на диск и не отправляется в сеть. "
+        "Распознавание выполняется локальным CPU-модулем."
+    )
+    vision_ocr_help.setWordWrap(True)
+    vision_ocr_help.setStyleSheet("color:#929aa6;")
+    settings_layout.addWidget(vision_ocr_check)
+    settings_layout.addWidget(vision_ocr_help)
+
+    def persist_vision_settings(enabled: bool) -> None:
+        previous = bool(vision_settings.get("ocr_enabled", False))
+        vision_settings["ocr_enabled"] = bool(enabled)
+        try:
+            vision_settings_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = vision_settings_path.with_name(vision_settings_path.name + ".tmp")
+            temporary.write_text(
+                json.dumps({"schema_version": 1, "ocr_enabled": bool(enabled)}, indent=2),
+                encoding="utf-8",
+            )
+            temporary.replace(vision_settings_path)
+            vision_ocr_help.setText(
+                "OCR включён. Снимок экрана делается только по явной команде, "
+                "не сохраняется и не отправляется в сеть."
+                if enabled else
+                "OCR выключен. Помощник не сможет читать текст с экрана, пока ты не включишь эту функцию."
+            )
+        except OSError as exc:
+            vision_settings["ocr_enabled"] = previous
+            vision_ocr_check.blockSignals(True)
+            vision_ocr_check.setChecked(previous)
+            vision_ocr_check.blockSignals(False)
+            vision_ocr_help.setText(f"Не удалось сохранить настройку OCR: {exc}")
+
+    vision_ocr_check.toggled.connect(persist_vision_settings)
 
     startup_title = QLabel("АВТОЗАПУСК WINDOWS")
     startup_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
