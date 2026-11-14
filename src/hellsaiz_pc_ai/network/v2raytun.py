@@ -60,7 +60,9 @@ def validate_proxy_url(value: str) -> str:
         raise ValueError(
             "Прокси должен быть локальным HTTP endpoint, например http://127.0.0.1:10809."
         )
-    return f"http://{parsed.hostname}:{parsed.port}"
+    host = parsed.hostname
+    host_text = f"[{host}]" if ":" in host else host
+    return f"http://{host_text}:{parsed.port}"
 
 
 def validate_health_url(value: str) -> str:
@@ -228,6 +230,7 @@ def load_network_settings(path: Path) -> dict[str, Any]:
         "proxy_url": "",
         "health_url": DEFAULT_HEALTH_URL,
         "require_proxy_for_telegram": True,
+        "launch_on_start": False,
     }
     if not path.is_file():
         return defaults
@@ -241,6 +244,7 @@ def load_network_settings(path: Path) -> dict[str, Any]:
     proxy = raw.get("proxy_url", "")
     health = raw.get("health_url", DEFAULT_HEALTH_URL)
     require = raw.get("require_proxy_for_telegram", True)
+    launch_on_start = raw.get("launch_on_start", False)
     if not isinstance(executable, str) or len(executable) > 2048:
         raise ValueError("Путь v2RayTun должен быть строкой длиной до 2048 символов.")
     if not isinstance(proxy, str) or len(proxy) > 512:
@@ -252,12 +256,15 @@ def load_network_settings(path: Path) -> dict[str, Any]:
     health = validate_health_url(health)
     if not isinstance(require, bool):
         raise ValueError("require_proxy_for_telegram должен быть логическим значением.")
+    if not isinstance(launch_on_start, bool):
+        raise ValueError("launch_on_start должен быть логическим значением.")
     return {
         "schema_version": 1,
         "executable_path": executable,
         "proxy_url": proxy,
         "health_url": health,
         "require_proxy_for_telegram": require,
+        "launch_on_start": launch_on_start,
     }
 
 
@@ -268,9 +275,12 @@ def save_network_settings(path: Path, settings: dict[str, Any]) -> None:
         "proxy_url": validate_proxy_url(str(settings.get("proxy_url") or "")) if settings.get("proxy_url") else "",
         "health_url": validate_health_url(str(settings.get("health_url") or DEFAULT_HEALTH_URL)),
         "require_proxy_for_telegram": settings.get("require_proxy_for_telegram", True),
+        "launch_on_start": settings.get("launch_on_start", False),
     }
     if not isinstance(normalized["require_proxy_for_telegram"], bool):
         raise ValueError("require_proxy_for_telegram должен быть логическим значением.")
+    if not isinstance(normalized["launch_on_start"], bool):
+        raise ValueError("launch_on_start должен быть логическим значением.")
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + ".tmp")
     temporary.write_text(json.dumps(normalized, ensure_ascii=False, indent=2), encoding="utf-8")
