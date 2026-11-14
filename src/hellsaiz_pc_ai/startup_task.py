@@ -7,8 +7,7 @@ from pathlib import Path
 from typing import Any
 
 
-TASK_NAME = r"\Hellsaiz\Hellsaiz PC AI"
-TASK_PATH = r"\Hellsaiz"
+TASK_NAME = "Hellsaiz PC AI"
 
 
 class StartupTaskError(RuntimeError):
@@ -53,7 +52,7 @@ def register_startup_task(
     *,
     runner: Runner = subprocess.run,
 ) -> None:
-    if os.name != "nt":
+    if sys.platform != "win32":
         raise StartupTaskError("Автозапуск через Планировщик поддерживается только в Windows.")
     launcher = Path(launcher_path).expanduser().resolve()
     if not launcher.is_file() or launcher.name.casefold() != "hellsaizlauncher.exe":
