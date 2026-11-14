@@ -41,7 +41,6 @@ def _wait_for_parent(pid: int, timeout_seconds: int = 120) -> None:
     if pid <= 0 or os.name != "nt":
         return
     import ctypes
-    from ctypes import wintypes
 
     SYNCHRONIZE = 0x00100000
     handle = ctypes.windll.kernel32.OpenProcess(SYNCHRONIZE, False, pid)
