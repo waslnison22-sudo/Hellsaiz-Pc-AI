@@ -581,6 +581,32 @@ def main() -> int:
     profile_heading.setStyleSheet("color:#aeb4be; font-size:10px; letter-spacing:1.8px;")
     profile_layout.addWidget(profile_heading)
 
+    provider_profile_store_path = settings.workflows_path.parent / "provider_profiles.json"
+    try:
+        provider_profile_store = load_profile_store(
+            provider_profile_store_path,
+            legacy_profile=profile_data,
+        )
+    except ValueError as exc:
+        logging.warning("Could not load named AI profiles: %s", exc)
+        provider_profile_store = default_profile_store(
+            base_url=settings.llm.base_url,
+            model=settings.llm.model,
+            enabled=settings.llm.enabled,
+        )
+
+    named_profile_row = QHBoxLayout()
+    named_profile_label = QLabel("Профиль")
+    named_profile_label.setMinimumWidth(95)
+    named_profile_combo = QComboBox()
+    named_profile_combo.setMinimumWidth(190)
+    named_profile_name = QLineEdit()
+    named_profile_name.setPlaceholderText("Название профиля")
+    named_profile_row.addWidget(named_profile_label)
+    named_profile_row.addWidget(named_profile_combo)
+    named_profile_row.addWidget(named_profile_name, 1)
+    profile_layout.addLayout(named_profile_row)
+
     provider_row = QHBoxLayout()
     provider_label = QLabel("Провайдер")
     provider_label.setMinimumWidth(95)
@@ -626,7 +652,7 @@ def main() -> int:
     profile_footer = QHBoxLayout()
     profile_status = QLabel("Параметры сохраняются локально.")
     profile_status.setStyleSheet("color:#89919d; font-size:11px;")
-    profile_apply_button = QPushButton("Применить")
+    profile_apply_button = QPushButton("Применить и сохранить")
     profile_footer.addWidget(profile_status, 1)
     profile_footer.addWidget(profile_apply_button)
     profile_layout.addLayout(profile_footer)
@@ -666,8 +692,43 @@ def main() -> int:
     endpoint_defaults = {
         "lm-studio": "http://127.0.0.1:1234/v1",
         "ollama": "http://127.0.0.1:11434/v1",
+        "llama.cpp": settings.llm.base_url,
         "custom": settings.llm.base_url,
     }
+
+    def refresh_named_profile_combo(selected_name: str) -> None:
+        named_profile_combo.blockSignals(True)
+        named_profile_combo.clear()
+        for saved_profile in provider_profile_store["profiles"]:
+            named_profile_combo.addItem(saved_profile["name"], saved_profile["name"])
+        selected_index = named_profile_combo.findData(selected_name)
+        if selected_index >= 0:
+            named_profile_combo.setCurrentIndex(selected_index)
+        named_profile_combo.blockSignals(False)
+        named_profile_name.setText(selected_name)
+
+    def load_named_profile(index: int) -> None:
+        profile_name = named_profile_combo.itemData(index)
+        if not isinstance(profile_name, str):
+            return
+        saved_profile = next(
+            (item for item in provider_profile_store["profiles"] if item["name"] == profile_name),
+            None,
+        )
+        if saved_profile is None:
+            return
+        provider_index = provider_combo.findData(saved_profile["provider"])
+        if provider_index >= 0:
+            provider_combo.setCurrentIndex(provider_index)
+        endpoint_edit.setText(saved_profile["base_url"])
+        model_edit.setText(saved_profile["model"])
+        ai_enabled_check.setChecked(saved_profile["enabled"])
+        named_profile_name.setText(saved_profile["name"])
+        profile_status.setText(f"Выбран профиль «{saved_profile['name']}». Нажми «Применить и сохранить».")
+
+    refresh_named_profile_combo(provider_profile_store["active_profile"])
+    named_profile_combo.currentIndexChanged.connect(load_named_profile)
+
     saved_provider = str(profile_data.get("provider") or "lm-studio")
     provider_index = provider_combo.findData(saved_provider)
     if provider_index >= 0:
@@ -739,13 +800,19 @@ def main() -> int:
     test_voice_button.clicked.connect(test_voice)
 
     def apply_profile() -> None:
-        nonlocal assistant
+        nonlocal assistant, provider_profile_store
         endpoint = endpoint_edit.text().strip().rstrip("/")
         model = model_edit.text().strip()
         enabled = ai_enabled_check.isChecked()
+        profile_name = named_profile_name.text().strip()
+        if not profile_name:
+            profile_status.setText("Укажи название AI-профиля.")
+            return
         if enabled and (not endpoint.startswith(("http://", "https://")) or not model):
             profile_status.setText("Укажи корректный адрес сервера и имя модели.")
             return
+
+        new_assistant = None
         if enabled:
             try:
                 provider = OpenAICompatibleProvider(
@@ -755,24 +822,36 @@ def main() -> int:
                     settings.llm.timeout_seconds,
                     settings.allow_remote_llm,
                 )
-                assistant = AssistantOrchestrator(
+                new_assistant = AssistantOrchestrator(
                     provider, registry, settings.llm.system_prompt, settings.llm.max_tool_rounds
                 )
-                assistant.history = store.recent_messages()
+                new_assistant.history = store.recent_messages()
             except Exception as exc:
                 profile_status.setText(f"Не удалось применить ИИ-профиль: {exc}")
                 return
-        else:
-            assistant = None
 
-        selected_voice = voice_combo.currentText()
-        if selected_voice:
-            active_voice["name"] = selected_voice
-        profile_data.update({
+        provider_profile = {
+            "name": profile_name,
             "provider": str(provider_combo.currentData() or "custom"),
             "base_url": endpoint or settings.llm.base_url,
             "model": model or settings.llm.model,
             "enabled": enabled,
+        }
+        try:
+            updated_store = upsert_profile(provider_profile_store, provider_profile, activate=True)
+            save_profile_store(provider_profile_store_path, updated_store)
+        except (OSError, ValueError) as exc:
+            profile_status.setText(f"Не удалось сохранить AI-профиль: {exc}")
+            return
+        provider_profile_store = updated_store
+        refresh_named_profile_combo(profile_name)
+
+        assistant = new_assistant
+        selected_voice = voice_combo.currentText()
+        if selected_voice:
+            active_voice["name"] = selected_voice
+        profile_data.update({
+            **provider_profile,
             "voice_name": active_voice["name"],
             "auto_speak": speak_toggle.isChecked(),
         })
@@ -785,9 +864,9 @@ def main() -> int:
                 encoding="utf-8",
             )
             temporary.replace(profile_path)
-            profile_status.setText("Профиль сохранён. Настройки применены.")
+            profile_status.setText(f"Профиль «{profile_name}» сохранён. Настройки применены.")
         except OSError as exc:
-            profile_status.setText(f"Профиль применён, но не сохранён: {exc}")
+            profile_status.setText(f"AI-профиль сохранён, но голосовые настройки не сохранены: {exc}")
 
     profile_apply_button.clicked.connect(apply_profile)
     refresh_voices()
