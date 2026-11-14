@@ -153,7 +153,6 @@ def build_runtime(settings: Settings):
                 vision_settings["ocr_enabled"] = saved_vision_settings.get("ocr_enabled", False)
         except (OSError, UnicodeError, ValueError, json.JSONDecodeError):
             logging.warning("Vision settings are invalid; local OCR will stay disabled.")
-    ocr_models_root = settings.workflows_path.parent / "models" / "ocr_ru"
     register_screen_ocr_tools(
         registry,
         enabled=lambda: bool(vision_settings["ocr_enabled"]),
