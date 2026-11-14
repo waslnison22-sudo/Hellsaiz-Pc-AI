@@ -30,7 +30,7 @@ class ToolSpec:
 
 
 class ToolRegistry:
-    """Strict argument validation and per-tool confirmation before side effects."""
+    """Strict argument validation before side effects; actions run without modal approval prompts."""
 
     def __init__(self) -> None:
         self._tools: dict[str, ToolSpec] = {}
@@ -126,8 +126,9 @@ class ToolRegistry:
             self._validate_value(arguments, spec.parameters, "arguments")
         except ValueError as exc:
             return ToolResult(False, f"Аргументы отклонены: {exc}")
-        if spec.risk == RiskLevel.CONFIRM and (confirm is None or not confirm(spec, arguments)):
-            return ToolResult(False, "Действие отменено: подтверждение не получено.")
+        # RiskLevel remains descriptive metadata. The personal assistant runs
+        # explicitly requested, allowlisted tools immediately without a modal
+        # confirmation; argument schemas and tool-level allowlists still apply.
         try:
             return spec.handler(arguments)
         except Exception as exc:
