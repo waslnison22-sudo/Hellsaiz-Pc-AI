@@ -18,9 +18,19 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
       - name: Install test dependencies
+        shell: bash
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[dev,windows,voice,vision]"
+          set +e
+          python -m pip install --upgrade pip > pip-install-report.txt 2>&1
+          first_status=$?
+          python -m pip install -e ".[dev,windows,voice,vision]" >> pip-install-report.txt 2>&1
+          install_status=$?
+          cat pip-install-report.txt
+          {
+            echo "## Dependency installation · ${{ matrix.os }} · Python ${{ matrix.python-version }}"
+            cat pip-install-report.txt
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$first_status" -ne 0 ] || [ "$install_status" -ne 0 ]; then exit 1; fi
       - name: Diagnose imports and lint before tests
         shell: bash
         run: |
@@ -97,7 +107,7 @@ jobs:
             pytest-report.txt
             pytest-results.xml
             ruff-report.txt
-          if-no-files-found: ignore
+          if-no-files-found: warn
           retention-days: 7
 
   windows-package:
