@@ -90,9 +90,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Package or signature generation failed." }
 
           $fullPackage = "dist/release-assets/HellsaizPC_AI-windows-x64-full.zip"
-          if (-not (Test-Path $fullPackage -PathType Leaf)) { throw "Full ZIP package was not created." }
-          if ((Get-Item $fullPackage).Length -le 0) { throw "Full ZIP package is empty." }
-          Write-Host "Validated test package: $fullPackage"
+          $portablePackage = "dist/release-assets/HellsaizPC_AI-windows-x64-portable.zip"
+          foreach ($package in @($fullPackage, $portablePackage)) {
+            if (-not (Test-Path $package -PathType Leaf)) { throw "Required ZIP package was not created: $package" }
+            if ((Get-Item $package).Length -le 0) { throw "ZIP package is empty: $package" }
+            Write-Host "Validated ZIP package: $package"
+          }
 
       - name: Upload release assets
         shell: pwsh
