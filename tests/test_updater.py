@@ -77,7 +77,6 @@ def test_delta_staging_does_not_modify_active_version(tmp_path: Path):
     assert (staged / "app.exe").read_bytes() == b"new-version"
 
 
-
 @pytest.mark.parametrize(
     "unsafe_path",
     [
@@ -126,7 +125,6 @@ def test_wait_for_parent_uses_pointer_sized_windows_handles(monkeypatch):
     assert kernel32.OpenProcess.restype is wintypes.HANDLE
     assert kernel32.WaitForSingleObject.calls == [(0x123456789, 120000)]
     assert kernel32.CloseHandle.calls == [(0x123456789,)]
-
 
 
 @pytest.mark.skipif(__import__("os").name != "nt", reason="The update installer is Windows-only.")
