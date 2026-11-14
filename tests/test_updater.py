@@ -182,6 +182,7 @@ def test_full_update_migrates_existing_install_and_preserves_user_data(
     monkeypatch.setattr(updater, "verify_signed_manifest", lambda *_args: manifest)
     monkeypatch.setattr(updater, "_wait_for_parent", lambda *_args: None)
     if health_state == "exception":
+
         def fail_launch(*_args):
             raise OSError("launcher failed to start")
         monkeypatch.setattr(updater, "_launch_and_check", fail_launch)
