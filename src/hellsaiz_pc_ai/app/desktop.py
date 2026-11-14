@@ -3112,10 +3112,12 @@ def main() -> int:
                 validate_bot_token(value)
             if value:
                 save_secret(telegram_token_path, value)
+                telegram_settings.token = value
                 telegram_token_status.setText("Токен защищён DPAPI и сохранён.")
             else:
                 from hellsaiz_pc_ai.telegram.config import delete_saved_token
                 delete_saved_token(telegram_config_path)
+                telegram_settings.token = ""
                 telegram_token_status.setText("Токен удалён.")
             telegram_token_input.clear()
         except (SecureStoreError, ValueError) as exc:
