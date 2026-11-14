@@ -15,6 +15,7 @@ from hellsaiz_pc_ai.core.registry import ToolRegistry
 from hellsaiz_pc_ai.hotkeys import GlobalHotkeyService, HotkeyUnavailableError
 from hellsaiz_pc_ai.providers.openai_compatible import OpenAICompatibleProvider, ProviderError
 from hellsaiz_pc_ai.storage.sqlite_store import ChatStore
+from hellsaiz_pc_ai.tools.clipboard import register_clipboard_tools
 from hellsaiz_pc_ai.tools.system import register_system_tools
 from hellsaiz_pc_ai.tools.windows import register_windows_tools
 from hellsaiz_pc_ai.workflows.builder import append_hour_condition, append_repeat_action, append_tool_action, append_wait_action, append_weekday_condition, terminal_nodes
@@ -27,6 +28,7 @@ def build_runtime(settings: Settings):
     registry = ToolRegistry()
     register_system_tools(registry)
     register_windows_tools(registry, settings.allowed_apps, settings.allowed_processes)
+    register_clipboard_tools(registry)
     router = CommandRouter(registry, settings.allowed_apps, settings.allowed_processes)
 
     assistant = None
