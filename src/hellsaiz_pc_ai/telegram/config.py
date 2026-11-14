@@ -84,6 +84,12 @@ def save_settings(path: Path, settings: TelegramSettings) -> None:
         "allowed_chat_ids": settings.allowed_chat_ids,
         "allowed_tools": settings.allowed_tools,
     })
+    token_path = path.with_name("telegram_token.dpapi")
+    token_value = validate_bot_token(settings.token) if settings.token.strip() else ""
+    if not token_value:
+        delete_secret(token_path)
+    else:
+        save_secret(token_path, token_value)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + ".tmp")
     temporary.write_text(
@@ -97,12 +103,8 @@ def save_settings(path: Path, settings: TelegramSettings) -> None:
         encoding="utf-8",
     )
     os.replace(temporary, path)
-    token_path = path.with_name("telegram_token.dpapi")
-    if settings.token.strip():
-        save_secret(token_path, validate_bot_token(settings.token))
-    else:
-        delete_secret(token_path)
     settings.enabled = normalized.enabled
     settings.allowed_user_ids[:] = normalized.allowed_user_ids
     settings.allowed_chat_ids[:] = normalized.allowed_chat_ids
     settings.allowed_tools[:] = normalized.allowed_tools
+    settings.token = token_value
