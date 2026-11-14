@@ -7,7 +7,7 @@ This is the execution order for the next development cycle. Each stage depends o
 - Keep CI green on Windows/Linux, Python 3.11/3.12.
 - Fix lint/test regressions immediately.
 - Confirm current SQLite reminders, clipboard operations and workflow scheduler on Windows.
-- Add a single-instance app guard and structured health/status reporting. The single-instance lock is now implemented.
+- Add a single-instance app guard and structured health/status reporting. Single-instance locking and speech subsystem diagnostics are implemented.
 
 ## P1 — platform foundations
 
