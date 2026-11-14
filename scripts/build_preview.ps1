@@ -66,6 +66,27 @@ if (-not (Test-Path "dist/HellsaizPC_AI_Setup.exe" -PathType Leaf)) {
     throw "The Windows installer executable was not created."
 }
 
+function Invoke-ExecutableSmokeTest {
+    param(
+        [Parameter(Mandatory = $true)][string]$Executable,
+        [Parameter(Mandatory = $true)][string]$WorkingDirectory,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+    $process = Start-Process -FilePath (Resolve-Path $Executable) -ArgumentList "--self-test" -WorkingDirectory (Resolve-Path $WorkingDirectory) -PassThru
+    if (-not $process.WaitForExit(120000)) {
+        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+        throw "$Label self-test timed out."
+    }
+    if ($process.ExitCode -ne 0) {
+        throw "$Label self-test failed with exit code $($process.ExitCode)."
+    }
+    Write-Host "$Label self-test passed."
+}
+
+Invoke-ExecutableSmokeTest -Executable "dist/app/HellsaizPC_AI/HellsaizPC_AI.exe" -WorkingDirectory "dist/app/HellsaizPC_AI" -Label "Desktop application"
+Invoke-ExecutableSmokeTest -Executable "dist/install/HellsaizLauncher.exe" -WorkingDirectory "dist/install" -Label "Application launcher"
+Invoke-ExecutableSmokeTest -Executable "dist/tools/HellsaizUpdater.exe" -WorkingDirectory "dist/tools" -Label "Update helper"
+
 $metadataDir = "dist/preview"
 New-Item -ItemType Directory -Force -Path $metadataDir | Out-Null
 $metadata = @(
