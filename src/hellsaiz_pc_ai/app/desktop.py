@@ -332,31 +332,42 @@ def main() -> int:
 
                 if self.speak_reply:
                     try:
-                        if profile_data.get("tts_engine") == "piper":
-                            voice_id = str(profile_data.get("piper_voice_id") or "")
-                            voice_models = list_installed_voices(
-                                settings.workflows_path.parent / "voices"
-                            )
-                            selected_model = next(
-                                (voice for voice in voice_models if voice.voice_id == voice_id),
-                                None,
-                            )
-                            if selected_model is None:
-                                raise RuntimeError(
-                                    "Выбранная модель Piper не установлена. Открой раздел «Голоса»."
-                                )
-                            PiperSynthesizer(selected_model.model_path).speak(answer)
-                        else:
-                            from hellsaiz_pc_ai.speech.sapi5 import Sapi5Synthesizer
+                        from hellsaiz_pc_ai.speech.output import SpeechOutputRouter
+                        from hellsaiz_pc_ai.speech.sapi5 import Sapi5Synthesizer
 
-                            Sapi5Synthesizer(
+                        speakers = {
+                            "sapi5": Sapi5Synthesizer(
                                 active_voice["name"],
                                 settings.speech.tts_rate,
                                 settings.speech.tts_volume,
-                            ).speak(answer)
+                            )
+                        }
+                        voice_id = str(profile_data.get("piper_voice_id") or "")
+                        voice_models = list_installed_voices(
+                            settings.workflows_path.parent / "voices"
+                        )
+                        selected_model = next(
+                            (voice for voice in voice_models if voice.voice_id == voice_id),
+                            None,
+                        )
+                        if selected_model is not None:
+                            speakers["piper"] = PiperSynthesizer(selected_model.model_path)
+                        preferred_tts = str(profile_data.get("tts_engine") or "sapi5").casefold()
+                        if preferred_tts not in {"sapi5", "piper"}:
+                            preferred_tts = "sapi5"
+                        fallback_tts = "sapi5" if preferred_tts == "piper" else "piper"
+                        result = SpeechOutputRouter(
+                            speakers, preferred_tts, fallback_tts
+                        ).speak(answer)
+                        if result.fallback_used:
+                            logging.warning(
+                                "TTS fell back to %s because the preferred engine failed: %s",
+                                result.engine,
+                                result.primary_error,
+                            )
                     except Exception as exc:
                         logging.warning("Speech output unavailable: %s", exc)
-                        answer += "\n\n[Не удалось воспроизвести голос. Проверь выбранный движок и модель.]"
+                        answer += "\n\n[Не удалось воспроизвести голос. Проверь установленные голоса и модель.]"
 
                 stored_prompt = (
                     prompt
