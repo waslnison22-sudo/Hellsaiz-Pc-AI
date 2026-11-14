@@ -149,6 +149,7 @@ def main() -> int:
             QMainWindow,
             QMessageBox,
             QPlainTextEdit,
+            QScrollArea,
             QPushButton,
             QSplitter,
             QStackedLayout,
@@ -1938,7 +1939,11 @@ def main() -> int:
             "запуске EXE. Распакуй portable ZIP и запускай HellsaizLauncher.exe из его корня."
         )
     settings_layout.addStretch(1)
-    tabs.addTab(settings_page, "Настройки")
+    settings_scroll = QScrollArea()
+    settings_scroll.setWidgetResizable(True)
+    settings_scroll.setFrameShape(QFrame.Shape.NoFrame)
+    settings_scroll.setWidget(settings_page)
+    tabs.addTab(settings_scroll, "Настройки")
 
     update_workers: list[QThread] = []
     latest_release_url = ""
