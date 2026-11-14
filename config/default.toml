@@ -28,9 +28,10 @@ tts_rate = 175
 tts_volume = 0.9
 vosk_model_path = ""
 stt_primary = "vosk"
-stt_fallback = "whisper.cpp"
+stt_fallback = "none"
 whisper_cpp_executable = ""
 whisper_cpp_model = ""
+recording_seconds = 5
 
 [windows.allowed_apps]
 notepad = ["notepad.exe"]
