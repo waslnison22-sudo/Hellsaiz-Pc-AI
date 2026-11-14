@@ -70,3 +70,23 @@ def test_ocr_tool_is_disabled_until_user_opt_in():
     state["enabled"] = True
     # Once enabled, a mocked screen capture is tested by read_primary_screen_text.
     assert registry.get_spec("read_screen_text") is not None
+
+
+
+def test_enabled_ocr_tool_uses_local_reader(monkeypatch):
+    from hellsaiz_pc_ai.core.models import ToolResult
+    from hellsaiz_pc_ai.tools import screen_ocr
+
+    registry = ToolRegistry()
+    register_screen_ocr_tools(registry, enabled=lambda: True)
+    monkeypatch.setattr(
+        screen_ocr,
+        "read_primary_screen_text",
+        lambda: ToolResult(True, "Visible text", {"sent_to_network": False}),
+    )
+
+    result = registry.execute("read_screen_text", {})
+
+    assert result.ok
+    assert result.output == "Visible text"
+    assert result.data["sent_to_network"] is False
