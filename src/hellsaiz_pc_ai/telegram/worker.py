@@ -3,11 +3,9 @@ from __future__ import annotations
 import json
 import logging
 import threading
-import time
 from collections.abc import Callable
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
 from urllib.request import ProxyHandler, Request, build_opener
 
 from hellsaiz_pc_ai.core.models import RiskLevel
