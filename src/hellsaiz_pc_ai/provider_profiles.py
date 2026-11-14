@@ -57,7 +57,7 @@ def validate_profile(value: Any) -> dict[str, Any]:
     enabled = value.get("enabled", False)
     if not isinstance(name, str) or not 1 <= len(name.strip()) <= 48:
         raise ValueError("Название AI-профиля должно содержать от 1 до 48 символов.")
-    if not re.fullmatch(r"[^\\x00-\\x1f\\x7f]+", name.strip()):
+    if any(ord(character) < 32 or ord(character) == 127 for character in name.strip()):
         raise ValueError("Название AI-профиля содержит недопустимые символы.")
     if provider not in SUPPORTED_PROVIDERS:
         raise ValueError(f"Неизвестный тип AI-провайдера: {provider}.")
