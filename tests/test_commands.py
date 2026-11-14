@@ -170,7 +170,6 @@ def test_close_process_runs_immediately_but_keeps_allowlist():
     assert "не добавлен" in router.route("закрой powershell").casefold()
 
 
-
 def test_read_clipboard_requires_an_explicit_command():
     router = make_router()
 
@@ -222,7 +221,6 @@ def test_list_and_dismiss_reminders_are_explicit():
     router = make_router()
     assert router.route("мои напоминания") == "Готово. no reminders"
     assert router.route("удали напоминание 12") == "Готово. dismissed 12"
-
 
 
 def test_multiple_wake_names_are_normalized_before_routing():
@@ -285,14 +283,12 @@ def test_unknown_application_alias_is_not_guessed():
     assert "не добавлено" in response.casefold()
 
 
-
 def test_user_alias_cannot_shadow_another_canonical_app_id():
     with pytest.raises(ValueError, match="Ambiguous"):
         make_router(
             allowed_apps={"steam": ("steam.exe",), "cs2": ("cs2.exe",)},
             app_aliases={"steam": ("cs2",)},
         )
-
 
 
 def test_alice_style_search_phrasings_resolve_to_one_skill():
@@ -317,7 +313,6 @@ def test_currency_skill_extracts_base_and_quote_currency():
     router = make_router()
     assert router.route("курс доллара к рублю") == "Готово. rate: USD/RUB"
     assert router.route("сколько стоит евро") == "Готово. rate: EUR/RUB"
-
 
 
 def test_intent_engine_extracts_named_slots():
