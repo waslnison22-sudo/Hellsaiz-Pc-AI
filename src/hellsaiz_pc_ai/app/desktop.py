@@ -70,7 +70,15 @@ from hellsaiz_pc_ai.tools.windows import register_windows_tools
 from hellsaiz_pc_ai.tools.window_control import register_window_tools
 from hellsaiz_pc_ai.tools.file_system import register_file_system_tools
 from hellsaiz_pc_ai.tools.ui_automation import register_ui_automation_tools
-from hellsaiz_pc_ai.tools.screen_ocr import register_screen_ocr_tools
+from hellsaiz_pc_ai.tools.screen_ocr import (
+    clear_ocr_engine_cache,
+    register_screen_ocr_tools,
+)
+from hellsaiz_pc_ai.tools.ocr_models import (
+    OcrModelError,
+    check_russian_ocr_models,
+    download_russian_ocr_models,
+)
 from hellsaiz_pc_ai.workflows.builder import append_hour_condition, append_repeat_action, append_tool_action, append_wait_action, append_weekday_condition, terminal_nodes
 from hellsaiz_pc_ai.workflows.graph import WorkflowGraph, WorkflowGraphRunner, WorkflowTrigger
 from hellsaiz_pc_ai.workflows.library import WorkflowLibrary
@@ -133,6 +141,7 @@ def build_runtime(settings: Settings):
     )
 
     vision_settings_path = settings.workflows_path.parent / "vision.json"
+    ocr_models_root = settings.workflows_path.parent / "models" / "ocr_ru"
     vision_settings: dict[str, Any] = {"ocr_enabled": False}
     if vision_settings_path.is_file():
         try:
@@ -3124,19 +3133,84 @@ def main() -> int:
     vision_title = QLabel("ЛОКАЛЬНОЕ РАСПОЗНАВАНИЕ ЭКРАНА")
     vision_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
     settings_layout.addWidget(vision_title)
+
+    try:
+        initial_ocr_models = check_russian_ocr_models(ocr_models_root)
+    except OcrModelError:
+        initial_ocr_models = None
+    ocr_models_ready = bool(initial_ocr_models and initial_ocr_models.ready)
+    if not ocr_models_ready:
+        vision_settings["ocr_enabled"] = False
+
     vision_ocr_check = QCheckBox("Разрешить локальный OCR основного монитора")
     vision_ocr_check.setChecked(bool(vision_settings.get("ocr_enabled", False)))
+    vision_ocr_check.setEnabled(ocr_models_ready)
     vision_ocr_help = QLabel(
-        "Снимок экрана делается только по явной команде «прочитай текст на экране». "
-        "Изображение остаётся в памяти, не сохраняется на диск и не отправляется в сеть. "
-        "Распознавание выполняется локальным CPU-модулем."
+        "Русские OCR-модели уже установлены. Снимок экрана делается только по явной команде, "
+        "остаётся в памяти, не сохраняется и не отправляется в сеть."
+        if ocr_models_ready else
+        "Сначала скачай три русские OCR-модели. Без них снимок экрана не создаётся, "
+        "а OCR-команда недоступна."
     )
     vision_ocr_help.setWordWrap(True)
     vision_ocr_help.setStyleSheet("color:#929aa6;")
     settings_layout.addWidget(vision_ocr_check)
     settings_layout.addWidget(vision_ocr_help)
 
+    ocr_model_buttons = QHBoxLayout()
+    download_ocr_models_button = QPushButton("Загрузить русские OCR-модели")
+    verify_ocr_models_button = QPushButton("Проверить модели")
+    ocr_model_buttons.addWidget(download_ocr_models_button)
+    ocr_model_buttons.addWidget(verify_ocr_models_button)
+    settings_layout.addLayout(ocr_model_buttons)
+
+    ocr_model_status = QLabel(
+        "Пакет моделей установлен и проверен."
+        if ocr_models_ready else "Модели отсутствуют. Загрузка выполняется только после нажатия кнопки."
+    )
+    ocr_model_status.setWordWrap(True)
+    ocr_model_status.setStyleSheet("color:#929aa6;")
+    settings_layout.addWidget(ocr_model_status)
+
+    ocr_model_workers: list[QThread] = []
+
+    class OcrModelDownloadWorker(QThread):
+        progress = Signal(str)
+        completed = Signal(object)
+        failed = Signal(str)
+
+        def __init__(self, root: Path) -> None:
+            super().__init__()
+            self.root = root
+
+        def run(self) -> None:
+            try:
+                status = download_russian_ocr_models(
+                    self.root,
+                    progress=lambda key, action: self.progress.emit(
+                        f"{key}: {'уже установлен' if action == 'already-installed' else 'загружен'}"
+                    ),
+                )
+                self.completed.emit(status)
+            except Exception as exc:
+                self.failed.emit(f"{type(exc).__name__}: {exc}")
+
     def persist_vision_settings(enabled: bool) -> None:
+        if enabled:
+            try:
+                if not check_russian_ocr_models(ocr_models_root).ready:
+                    vision_ocr_check.blockSignals(True)
+                    vision_ocr_check.setChecked(False)
+                    vision_ocr_check.blockSignals(False)
+                    vision_ocr_help.setText("OCR не включён: русские модели отсутствуют или повреждены.")
+                    return
+            except OcrModelError as exc:
+                vision_ocr_check.blockSignals(True)
+                vision_ocr_check.setChecked(False)
+                vision_ocr_check.blockSignals(False)
+                vision_ocr_help.setText(f"OCR не включён: {exc}")
+                return
+
         previous = bool(vision_settings.get("ocr_enabled", False))
         vision_settings["ocr_enabled"] = bool(enabled)
         try:
@@ -3148,10 +3222,10 @@ def main() -> int:
             )
             temporary.replace(vision_settings_path)
             vision_ocr_help.setText(
-                "OCR включён. Снимок экрана делается только по явной команде, "
-                "не сохраняется и не отправляется в сеть."
+                "OCR включён. Снимок создаётся только по явной команде; "
+                "используется локальная модель кириллицы."
                 if enabled else
-                "OCR выключен. Помощник не сможет читать текст с экрана, пока ты не включишь эту функцию."
+                "OCR выключен. Снимок экрана не создаётся."
             )
         except OSError as exc:
             vision_settings["ocr_enabled"] = previous
@@ -3160,6 +3234,66 @@ def main() -> int:
             vision_ocr_check.blockSignals(False)
             vision_ocr_help.setText(f"Не удалось сохранить настройку OCR: {exc}")
 
+    def refresh_ocr_model_status() -> bool:
+        nonlocal ocr_models_ready
+        try:
+            status = check_russian_ocr_models(ocr_models_root)
+        except OcrModelError as exc:
+            ocr_models_ready = False
+            ocr_model_status.setText(str(exc))
+            return False
+        ocr_models_ready = status.ready
+        vision_ocr_check.setEnabled(status.ready)
+        if not status.ready:
+            vision_settings["ocr_enabled"] = False
+            vision_ocr_check.blockSignals(True)
+            vision_ocr_check.setChecked(False)
+            vision_ocr_check.blockSignals(False)
+            missing = ", ".join(status.missing) or "нет"
+            invalid = ", ".join(status.invalid) or "нет"
+            ocr_model_status.setText(f"Модели не готовы. Нет: {missing}. Повреждены: {invalid}.")
+            vision_ocr_help.setText("OCR выключен до установки и проверки всех трёх русских моделей.")
+            return False
+        clear_ocr_engine_cache()
+        ocr_model_status.setText("Все три русские OCR-модели установлены; SHA-256 проверен.")
+        return True
+
+    def download_ocr_models() -> None:
+        if any(worker.isRunning() for worker in ocr_model_workers):
+            return
+        download_ocr_models_button.setEnabled(False)
+        verify_ocr_models_button.setEnabled(False)
+        ocr_model_status.setText("Загружаю три русские OCR-модели. Контрольная сумма каждой будет проверена.")
+        worker = OcrModelDownloadWorker(ocr_models_root)
+        ocr_model_workers.append(worker)
+        worker.progress.connect(ocr_model_status.setText)
+
+        def on_ocr_downloaded(_status: Any) -> None:
+            download_ocr_models_button.setEnabled(True)
+            verify_ocr_models_button.setEnabled(True)
+            if refresh_ocr_model_status():
+                ocr_model_status.setText(
+                    "Модели установлены и проверены. Теперь можно отдельно включить OCR."
+                )
+
+        def on_ocr_download_failed(message: str) -> None:
+            download_ocr_models_button.setEnabled(True)
+            verify_ocr_models_button.setEnabled(True)
+            ocr_model_status.setText("Загрузка OCR-моделей не выполнена: " + message)
+
+        worker.completed.connect(on_ocr_downloaded)
+        worker.failed.connect(on_ocr_download_failed)
+        worker.finished.connect(
+            lambda: ocr_model_workers.remove(worker) if worker in ocr_model_workers else None
+        )
+        worker.start()
+
+    def verify_ocr_models() -> None:
+        if refresh_ocr_model_status():
+            vision_ocr_help.setText("Модели проверены. OCR включается отдельным переключателем.")
+
+    download_ocr_models_button.clicked.connect(download_ocr_models)
+    verify_ocr_models_button.clicked.connect(verify_ocr_models)
     vision_ocr_check.toggled.connect(persist_vision_settings)
 
     startup_title = QLabel("АВТОЗАПУСК WINDOWS")
@@ -3752,6 +3886,7 @@ def main() -> int:
             provider_health_workers,
             startup_workers,
             network_workers,
+            ocr_model_workers,
             voice_download_workers,
             vosk_model_download_workers,
             _BACKGROUND_VOICE_WORKERS["tests"],
