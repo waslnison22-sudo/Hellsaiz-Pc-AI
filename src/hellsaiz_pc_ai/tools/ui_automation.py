@@ -9,6 +9,19 @@ from hellsaiz_pc_ai.core.registry import ToolRegistry, ToolSpec
 
 MAX_CONTROLS = 40
 MAX_TEXT_LENGTH = 4000
+ALLOWED_SHORTCUTS = {
+    "CTRL+A": "^a",
+    "CTRL+C": "^c",
+    "CTRL+F": "^f",
+    "CTRL+L": "^l",
+    "CTRL+S": "^s",
+    "CTRL+T": "^t",
+    "CTRL+V": "^v",
+    "ALT+LEFT": "%{LEFT}",
+    "ALT+RIGHT": "%{RIGHT}",
+    "ESC": "{ESC}",
+    "F5": "{F5}",
+}
 
 
 def _desktop():
@@ -160,6 +173,31 @@ def _click_control(title_query: str, name_query: str) -> ToolResult:
         return ToolResult(False, f"Windows не выполнила нажатие ({type(exc).__name__}).")
 
 
+def _send_keyboard_shortcut(title_query: str, shortcut: str) -> ToolResult:
+    normalized = "+".join(part.strip().upper() for part in shortcut.split("+"))
+    sequence = ALLOWED_SHORTCUTS.get(normalized)
+    if sequence is None:
+        return ToolResult(
+            False,
+            "Сочетание не разрешено. Доступны: " + ", ".join(sorted(ALLOWED_SHORTCUTS)) + ".",
+        )
+    try:
+        desktop = _desktop()
+        window, error = _select_window(desktop, title_query)
+        if error:
+            return ToolResult(False, error)
+        window.set_focus()
+        window.type_keys(sequence, set_foreground=True)
+        return ToolResult(
+            True,
+            f"Сочетание {normalized} отправлено в окно «{window.window_text()}».",
+        )
+    except OSError as exc:
+        return ToolResult(False, str(exc))
+    except Exception as exc:
+        return ToolResult(False, f"Не удалось отправить сочетание ({type(exc).__name__}).")
+
+
 def _type_into_control(title_query: str, name_query: str, text: str) -> ToolResult:
     if len(text) > MAX_TEXT_LENGTH:
         return ToolResult(False, f"Текст ограничен {MAX_TEXT_LENGTH} символами.")
@@ -225,6 +263,23 @@ def register_ui_automation_tools(registry: ToolRegistry) -> None:
         risk=RiskLevel.CONFIRM,
         handler=lambda args: _click_control(
             str(args["window_title"]), str(args["control_name"])
+        ),
+    ))
+    registry.register(ToolSpec(
+        name="send_keyboard_shortcut",
+        description="Отправить одно из разрешённых клавиатурных сочетаний в единственное выбранное окно Windows.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "window_title": {"type": "string", "minLength": 1, "maxLength": 160},
+                "shortcut": {"type": "string", "enum": sorted(ALLOWED_SHORTCUTS)},
+            },
+            "required": ["window_title", "shortcut"],
+            "additionalProperties": False,
+        },
+        risk=RiskLevel.CONFIRM,
+        handler=lambda args: _send_keyboard_shortcut(
+            str(args["window_title"]), str(args["shortcut"])
         ),
     ))
     registry.register(ToolSpec(
