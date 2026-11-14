@@ -210,6 +210,26 @@ def test_dpapi_failure_does_not_write_enabled_telegram_config(monkeypatch, tmp_p
     assert not settings_path.exists()
 
 
+def test_saving_non_secret_settings_preserves_existing_dpapi_token(monkeypatch, tmp_path: Path):
+    from hellsaiz_pc_ai.telegram import config
+
+    protected = {}
+    monkeypatch.setattr(config, "save_secret", lambda path, value: protected.update({str(path): value}))
+    monkeypatch.setattr(config, "delete_secret", lambda path: protected.pop(str(path), None))
+    monkeypatch.setattr(config, "load_secret", lambda path: protected.get(str(path), ""))
+
+    path = tmp_path / "telegram.json"
+    token_path = path.with_name("telegram_token.dpapi")
+    config.save_secret(token_path, TOKEN)
+
+    # Editing allowed IDs and permissions must not clear a token saved separately.
+    settings = TelegramSettings(False, [111], [222], ["get_local_time"], token="")
+    save_settings(path, settings)
+
+    assert protected[str(token_path)] == TOKEN
+    assert load_settings(path).token == TOKEN
+
+
 def test_disabling_telegram_deletes_dpapi_token(monkeypatch, tmp_path: Path):
     from hellsaiz_pc_ai.telegram import config
 
