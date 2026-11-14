@@ -25,12 +25,21 @@ class ModelInstallError(RuntimeError):
 
 def is_valid_vosk_model(model_dir: Path) -> bool:
     model_dir = Path(model_dir)
-    return (
-        model_dir.is_dir()
-        and (model_dir / "am" / "final.mdl").is_file()
-        and (model_dir / "conf" / "model.conf").is_file()
-        and (model_dir / "graph" / "words.txt").is_file()
+    if model_dir.is_symlink() or not model_dir.is_dir():
+        return False
+    required = (
+        model_dir / "am" / "final.mdl",
+        model_dir / "conf" / "model.conf",
+        model_dir / "graph" / "words.txt",
     )
+    return all(path.is_file() and not path.is_symlink() for path in required)
+
+
+def _remove_path(path: Path) -> None:
+    if path.is_symlink() or path.is_file():
+        path.unlink(missing_ok=True)
+    elif path.is_dir():
+        shutil.rmtree(path)
 
 
 def _download_archive(destination: Path) -> None:
@@ -77,13 +86,19 @@ def _safe_extract(archive_path: Path, destination: Path) -> Path:
                 if not name or "\\" in name:
                     raise ModelInstallError("Архив Vosk содержит небезопасный путь.")
                 relative = PurePosixPath(name)
-                if relative.is_absolute() or any(part in {"", ".", ".."} for part in relative.parts):
+                if (
+                    relative.is_absolute()
+                    or any(part in {"", ".", ".."} or ":" in part for part in relative.parts)
+                ):
                     raise ModelInstallError("Архив Vosk содержит путь за пределами модели.")
                 if not relative.parts or relative.parts[0] != expected_root:
                     raise ModelInstallError("Архив Vosk имеет неожиданный корневой каталог.")
                 mode = (info.external_attr >> 16) & 0xFFFF
                 if stat.S_ISLNK(mode):
                     raise ModelInstallError("Символические ссылки в архиве Vosk запрещены.")
+                file_type = stat.S_IFMT(mode)
+                if file_type not in {0, stat.S_IFREG, stat.S_IFDIR}:
+                    raise ModelInstallError("Архив Vosk содержит специальный файл.")
                 if info.is_dir():
                     continue
                 file_count += 1
@@ -123,10 +138,19 @@ def _safe_extract(archive_path: Path, destination: Path) -> Path:
 def install_vosk_small_ru(destination_dir: Path) -> Path:
     """Install the official 45 MB small Russian Vosk model atomically."""
     destination_dir = Path(destination_dir).expanduser()
+    if destination_dir.is_symlink():
+        raise ModelInstallError("Каталог моделей Vosk не должен быть символической ссылкой.")
     destination_dir.mkdir(parents=True, exist_ok=True)
     target = destination_dir / VOSK_MODEL_ID
     if is_valid_vosk_model(target):
         return target
+    if target.is_symlink():
+        raise ModelInstallError("Целевая папка модели Vosk является символической ссылкой.")
+
+    backup = destination_dir / f".{VOSK_MODEL_ID}.previous"
+    if backup.is_symlink():
+        raise ModelInstallError("Резервная папка модели Vosk является символической ссылкой.")
+    _remove_path(backup)
 
     with tempfile.TemporaryDirectory(
         prefix="hellsaiz-vosk-", dir=destination_dir
@@ -138,21 +162,21 @@ def install_vosk_small_ru(destination_dir: Path) -> Path:
         staged_model = temporary_dir / "staged-model"
         extracted_root.replace(staged_model)
 
-        backup = destination_dir / f".{VOSK_MODEL_ID}.previous"
-        if backup.exists():
-            shutil.rmtree(backup)
         had_previous = target.exists()
         if had_previous:
             target.replace(backup)
         try:
             staged_model.replace(target)
+            if not is_valid_vosk_model(target):
+                raise ModelInstallError(
+                    "Установленная модель Vosk не прошла проверку целостности."
+                )
         except Exception:
-            if had_previous and backup.exists() and not target.exists():
+            if target.exists():
+                _remove_path(target)
+            if had_previous and backup.exists():
                 backup.replace(target)
             raise
 
-    if backup.exists():
-        shutil.rmtree(backup)
-    if not is_valid_vosk_model(target):
-        raise ModelInstallError("Установленная модель Vosk не прошла проверку целостности.")
+    _remove_path(backup)
     return target
