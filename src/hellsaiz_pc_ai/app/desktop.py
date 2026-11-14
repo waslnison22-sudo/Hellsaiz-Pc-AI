@@ -2594,6 +2594,107 @@ def main() -> int:
     always_listen_check.toggled.connect(lambda _checked: save_stt_profile())
     refresh_microphone_devices()
 
+    file_access_title = QLabel("ДОСТУП К ФАЙЛАМ")
+    file_access_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
+    settings_layout.addWidget(file_access_title)
+    file_access_help = QLabel(
+        "Помощник работает только внутри этих папок. Поиск, чтение и открытие доступны сразу. "
+        "Создание папок и новых текстовых файлов требует отдельного разрешения. "
+        "Удаление и перезапись файлов голосовыми командами недоступны."
+    )
+    file_access_help.setWordWrap(True)
+    file_access_help.setStyleSheet("color:#929aa6;")
+    settings_layout.addWidget(file_access_help)
+
+    file_roots_list = QListWidget()
+    file_roots_list.setMaximumHeight(120)
+    for root_path in file_access_settings.roots:
+        file_roots_list.addItem(str(root_path))
+    settings_layout.addWidget(file_roots_list)
+
+    file_root_buttons = QHBoxLayout()
+    add_file_root_button = QPushButton("Добавить папку")
+    remove_file_root_button = QPushButton("Убрать выбранную")
+    file_root_buttons.addWidget(add_file_root_button)
+    file_root_buttons.addWidget(remove_file_root_button)
+    settings_layout.addLayout(file_root_buttons)
+
+    allow_file_writes_check = QCheckBox("Разрешить создавать новые папки и текстовые файлы")
+    allow_file_writes_check.setChecked(file_access_settings.allow_writes)
+    settings_layout.addWidget(allow_file_writes_check)
+    file_access_status = QLabel("Папки доступа хранятся локально.")
+    file_access_status.setWordWrap(True)
+    file_access_status.setStyleSheet("color:#929aa6;")
+    settings_layout.addWidget(file_access_status)
+
+    def refresh_file_roots_list() -> None:
+        file_roots_list.clear()
+        for root_path in file_access_settings.roots:
+            file_roots_list.addItem(str(root_path))
+
+    def persist_file_access_settings() -> bool:
+        try:
+            save_file_access_settings(file_access_path, file_access_settings)
+            refresh_file_roots_list()
+            file_access_status.setText(
+                f"Сохранено разрешённых папок: {len(file_access_settings.roots)}. "
+                + (
+                    "Создание новых объектов разрешено."
+                    if file_access_settings.allow_writes
+                    else "Запись и создание объектов отключены."
+                )
+            )
+            return True
+        except (OSError, ValueError) as exc:
+            file_access_status.setText(f"Не удалось сохранить доступ к файлам: {exc}")
+            return False
+
+    def add_file_access_root() -> None:
+        selected = QFileDialog.getExistingDirectory(
+            window,
+            "Разрешить доступ к папке",
+            str(Path.home()),
+        )
+        if not selected:
+            return
+        candidate = Path(selected).resolve()
+        if candidate in file_access_settings.roots:
+            file_access_status.setText("Эта папка уже разрешена.")
+            return
+        if len(file_access_settings.roots) >= 12:
+            file_access_status.setText("Можно разрешить не более 12 папок.")
+            return
+        file_access_settings.roots.append(candidate)
+        if not persist_file_access_settings():
+            file_access_settings.roots.remove(candidate)
+
+    def remove_file_access_root() -> None:
+        item = file_roots_list.currentItem()
+        if item is None:
+            file_access_status.setText("Сначала выбери папку в списке.")
+            return
+        target = Path(item.text()).resolve()
+        previous = list(file_access_settings.roots)
+        file_access_settings.roots[:] = [
+            root for root in file_access_settings.roots if root.resolve() != target
+        ]
+        if not persist_file_access_settings():
+            file_access_settings.roots[:] = previous
+            refresh_file_roots_list()
+
+    def toggle_file_write_permission(enabled: bool) -> None:
+        previous = file_access_settings.allow_writes
+        file_access_settings.allow_writes = enabled
+        if not persist_file_access_settings():
+            file_access_settings.allow_writes = previous
+            allow_file_writes_check.blockSignals(True)
+            allow_file_writes_check.setChecked(previous)
+            allow_file_writes_check.blockSignals(False)
+
+    add_file_root_button.clicked.connect(add_file_access_root)
+    remove_file_root_button.clicked.connect(remove_file_access_root)
+    allow_file_writes_check.toggled.connect(toggle_file_write_permission)
+
     startup_title = QLabel("АВТОЗАПУСК WINDOWS")
     startup_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
     settings_layout.addWidget(startup_title)
