@@ -318,8 +318,41 @@ def apply_update(
         )
         _write_log(root, f"Activated version {manifest['version']} from {previous} ({mode}).")
 
-        if not _launch_and_check(root, manifest["version"]):
-            _write_json_atomic(active_path, active)
+        try:
+            health_ok = _launch_and_check(root, manifest["version"])
+        except Exception as launch_error:
+            try:
+                _write_json_atomic(active_path, active)
+            except OSError as rollback_error:
+                _write_log(
+                    root,
+                    f"CRITICAL: health launch failed and active.json rollback failed: {rollback_error}",
+                )
+                raise ApplyUpdateError(
+                    "Новая версия не запустилась, а автоматическое восстановление active.json не удалось. "
+                    "Не запускайте приложение до ручного восстановления."
+                ) from rollback_error
+            shutil.rmtree(target_dir, ignore_errors=True)
+            _write_log(
+                root,
+                f"Health launch raised {type(launch_error).__name__}; rolled back to {previous}.",
+            )
+            raise ApplyUpdateError(
+                "Не удалось запустить новую версию. Выполнен автоматический откат."
+            ) from launch_error
+
+        if not health_ok:
+            try:
+                _write_json_atomic(active_path, active)
+            except OSError as rollback_error:
+                _write_log(
+                    root,
+                    f"CRITICAL: health check failed and active.json rollback failed: {rollback_error}",
+                )
+                raise ApplyUpdateError(
+                    "Новая версия не прошла проверку, и автоматический откат active.json не удался. "
+                    "Не запускайте приложение до ручного восстановления."
+                ) from rollback_error
             shutil.rmtree(target_dir, ignore_errors=True)
             _write_log(root, f"Health check failed for {manifest['version']}; rolled back to {previous}.")
             raise ApplyUpdateError(
