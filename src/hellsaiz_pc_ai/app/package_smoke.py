@@ -9,6 +9,7 @@ from collections.abc import Callable
 PACKAGED_RUNTIME_MODULES = (
     "PySide6.QtCore",
     "PySide6.QtWidgets",
+    "hellsaiz_pc_ai.providers.gigachat",
     "cryptography.hazmat.primitives.asymmetric.ed25519",
     "numpy",
     "sounddevice",
