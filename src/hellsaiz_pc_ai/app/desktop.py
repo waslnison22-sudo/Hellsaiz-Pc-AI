@@ -2760,6 +2760,33 @@ def main() -> int:
 
     def release_speech_runtime() -> None:
         stop_wake_listener()
+        worker_groups = (
+            workers,
+            update_workers,
+            voice_download_workers,
+            vosk_model_download_workers,
+            _BACKGROUND_VOICE_WORKERS["tests"],
+            _BACKGROUND_VOICE_WORKERS["sapi_inventory"],
+        )
+        seen: set[int] = set()
+        for group in worker_groups:
+            for worker in tuple(group):
+                worker_id = id(worker)
+                if worker_id in seen:
+                    continue
+                seen.add(worker_id)
+                try:
+                    if worker.isRunning():
+                        logging.info(
+                            "Waiting for background task %s to finish before exit",
+                            type(worker).__name__,
+                        )
+                        worker.wait()
+                except Exception:
+                    logging.exception(
+                        "Could not finish background task %s during shutdown",
+                        type(worker).__name__,
+                    )
         try:
             from hellsaiz_pc_ai.speech.vosk import VoskTranscriber
 
