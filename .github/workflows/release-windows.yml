@@ -113,6 +113,7 @@ jobs:
           $setup = "dist/HellsaizPC_AI_Setup.exe"
           if (-not (Test-Path $setup -PathType Leaf)) { throw "Windows setup installer is missing." }
           if ((Get-Item $setup).Length -le 0) { throw "Windows setup installer is empty." }
+          Copy-Item $setup "dist/release-assets/HellsaizPC_AI_Setup.exe" -Force
 
       - name: Upload release assets
         shell: pwsh
