@@ -191,10 +191,23 @@ def main() -> int:
                             "Генеративный ИИ выключен."
                         )
                 elif answer is None:
-                    answer = (
-                        f"Для комбинации {self.workflow_trigger.value} не найден "
-                        "сценарий с таким триггером."
-                    )
+                    if self.workflow_trigger.workflow_id:
+                        answer = (
+                            f"Сценарий «{self.workflow_trigger.workflow_id}» больше не доступен "
+                            "или его триггер был изменён. Ничего не запущено."
+                        )
+                    elif self.workflow_trigger.kind == "startup":
+                        answer = "Не найден сценарий автозапуска. Ничего не запущено."
+                    elif self.workflow_trigger.kind == "schedule":
+                        answer = (
+                            f"Для расписания {self.workflow_trigger.value} не найден сценарий. "
+                            "Ничего не запущено."
+                        )
+                    else:
+                        answer = (
+                            f"Для комбинации {self.workflow_trigger.value} не найден "
+                            "сценарий с таким триггером."
+                        )
 
                 if self.speak_reply:
                     try:
