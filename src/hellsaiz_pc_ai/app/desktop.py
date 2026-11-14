@@ -55,6 +55,7 @@ from hellsaiz_pc_ai.speech.voice_library import (
 from hellsaiz_pc_ai.speech.piper import PiperSynthesizer
 from hellsaiz_pc_ai.tools.windows import register_windows_tools
 from hellsaiz_pc_ai.tools.window_control import register_window_tools
+from hellsaiz_pc_ai.tools.ui_automation import register_ui_automation_tools
 from hellsaiz_pc_ai.workflows.builder import append_hour_condition, append_repeat_action, append_tool_action, append_wait_action, append_weekday_condition, terminal_nodes
 from hellsaiz_pc_ai.workflows.graph import WorkflowGraph, WorkflowGraphRunner, WorkflowTrigger
 from hellsaiz_pc_ai.workflows.library import WorkflowLibrary
@@ -99,6 +100,7 @@ def build_runtime(settings: Settings):
 
     register_windows_tools(registry, allowed_apps, settings.allowed_processes)
     register_window_tools(registry)
+    register_ui_automation_tools(registry)
     register_clipboard_tools(registry)
     reminder_store = ReminderStore(settings.database_path)
     register_reminder_tools(registry, reminder_store)
