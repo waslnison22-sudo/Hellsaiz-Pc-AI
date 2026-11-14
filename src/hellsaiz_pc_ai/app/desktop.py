@@ -173,7 +173,18 @@ def main() -> int:
         reminder_store, allowed_apps, profile_data
     ) = build_runtime(settings)
     active_voice = {"name": str(profile_data.get("voice_name") or settings.speech.tts_voice_name)}
+    raw_recording_seconds = profile_data.get(
+        "recording_seconds", settings.speech.recording_seconds
+    )
+    recording_seconds = (
+        float(raw_recording_seconds)
+        if isinstance(raw_recording_seconds, (int, float))
+        and not isinstance(raw_recording_seconds, bool)
+        and 1.0 <= float(raw_recording_seconds) <= 15.0
+        else settings.speech.recording_seconds
+    )
     active_stt = {
+        "recording_seconds": recording_seconds,
         "primary": str(profile_data.get("stt_primary") or settings.speech.stt_primary),
         "fallback": str(profile_data.get("stt_fallback") or settings.speech.stt_fallback),
         "vosk_model_path": str(
@@ -243,7 +254,7 @@ def main() -> int:
                         audio_path = Path(audio_file.name)
                     try:
                         record_microphone(
-                            audio_path, duration_seconds=settings.speech.recording_seconds
+                            audio_path, duration_seconds=active_stt["recording_seconds"]
                         )
                         speech_router = build_speech_router(
                             primary=active_stt["primary"],
@@ -1586,8 +1597,7 @@ def main() -> int:
     recording_duration_combo = QComboBox()
     for seconds in (3, 5, 7, 10, 15):
         recording_duration_combo.addItem(f"{seconds} сек.", float(seconds))
-    set_combo_data(recording_duration_combo, str(int(settings.speech.recording_seconds)))
-    duration_index = recording_duration_combo.findData(float(settings.speech.recording_seconds))
+    duration_index = recording_duration_combo.findData(float(active_stt["recording_seconds"]))
     if duration_index >= 0:
         recording_duration_combo.setCurrentIndex(duration_index)
     recording_row.addWidget(recording_duration_combo)
