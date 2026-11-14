@@ -105,18 +105,21 @@ class WakeWordListener:
                     pass
 
         try:
+            from hellsaiz_pc_ai.speech.capture import resolve_input_sample_rate
+
             selected_device = self.device
+            sample_rate = resolve_input_sample_rate(selected_device, self.sample_rate)
             if isinstance(selected_device, str):
                 from hellsaiz_pc_ai.speech.capture import resolve_input_device
 
                 selected_device = resolve_input_device(selected_device)
             model = VoskTranscriber._load_model(self.model_dir, Model)
-            recognizer = KaldiRecognizer(model, self.sample_rate)
+            recognizer = KaldiRecognizer(model, sample_rate)
             awaiting_command = False
             command_deadline = 0.0
             self.on_status("Ожидаю обращение «Хеллсайз»…")
             with sd.RawInputStream(
-                samplerate=self.sample_rate,
+                samplerate=sample_rate,
                 blocksize=4000,
                 channels=1,
                 dtype="int16",
@@ -129,7 +132,7 @@ class WakeWordListener:
                     except queue.Empty:
                         if awaiting_command and time.monotonic() >= command_deadline:
                             awaiting_command = False
-                            recognizer = KaldiRecognizer(model, self.sample_rate)
+                            recognizer = KaldiRecognizer(model, sample_rate)
                             self.on_status("Ожидаю обращение…")
                         continue
 
