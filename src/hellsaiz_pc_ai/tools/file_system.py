@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import stat
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any
 
 from hellsaiz_pc_ai.core.models import RiskLevel, ToolResult
@@ -259,11 +260,16 @@ def _write_text_file(
 
 def register_file_system_tools(
     registry: ToolRegistry,
-    roots: tuple[Path, ...] | list[Path],
+    roots: tuple[Path, ...] | list[Path] | Callable[[], tuple[Path, ...]],
     *,
-    allow_writes: bool = False,
+    allow_writes: bool | Callable[[], bool] = False,
 ) -> None:
-    allowed_roots = tuple(Path(item).resolve() for item in roots)
+    def current_roots() -> tuple[Path, ...]:
+        value = roots() if callable(roots) else roots
+        return tuple(Path(item).resolve() for item in value)
+
+    def writes_enabled() -> bool:
+        return bool(allow_writes() if callable(allow_writes) else allow_writes)
 
     registry.register(ToolSpec(
         name="list_directory",
@@ -275,7 +281,7 @@ def register_file_system_tools(
             "additionalProperties": False,
         },
         risk=RiskLevel.CONFIRM,
-        handler=lambda args: _list_directory(str(args["path"]), allowed_roots),
+        handler=lambda args: _list_directory(str(args["path"]), current_roots()),
     ))
     registry.register(ToolSpec(
         name="search_files",
@@ -290,7 +296,7 @@ def register_file_system_tools(
             "additionalProperties": False,
         },
         risk=RiskLevel.CONFIRM,
-        handler=lambda args: _search_files(str(args["path"]), str(args["query"]), allowed_roots),
+        handler=lambda args: _search_files(str(args["path"]), str(args["query"]), current_roots()),
     ))
     registry.register(ToolSpec(
         name="read_text_file",
@@ -302,7 +308,7 @@ def register_file_system_tools(
             "additionalProperties": False,
         },
         risk=RiskLevel.CONFIRM,
-        handler=lambda args: _read_text_file(str(args["path"]), allowed_roots),
+        handler=lambda args: _read_text_file(str(args["path"]), current_roots()),
     ))
     registry.register(ToolSpec(
         name="open_allowed_path",
@@ -314,7 +320,7 @@ def register_file_system_tools(
             "additionalProperties": False,
         },
         risk=RiskLevel.CONFIRM,
-        handler=lambda args: _open_path(str(args["path"]), allowed_roots),
+        handler=lambda args: _open_path(str(args["path"]), current_roots()),
     ))
     registry.register(ToolSpec(
         name="create_directory",
@@ -327,7 +333,7 @@ def register_file_system_tools(
         },
         risk=RiskLevel.CONFIRM,
         handler=lambda args: _create_directory(
-            str(args["path"]), allowed_roots, allow_writes=allow_writes
+            str(args["path"]), current_roots(), allow_writes=writes_enabled()
         ),
     ))
     registry.register(ToolSpec(
@@ -344,6 +350,6 @@ def register_file_system_tools(
         },
         risk=RiskLevel.CONFIRM,
         handler=lambda args: _write_text_file(
-            str(args["path"]), str(args["text"]), allowed_roots, allow_writes=allow_writes
+            str(args["path"]), str(args["text"]), current_roots(), allow_writes=writes_enabled()
         ),
     ))
