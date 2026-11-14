@@ -303,3 +303,25 @@ def test_text_trigger_does_not_accept_phrase_and_phrases_together():
             ],
             "edges": [{"from": "start", "to": "end"}],
         })
+
+
+
+def test_graph_rejects_non_string_node_types_without_type_error():
+    data = build_graph().to_dict()
+    data["nodes"][0]["type"] = []
+    with pytest.raises(ValueError, match="Unsupported node type"):
+        WorkflowGraph.from_dict(data)
+
+
+def test_graph_rejects_unhashable_edge_branches_without_type_error():
+    data = build_graph().to_dict()
+    data["edges"][2]["when"] = []
+    with pytest.raises(ValueError, match="Edge branch"):
+        WorkflowGraph.from_dict(data)
+
+
+def test_graph_rejects_unhashable_hour_operators_without_type_error():
+    data = build_graph().to_dict()
+    data["nodes"][2]["config"]["operator"] = []
+    with pytest.raises(ValueError, match="Hour condition"):
+        WorkflowGraph.from_dict(data)

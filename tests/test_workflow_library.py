@@ -70,3 +70,21 @@ def test_deleting_workflow_also_deletes_its_layout(tmp_path):
     library.delete("demo")
 
     assert library.load_layout("demo") == {}
+
+
+
+def test_library_skips_workflows_with_malformed_json_value_types(tmp_path):
+    import json
+
+    library = WorkflowLibrary(tmp_path)
+    malformed = {
+        "name": "Broken workflow",
+        "nodes": [
+            {"id": "start", "type": [], "config": {}},
+            {"id": "end", "type": "action.wait", "config": {"seconds": 0}},
+        ],
+        "edges": [{"from": "start", "to": "end"}],
+    }
+    (tmp_path / "broken.json").write_text(json.dumps(malformed), encoding="utf-8")
+
+    assert library.list() == []

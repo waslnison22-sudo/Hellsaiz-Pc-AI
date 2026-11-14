@@ -90,7 +90,7 @@ class WorkflowLibrary:
         for path in sorted(self.directory.glob("*.json")):
             try:
                 graph = WorkflowGraph.from_dict(json.loads(path.read_text(encoding="utf-8")))
-            except (OSError, ValueError, json.JSONDecodeError) as exc:
+            except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
                 logging.warning("Skipping invalid workflow %s: %s", path.name, exc)
                 continue
             entries.append((path.stem, graph))

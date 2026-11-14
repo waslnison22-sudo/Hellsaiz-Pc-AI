@@ -60,7 +60,7 @@ class WorkflowGraph:
                 raise ValueError("Node id must be a short alphanumeric identifier.")
             if node_id in by_id:
                 raise ValueError(f"Duplicate node id: {node_id}")
-            if kind not in _ALLOWED_KINDS:
+            if not isinstance(kind, str) or kind not in _ALLOWED_KINDS:
                 raise ValueError(f"Unsupported node type: {kind}")
             if not isinstance(config, dict):
                 raise ValueError(f"Node '{node_id}' config must be an object.")
@@ -79,7 +79,9 @@ class WorkflowGraph:
                 raise ValueError("Edge endpoints must be node identifiers.")
             if source not in by_id or target not in by_id:
                 raise ValueError("An edge references a missing node.")
-            if when not in (None, "true", "false"):
+            if when is not None and (
+                not isinstance(when, str) or when not in {"true", "false"}
+            ):
                 raise ValueError("Edge branch must be true, false or null.")
             if by_id[target].kind.startswith("trigger."):
                 raise ValueError("Edges cannot point into trigger nodes.")
@@ -138,7 +140,11 @@ class WorkflowGraph:
                 raise ValueError(f"Startup trigger '{node.id}' does not accept configuration.")
         elif node.kind == "condition.hour":
             operator, value = cfg.get("operator"), cfg.get("value")
-            if set(cfg) != {"operator", "value"} or operator not in {"eq", "lt", "lte", "gt", "gte"}:
+            if (
+                set(cfg) != {"operator", "value"}
+                or not isinstance(operator, str)
+                or operator not in {"eq", "lt", "lte", "gt", "gte"}
+            ):
                 raise ValueError(f"Hour condition '{node.id}' has invalid settings.")
             if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 23:
                 raise ValueError(f"Hour condition '{node.id}' value must be 0..23.")
