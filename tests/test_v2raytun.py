@@ -114,11 +114,13 @@ def test_network_settings_validate_and_persist(tmp_path: Path):
         "proxy_url": "http://127.0.0.1:10809",
         "health_url": "https://api.telegram.org/",
         "require_proxy_for_telegram": True,
+        "launch_on_start": True,
     }
     v2raytun.save_network_settings(path, config)
     loaded = v2raytun.load_network_settings(path)
     assert loaded["proxy_url"] == config["proxy_url"]
     assert loaded["require_proxy_for_telegram"] is True
+    assert loaded["launch_on_start"] is True
 
     raw = json.loads(path.read_text(encoding="utf-8"))
     raw["proxy_url"] = "http://external.example:10809"
