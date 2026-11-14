@@ -57,7 +57,7 @@ def test_window_inventory_and_focus_phrases_extract_target():
     router, called = make_router()
 
     assert router.route("покажи открытые окна") == "Готово. list_windows"
-    assert router.route("переключись на Steam") == "Готово. Steam"
+    assert router.route("переключись на Steam") == "Готово. steam"
     assert router.route("активируй окно браузер Google Chrome") == "Готово. браузер google chrome"
 
     assert called == [
