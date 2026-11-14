@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from hellsaiz_pc_ai.secure_store import delete_secret, load_secret, save_secret
+from hellsaiz_pc_ai.secure_store import SecureStoreError, delete_secret, load_secret, save_secret
 
 
 SCHEMA_VERSION = 1
