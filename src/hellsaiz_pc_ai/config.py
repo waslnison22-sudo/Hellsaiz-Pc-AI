@@ -109,6 +109,9 @@ def load_settings(path: Path | None = None) -> Settings:
         "notepad": ["notepad.exe"],
         "calculator": ["calc.exe"],
         "explorer": ["explorer.exe"],
+        "task_manager": ["taskmgr.exe"],
+        "settings": ["__shell_link__", "ms-settings:"],
+        "control_panel": ["control.exe"],
     })
     if not isinstance(apps_data, dict):
         raise ValueError("[windows.allowed_apps] must be a table")
