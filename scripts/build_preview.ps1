@@ -87,6 +87,39 @@ Invoke-ExecutableSmokeTest -Executable "dist/app/HellsaizPC_AI/HellsaizPC_AI.exe
 Invoke-ExecutableSmokeTest -Executable "dist/install/HellsaizLauncher.exe" -WorkingDirectory "dist/install" -Label "Application launcher"
 Invoke-ExecutableSmokeTest -Executable "dist/tools/HellsaizUpdater.exe" -WorkingDirectory "dist/tools" -Label "Update helper"
 
+$smokeInstallRoot = Join-Path $env:RUNNER_TEMP "HellsaizPC_AI-Installer-Smoke"
+Remove-Item -Recurse -Force $smokeInstallRoot -ErrorAction SilentlyContinue
+$setupProcess = Start-Process -FilePath (Resolve-Path "dist/HellsaizPC_AI_Setup.exe") -ArgumentList @(
+    "/VERYSILENT",
+    "/SUPPRESSMSGBOXES",
+    "/NORESTART",
+    "/DIR=$smokeInstallRoot"
+) -PassThru -Wait
+if ($setupProcess.ExitCode -ne 0) {
+    throw "Inno Setup installation smoke test failed with exit code $($setupProcess.ExitCode)."
+}
+$installedActive = Get-Content (Join-Path $smokeInstallRoot "active.json") -Raw | ConvertFrom-Json
+if (-not $installedActive.active_version) {
+    throw "Installed active.json does not select an application version."
+}
+$installedVersionRoot = Join-Path $smokeInstallRoot "versions/$($installedActive.active_version)"
+Invoke-ExecutableSmokeTest -Executable (Join-Path $installedVersionRoot "HellsaizPC_AI.exe") -WorkingDirectory $installedVersionRoot -Label "Installed desktop application"
+Invoke-ExecutableSmokeTest -Executable (Join-Path $smokeInstallRoot "HellsaizLauncher.exe") -WorkingDirectory $smokeInstallRoot -Label "Installed launcher"
+Invoke-ExecutableSmokeTest -Executable (Join-Path $smokeInstallRoot "HellsaizUpdater.exe") -WorkingDirectory $smokeInstallRoot -Label "Installed updater"
+
+$uninstaller = Join-Path $smokeInstallRoot "unins000.exe"
+if (-not (Test-Path $uninstaller -PathType Leaf)) {
+    throw "The Windows installer did not register an uninstaller."
+}
+$uninstallProcess = Start-Process -FilePath $uninstaller -ArgumentList @(
+    "/VERYSILENT",
+    "/SUPPRESSMSGBOXES",
+    "/NORESTART"
+) -PassThru -Wait
+if ($uninstallProcess.ExitCode -ne 0) {
+    throw "Installer uninstall smoke test failed with exit code $($uninstallProcess.ExitCode)."
+}
+
 $metadataDir = "dist/preview"
 New-Item -ItemType Directory -Force -Path $metadataDir | Out-Null
 $metadata = @(
