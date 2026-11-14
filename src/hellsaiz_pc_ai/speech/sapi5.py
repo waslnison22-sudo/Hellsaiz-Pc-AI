@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import threading
 from dataclasses import dataclass
 
@@ -13,6 +14,10 @@ class SapiVoice:
     id: str
     name: str
     languages: tuple[str, ...]
+
+
+def _is_windows() -> bool:
+    return os.name == "nt"
 
 
 class Sapi5Synthesizer:
@@ -43,7 +48,7 @@ class Sapi5Synthesizer:
             raise SpeechSynthesisError(f"Could not initialize Windows SAPI5: {exc}") from exc
 
     def list_voices(self) -> list[SapiVoice]:
-        if __import__("os").name != "nt":
+        if not _is_windows():
             raise SpeechSynthesisError("Windows SAPI5 is available only on Windows.")
         with self._lock:
             engine = self._create_engine()
@@ -64,7 +69,7 @@ class Sapi5Synthesizer:
             return
         if len(text) > 5000:
             raise ValueError("Speech synthesis input is limited to 5000 characters.")
-        if __import__("os").name != "nt":
+        if not _is_windows():
             raise SpeechSynthesisError("Windows SAPI5 is available only on Windows.")
 
         with self._lock:
