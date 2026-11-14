@@ -52,7 +52,7 @@ class TelegramBotWorker(threading.Thread):
         status_callback: Callable[[str], None] | None = None,
         api_call: Callable[[str, dict[str, Any]], dict[str, Any]] | None = None,
         network_checker: Callable[[str, str], Any] = check_http_proxy,
-        network_retry_seconds: float = 30.0,
+        network_retry_seconds: float = 10.0,
     ) -> None:
         super().__init__(name="HellsaizTelegramWorker", daemon=True)
         self.token = validate_bot_token(token)
