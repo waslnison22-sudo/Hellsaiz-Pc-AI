@@ -80,6 +80,7 @@ class WakeWordListener:
         try:
             import sounddevice as sd
             from vosk import KaldiRecognizer, Model
+            from hellsaiz_pc_ai.speech.vosk import VoskTranscriber
         except ImportError as exc:
             raise WakeListenerError(
                 'Для фоновой активации установи голосовые зависимости: pip install -e ".[voice]"'
@@ -109,7 +110,7 @@ class WakeWordListener:
                 from hellsaiz_pc_ai.speech.capture import resolve_input_device
 
                 selected_device = resolve_input_device(selected_device)
-            model = Model(str(self.model_dir))
+            model = VoskTranscriber._load_model(self.model_dir, Model)
             recognizer = KaldiRecognizer(model, self.sample_rate)
             awaiting_command = False
             command_deadline = 0.0
