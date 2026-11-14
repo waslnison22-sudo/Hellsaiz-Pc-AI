@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import sys
 import wave
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
