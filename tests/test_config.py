@@ -103,3 +103,27 @@ steam = ["cs2"]
 
     with pytest.raises(ValueError, match="ambiguous"):
         load_settings(path)
+
+
+
+@pytest.mark.parametrize(
+    "config_text",
+    [
+        '[security]\nallow_remote_llm = "false"\n',
+        '[llm]\nenabled = "false"\n',
+        '[speech]\nauto_speak = "false"\n',
+    ],
+)
+def test_boolean_settings_reject_string_values(tmp_path: Path, config_text: str):
+    path = tmp_path / "config.toml"
+    path.write_text(config_text, encoding="utf-8")
+    with pytest.raises(ValueError, match="must be true or false"):
+        load_settings(path)
+
+
+@pytest.mark.parametrize("timeout", [0, -1, 601])
+def test_llm_timeout_is_bounded(tmp_path: Path, timeout: int):
+    path = tmp_path / "config.toml"
+    path.write_text(f"[llm]\ntimeout_seconds = {timeout}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="timeout_seconds"):
+        load_settings(path)

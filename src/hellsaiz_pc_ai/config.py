@@ -74,6 +74,13 @@ def _table(data: dict[str, Any], name: str) -> dict[str, Any]:
     return value
 
 
+def _boolean(data: dict[str, Any], name: str, default: bool) -> bool:
+    value = data.get(name, default)
+    if not isinstance(value, bool):
+        raise ValueError(f"Configuration value '{name}' must be true or false")
+    return value
+
+
 def load_settings(path: Path | None = None) -> Settings:
     config_path = path or (user_data_dir() / "config.toml")
     data: dict[str, Any] = {}
@@ -168,6 +175,9 @@ def load_settings(path: Path | None = None) -> Settings:
     db_path = Path(db_value).expanduser() if db_value else user_data_dir() / "history.sqlite3"
     model_value = speech_data.get("vosk_model_path", "")
     model_path = Path(model_value).expanduser() if model_value else speech_defaults.vosk_model_path
+    timeout_seconds = int(llm_data.get("timeout_seconds", defaults.timeout_seconds))
+    if not 1 <= timeout_seconds <= 600:
+        raise ValueError("[llm].timeout_seconds must be between 1 and 600")
     rate = int(speech_data.get("tts_rate", speech_defaults.tts_rate))
     volume = float(speech_data.get("tts_volume", speech_defaults.tts_volume))
     if not 80 <= rate <= 300:
@@ -180,7 +190,7 @@ def load_settings(path: Path | None = None) -> Settings:
         language=str(app.get("language", "ru-RU")),
         log_level=str(app.get("log_level", "INFO")).upper(),
         llm=LLMSettings(
-            enabled=bool(llm_data.get("enabled", defaults.enabled)),
+            enabled=_boolean(llm_data, "enabled", defaults.enabled),
             base_url=str(
                 os.environ.get(
                     "HELLSAIZ_LLM_BASE_URL", llm_data.get("base_url", defaults.base_url)
@@ -188,18 +198,18 @@ def load_settings(path: Path | None = None) -> Settings:
             ).rstrip("/"),
             model=str(os.environ.get("HELLSAIZ_LLM_MODEL", llm_data.get("model", defaults.model))),
             api_key=str(llm_data.get("api_key", defaults.api_key)),
-            timeout_seconds=int(llm_data.get("timeout_seconds", defaults.timeout_seconds)),
+            timeout_seconds=timeout_seconds,
             max_tool_rounds=max(1, min(int(llm_data.get("max_tool_rounds", defaults.max_tool_rounds)), 8)),
             system_prompt=str(llm_data.get("system_prompt", defaults.system_prompt)),
         ),
         speech=SpeechSettings(
-            auto_speak=bool(speech_data.get("auto_speak", speech_defaults.auto_speak)),
+            auto_speak=_boolean(speech_data, "auto_speak", speech_defaults.auto_speak),
             tts_voice_name=str(speech_data.get("tts_voice_name", speech_defaults.tts_voice_name)),
             tts_rate=rate,
             tts_volume=volume,
             vosk_model_path=model_path,
         ),
-        allow_remote_llm=bool(security.get("allow_remote_llm", False)),
+        allow_remote_llm=_boolean(security, "allow_remote_llm", False),
         wake_aliases=wake_aliases,
         app_aliases=app_aliases,
         allowed_apps=apps,

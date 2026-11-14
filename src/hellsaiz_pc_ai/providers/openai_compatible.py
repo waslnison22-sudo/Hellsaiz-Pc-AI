@@ -14,7 +14,7 @@ class ProviderError(RuntimeError):
 
 def _is_loopback_url(url: str) -> bool:
     parsed = urlparse(url)
-    if parsed.scheme != "http" or not parsed.hostname:
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         return False
     if parsed.hostname.lower() == "localhost":
         return True
@@ -34,9 +34,30 @@ class OpenAICompatibleProvider:
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.api_key = api_key
-        self.timeout_seconds = timeout_seconds
-        if not allow_remote and not _is_loopback_url(self.base_url):
+        if (
+            isinstance(timeout_seconds, bool)
+            or not isinstance(timeout_seconds, (int, float))
+            or not 1 <= timeout_seconds <= 600
+        ):
+            raise ValueError("LLM timeout must be between 1 and 600 seconds.")
+
+        parsed = urlparse(self.base_url)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("LLM endpoint must be a valid HTTP(S) base URL without embedded credentials.")
+
+        local_endpoint = _is_loopback_url(self.base_url)
+        if not local_endpoint and not allow_remote:
             raise ValueError("Remote LLM endpoints are blocked; use localhost or explicitly opt in.")
+        if not local_endpoint and parsed.scheme != "https":
+            raise ValueError("Remote LLM endpoints must use HTTPS to protect credentials.")
+        self.timeout_seconds = timeout_seconds
 
     def complete(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> dict[str, Any]:
         payload: dict[str, Any] = {"model": self.model, "messages": messages, "temperature": 0.3}
