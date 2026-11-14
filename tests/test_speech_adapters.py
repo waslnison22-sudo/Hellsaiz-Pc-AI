@@ -47,3 +47,69 @@ def test_piper_writes_audio_to_requested_file(tmp_path, monkeypatch):
     monkeypatch.setattr("hellsaiz_pc_ai.speech.piper.subprocess.run", fake_run)
     result = PiperSynthesizer(executable, model).synthesize("Тест", output)
     assert result == output
+
+
+def test_piper_python_voice_is_cached_across_synthesizer_instances(tmp_path, monkeypatch):
+    import sys
+    import wave
+    from types import SimpleNamespace
+
+    model = touch(tmp_path / "voice.onnx")
+    output_one = tmp_path / "one.wav"
+    output_two = tmp_path / "two.wav"
+    loads = {"count": 0}
+
+    class FakeVoice:
+        def synthesize_wav(self, text, wav_file):
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(22050)
+            wav_file.writeframes(b"\0\0" * 400)
+
+    class FakePiperVoice:
+        @staticmethod
+        def load(path):
+            loads["count"] += 1
+            assert Path(path) == model.resolve()
+            return FakeVoice()
+
+    monkeypatch.setitem(
+        sys.modules, "piper", SimpleNamespace(PiperVoice=FakePiperVoice)
+    )
+    PiperSynthesizer.clear_voice_cache()
+
+    try:
+        assert PiperSynthesizer(model).synthesize("Первый ответ", output_one) == output_one
+        assert PiperSynthesizer(model).synthesize("Второй ответ", output_two) == output_two
+        assert loads["count"] == 1
+        with wave.open(str(output_one), "rb") as audio:
+            assert audio.getframerate() == 22050
+            assert audio.getnframes() == 400
+    finally:
+        PiperSynthesizer.clear_voice_cache()
+
+
+def test_piper_voice_cache_is_bounded(tmp_path, monkeypatch):
+    import sys
+    from types import SimpleNamespace
+
+    models = [touch(tmp_path / f"voice-{index}.onnx") for index in range(3)]
+    loads = []
+
+    class FakePiperVoice:
+        @staticmethod
+        def load(path):
+            loads.append(path)
+            return object()
+
+    monkeypatch.setitem(
+        sys.modules, "piper", SimpleNamespace(PiperVoice=FakePiperVoice)
+    )
+    PiperSynthesizer.clear_voice_cache()
+
+    try:
+        for model in models:
+            PiperSynthesizer(model)._load_voice()
+        assert len(PiperSynthesizer._voice_cache) == 2
+    finally:
+        PiperSynthesizer.clear_voice_cache()
