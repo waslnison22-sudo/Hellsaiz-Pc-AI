@@ -6,20 +6,17 @@ import hashlib
 import json
 import os
 import shutil
+import struct
 import zipfile
 from pathlib import Path, PurePosixPath
 from typing import Any
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from hellsaiz_pc_ai.update_client import (
-    APP_ID,
-    PLATFORM,
-    UpdateCheckError,
-    _safe_manifest_path,
-    _version_parts,
-    verify_signed_manifest,
-)
+from hellsaiz_pc_ai.update_client import APP_ID, PLATFORM, UpdateCheckError, verify_signed_manifest
+
+PORTABLE_PACKAGE_NAME = "HellsaizPC_AI-windows-x64-portable.zip"
+UPDATE_PACKAGE_NAME = "HellsaizPC_AI-windows-x64-full.zip"
 
 
 def sha256_file(path: Path) -> str:
@@ -56,99 +53,50 @@ def make_zip(app_dir: Path, destination: Path, relative_files: list[str]) -> Non
     temporary.replace(destination)
 
 
-def portable_file_list(install_root: Path) -> list[str]:
-    """Return the validated root-relative files for a first-install portable bundle."""
-    root = install_root.resolve()
-    if install_root.is_symlink() or not root.is_dir():
-        raise ValueError("Portable install root is missing or is a symbolic link.")
-
-    active_path = root / "active.json"
-    launcher_path = root / "HellsaizLauncher.exe"
-    updater_path = root / "HellsaizUpdater.exe"
-    for required in (active_path, launcher_path, updater_path):
-        if required.is_symlink() or not required.is_file():
-            raise ValueError(f"Portable bundle is missing a required file: {required.name}")
-
-    try:
-        active = json.loads(active_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise ValueError("Portable bundle active.json is invalid.") from exc
-    if not isinstance(active, dict) or active.get("schema_version") != 1:
-        raise ValueError("Portable bundle active.json has an unsupported schema.")
-    version = active.get("active_version")
-    if not isinstance(version, str):
-        raise ValueError("Portable bundle active.json has no active version.")
-    _version_parts(version)
-
-    versions_root = root / "versions"
-    version_dir = versions_root / version
-    if versions_root.is_symlink() or version_dir.is_symlink() or not version_dir.is_dir():
-        raise ValueError("Portable bundle active version directory is missing or unsafe.")
-    if not (version_dir / "HellsaizPC_AI.exe").is_file():
-        raise ValueError("Portable bundle active version has no HellsaizPC_AI.exe.")
-
-    files: list[str] = []
-    seen: set[str] = set()
-    for path in sorted(root.rglob("*")):
-        if path.is_symlink():
-            raise ValueError(f"Symbolic links are not allowed in the portable bundle: {path}")
-        if not path.is_file():
-            continue
-        relative = path.relative_to(root).as_posix()
-        _safe_manifest_path(relative)
-        folded = relative.casefold()
-        if folded in seen:
-            raise ValueError(f"Portable bundle contains duplicate paths: {relative}")
-        seen.add(folded)
-        files.append(relative)
-
-    required_paths = {
-        "active.json",
-        "HellsaizLauncher.exe",
-        "HellsaizUpdater.exe",
-        f"versions/{version}/HellsaizPC_AI.exe",
+def make_portable_zip(
+    install_root: Path, destination: Path, version: str, app_files: list[str]
+) -> None:
+    """Create the user-facing launcher layout; never use this ZIP for update extraction."""
+    required = ("active.json", "HellsaizLauncher.exe", "HellsaizUpdater.exe")
+    for name in required:
+        if not (install_root / name).is_file():
+            raise ValueError(f"Portable package is missing {name}.")
+    version_root = install_root / "versions" / version
+    if not version_root.is_dir():
+        raise ValueError(f"Portable package is missing versions/{version}.")
+    expected = {PurePosixPath(name).as_posix() for name in app_files}
+    actual = {
+        item.relative_to(version_root).as_posix()
+        for item in version_root.rglob("*") if item.is_file()
     }
-    if not required_paths.issubset(seen):
-        raise ValueError("Portable bundle does not contain all required launcher files.")
-    return files
+    if actual != expected:
+        raise ValueError("Portable app files do not match the signed release manifest.")
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_suffix(destination.suffix + ".tmp")
+    with zipfile.ZipFile(
+        temporary, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=7, allowZip64=True
+    ) as archive:
+        for name in required:
+            archive.write(install_root / name, arcname=name)
+        for relative in sorted(expected):
+            source = version_root.joinpath(*PurePosixPath(relative).parts)
+            archive.write(source, arcname=f"versions/{version}/{relative}")
+    temporary.replace(destination)
 
 
-def validate_portable_zip(archive_path: Path) -> None:
-    """Validate that a portable ZIP can bootstrap the launcher and updater."""
-    try:
-        with zipfile.ZipFile(archive_path, "r") as archive:
-            names = [info.filename for info in archive.infolist() if not info.is_dir()]
-            if not names:
-                raise ValueError("Portable ZIP is empty.")
-            folded: set[str] = set()
-            for name in names:
-                _safe_manifest_path(name)
-                if name.casefold() in folded:
-                    raise ValueError(f"Portable ZIP contains duplicate paths: {name}")
-                folded.add(name.casefold())
-
-            required = {"active.json", "HellsaizLauncher.exe", "HellsaizUpdater.exe"}
-            if not required.issubset(folded):
-                raise ValueError("Portable ZIP is missing active.json, Launcher or Updater.")
-
-            active = json.loads(archive.read("active.json").decode("utf-8"))
-            if not isinstance(active, dict) or active.get("schema_version") != 1:
-                raise ValueError("Portable ZIP active.json has an unsupported schema.")
-            version = active.get("active_version")
-            if not isinstance(version, str):
-                raise ValueError("Portable ZIP active.json has no active version.")
-            _version_parts(version)
-            entrypoint = f"versions/{version}/HellsaizPC_AI.exe".casefold()
-            if entrypoint not in folded:
-                raise ValueError("Portable ZIP does not contain the active application entrypoint.")
-    except (OSError, zipfile.BadZipFile, UnicodeError, json.JSONDecodeError) as exc:
-        raise ValueError(f"Portable ZIP is invalid: {exc}") from exc
-
-
-def make_portable_zip(install_root: Path, destination: Path) -> None:
-    files = portable_file_list(install_root)
-    make_zip(install_root, destination, files)
-    validate_portable_zip(destination)
+def validate_portable_zip(archive_path: Path, version: str, app_files: list[str]) -> None:
+    expected = {"active.json", "HellsaizLauncher.exe", "HellsaizUpdater.exe"}
+    expected.update(f"versions/{version}/{name}" for name in app_files)
+    with zipfile.ZipFile(archive_path) as archive:
+        names = archive.namelist()
+        if len(names) != len(set(names)) or set(names) != expected:
+            raise ValueError("Portable ZIP contents do not match the launcher layout and manifest.")
+        active = json.loads(archive.read("active.json").decode("utf-8"))
+        if active.get("schema_version") != 1 or active.get("active_version") != version:
+            raise ValueError("Portable ZIP active.json does not select the packaged version.")
+        if f"versions/{version}/HellsaizPC_AI.exe" not in expected:
+            raise ValueError("Portable ZIP is missing the application entrypoint.")
 
 
 def load_previous_manifest(manifest_path: Path, signature_path: Path) -> dict[str, Any]:
@@ -172,10 +120,9 @@ def main() -> int:
     args = parser.parse_args()
 
     version = args.version.removeprefix("v")
-    app_dir = args.app_dir.resolve()
-    launcher = args.launcher.resolve()
-    updater = args.updater.resolve()
-    output = args.output.resolve()
+    app_dir, launcher, updater, output = (
+        args.app_dir.resolve(), args.launcher.resolve(), args.updater.resolve(), args.output.resolve()
+    )
     if not app_dir.is_dir() or not launcher.is_file() or not updater.is_file():
         raise SystemExit("Build output is incomplete. Expected app, launcher and updater files.")
 
@@ -214,11 +161,8 @@ def main() -> int:
         signature + "\n", encoding="ascii"
     )
 
-    make_zip(
-        app_dir,
-        release_assets / "HellsaizPC_AI-windows-x64-full.zip",
-        sorted(files),
-    )
+    # Internal update archives contain only manifest-listed files at ZIP root.
+    make_zip(app_dir, release_assets / UPDATE_PACKAGE_NAME, sorted(files))
 
     install_root = output / "install"
     if install_root.exists():
@@ -236,8 +180,9 @@ def main() -> int:
         encoding="utf-8",
     )
 
-    portable_archive = release_assets / "HellsaizPC_AI-windows-x64-portable.zip"
-    make_portable_zip(install_root, portable_archive)
+    portable_path = release_assets / PORTABLE_PACKAGE_NAME
+    make_portable_zip(install_root, portable_path, version, sorted(files))
+    validate_portable_zip(portable_path, version, sorted(files))
 
     if args.previous_manifest and args.previous_signature:
         previous = load_previous_manifest(args.previous_manifest, args.previous_signature)
@@ -256,8 +201,8 @@ def main() -> int:
 
     total = sum(record["size"] for record in files.values())
     print(f"Release manifest signed for {version}; {len(files)} files, {total} bytes.")
-    print(f"Portable first-install ZIP prepared at {portable_archive}.")
-    print(f"Internal updater ZIP prepared at {release_assets / 'HellsaizPC_AI-windows-x64-full.zip'}.")
+    print(f"Portable package validated: {portable_path}")
+    print(f"Internal update package: {release_assets / UPDATE_PACKAGE_NAME}")
     return 0
 
 
