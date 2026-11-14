@@ -140,7 +140,7 @@ class WakeWordListener:
                         continue
                     result = json.loads(recognizer.Result())
                     transcript = str(result.get("text") or "").strip()
-                    recognizer = KaldiRecognizer(model, self.sample_rate)
+                    recognizer = KaldiRecognizer(model, sample_rate)
                     if not transcript:
                         continue
 
