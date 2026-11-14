@@ -275,8 +275,8 @@ def apply_update(
         raise ApplyUpdateError("Не удалось определить текущую установленную версию.") from exc
     if active_version != from_version:
         raise ApplyUpdateError("Текущая версия приложения изменилась. Повторите проверку обновлений.")
-    if manifest["version"] == active_version:
-        raise ApplyUpdateError("Эта версия уже установлена.")
+    if _version_parts(manifest["version"]) <= _version_parts(active_version):
+        raise ApplyUpdateError("Обновление не должно заменять приложение той же или более старой версией.")
 
     _wait_for_parent(parent_pid)
     versions_root = root / "versions"
@@ -319,14 +319,7 @@ def apply_update(
         _write_log(root, f"Activated version {manifest['version']} from {previous} ({mode}).")
 
         if not _launch_and_check(root, manifest["version"]):
-            _write_json_atomic(
-                active_path,
-                {
-                    "schema_version": 1,
-                    "active_version": previous,
-                    "previous_version": manifest["version"],
-                },
-            )
+            _write_json_atomic(active_path, active)
             shutil.rmtree(target_dir, ignore_errors=True)
             _write_log(root, f"Health check failed for {manifest['version']}; rolled back to {previous}.")
             raise ApplyUpdateError(
