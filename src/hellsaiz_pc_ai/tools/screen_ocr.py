@@ -43,19 +43,48 @@ def _capture_primary_monitor() -> Any:
     return image
 
 
-def _get_engine() -> Any:
+def _get_engine(model_root: Any | None = None) -> Any:
     global _engine
+    if model_root is None:
+        raise OcrModelError("Не задан каталог локальных русских OCR-моделей.")
     with _engine_lock:
         if _engine is None:
+            status = check_russian_ocr_models(model_root)
+            if not status.ready:
+                raise OcrModelError(
+                    "Русские OCR-модели отсутствуют или повреждены. "
+                    "Открой настройки и нажми «Загрузить русские OCR-модели»."
+                )
             try:
                 from rapidocr import RapidOCR
             except ImportError as exc:
                 raise RuntimeError(
                     'Локальный OCR не установлен. Установи пакет с extra: pip install -e ".[vision]".'
                 ) from exc
-            _engine = RapidOCR()
+            _engine = RapidOCR(params={
+                "Det.engine_type": "onnxruntime",
+                "Det.lang_type": "multi",
+                "Det.model_type": "mobile",
+                "Det.ocr_version": "PP-OCRv5",
+                "Det.model_path": str(model_path(model_root, "det")),
+                "Cls.engine_type": "onnxruntime",
+                "Cls.lang_type": "multi",
+                "Cls.model_type": "mobile",
+                "Cls.ocr_version": "PP-OCRv5",
+                "Cls.model_path": str(model_path(model_root, "cls")),
+                "Rec.engine_type": "onnxruntime",
+                "Rec.lang_type": "cyrillic",
+                "Rec.model_type": "mobile",
+                "Rec.ocr_version": "PP-OCRv5",
+                "Rec.model_path": str(model_path(model_root, "rec")),
+            })
         return _engine
 
+
+def clear_ocr_engine_cache() -> None:
+    global _engine
+    with _engine_lock:
+        _engine = None
 
 def _extract_text(result: Any) -> list[str]:
     if result is None:
@@ -118,6 +147,7 @@ def register_screen_ocr_tools(
     registry: ToolRegistry,
     *,
     enabled: Callable[[], bool],
+    model_root: Any | None = None,
 ) -> None:
     def run(_arguments: dict[str, Any]) -> ToolResult:
         try:
@@ -129,7 +159,7 @@ def register_screen_ocr_tools(
                 False,
                 "Распознавание экрана выключено. Включи локальный OCR в настройках приложения.",
             )
-        return read_primary_screen_text()
+        return read_primary_screen_text(model_root=model_root)
 
     registry.register(ToolSpec(
         name="read_screen_text",
