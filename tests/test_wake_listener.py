@@ -74,6 +74,10 @@ def test_listener_opens_selected_microphone_device(tmp_path, monkeypatch):
     fake_vosk = SimpleNamespace(Model=FakeModel, KaldiRecognizer=FakeRecognizer)
     monkeypatch.setitem(sys.modules, "sounddevice", fake_sounddevice)
     monkeypatch.setitem(sys.modules, "vosk", fake_vosk)
+    monkeypatch.setattr(
+        "hellsaiz_pc_ai.speech.capture.resolve_input_device",
+        lambda _name: 7,
+    )
     listener = WakeWordListener(
         model_dir,
         ["Хелл"],
@@ -84,4 +88,4 @@ def test_listener_opens_selected_microphone_device(tmp_path, monkeypatch):
 
     listener.listen()
 
-    assert listener_box["kwargs"]["device"] == "USB Mic · WASAPI"
+    assert listener_box["kwargs"]["device"] == 7
