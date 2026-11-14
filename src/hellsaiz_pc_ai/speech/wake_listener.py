@@ -66,6 +66,7 @@ class WakeWordListener:
         self.on_status = on_status or (lambda _: None)
         self.sample_rate = sample_rate
         self.command_timeout_seconds = command_timeout_seconds
+        self.queue_blocks = max(8, min(int(queue_blocks), 256))
         self._stop = threading.Event()
 
     def stop(self) -> None:
@@ -82,7 +83,7 @@ class WakeWordListener:
                 'Для фоновой активации установи голосовые зависимости: pip install -e ".[voice]"'
             ) from exc
 
-        audio_queue: queue.Queue[bytes] = queue.Queue(maxsize=64)
+        audio_queue: queue.Queue[bytes] = queue.Queue(maxsize=self.queue_blocks)
 
         def audio_callback(indata, frames, timing, status) -> None:
             if status:
