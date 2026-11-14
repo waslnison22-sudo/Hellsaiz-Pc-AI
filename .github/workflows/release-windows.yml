@@ -97,6 +97,23 @@ jobs:
             Write-Host "Validated ZIP package: $package"
           }
 
+      - name: Compile Windows setup installer
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart("v")
+          $compiler = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6/ISCC.exe"
+          if (-not (Test-Path $compiler)) {
+            choco install innosetup --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { throw "Inno Setup installation failed." }
+          }
+          if (-not (Test-Path $compiler)) { throw "ISCC.exe was not found." }
+
+          & $compiler "/DAppVersion=$version" "installer/HellsaizPC_AI.iss"
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup installer compilation failed." }
+          $setup = "dist/HellsaizPC_AI_Setup.exe"
+          if (-not (Test-Path $setup -PathType Leaf)) { throw "Windows setup installer is missing." }
+          if ((Get-Item $setup).Length -le 0) { throw "Windows setup installer is empty." }
+
       - name: Upload release assets
         shell: pwsh
         env:
@@ -105,11 +122,14 @@ jobs:
           $tag = $env:GITHUB_REF_NAME
           $assets = @(
             Get-ChildItem "dist/release-assets/*" -File |
-              Where-Object { $_.Extension -in @(".zip", ".json", ".sig") } |
+              Where-Object { $_.Extension -in @(".zip", ".json", ".sig", ".exe") } |
               ForEach-Object { $_.FullName }
           )
           if (-not ($assets | Where-Object { $_ -like "*HellsaizPC_AI-windows-x64-full.zip" })) {
             throw "The full ZIP package is missing from release assets."
+          }
+          if (-not ($assets | Where-Object { $_ -like "*HellsaizPC_AI_Setup.exe" })) {
+            throw "The Windows installer is missing from release assets."
           }
           gh release view $tag *> $null
           if ($LASTEXITCODE -eq 0) {
