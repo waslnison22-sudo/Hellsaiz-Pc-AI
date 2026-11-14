@@ -149,21 +149,31 @@ def _http_error(exc: urllib.error.HTTPError) -> UpdateCheckError:
 def _safe_manifest_path(value: str) -> str:
     if not isinstance(value, str) or not value or len(value) > 240:
         raise UpdateCheckError("Манифест содержит некорректный путь.")
-    if "\\" in value or ":" in value or value.startswith("/"):
+    if "\\" in value or value.startswith("/"):
         raise UpdateCheckError(f"Недопустимый путь в манифесте: {value}")
-    pure = PurePosixPath(value)
-    if any(part in {"", ".", ".."} for part in pure.parts):
+
+    parts = value.split("/")
+    if any(part in {"", ".", ".."} for part in parts):
         raise UpdateCheckError(f"Недопустимый путь в манифесте: {value}")
-    if not pure.parts:
-        raise UpdateCheckError("Пустой путь в манифесте.")
-    for part in pure.parts:
-        if part.endswith((" ", ".")) or part.casefold() in {
-            "con", "prn", "aux", "nul",
-            *(f"com{i}" for i in range(1, 10)),
-            *(f"lpt{i}" for i in range(1, 10)),
-        }:
+
+    reserved_names = {
+        "con", "prn", "aux", "nul", "conin$", "conout$",
+        *(f"com{i}" for i in range(1, 10)),
+        *(f"lpt{i}" for i in range(1, 10)),
+        *(f"com{i}" for i in ("¹", "²", "³")),
+        *(f"lpt{i}" for i in ("¹", "²", "³")),
+    }
+    invalid_characters = set('<>:"|?*')
+    for part in parts:
+        device_name = part.split(".", 1)[0].rstrip(" .").casefold()
+        if (
+            part.endswith((" ", "."))
+            or device_name in reserved_names
+            or any(ord(character) < 32 or character in invalid_characters for character in part)
+        ):
             raise UpdateCheckError(f"Недопустимое имя файла в манифесте: {value}")
-    return pure.as_posix()
+
+    return PurePosixPath(value).as_posix()
 
 
 def _validate_manifest(manifest: Any, expected_version: str | None = None) -> dict[str, Any]:
@@ -184,11 +194,14 @@ def _validate_manifest(manifest: Any, expected_version: str | None = None) -> di
     if not isinstance(files, dict) or not 1 <= len(files) <= MAX_FILES:
         raise UpdateCheckError("Манифест не содержит корректный список файлов.")
     normalized: dict[str, dict[str, Any]] = {}
+    seen_paths: set[str] = set()
     total_size = 0
     for raw_path, record in files.items():
         path = _safe_manifest_path(raw_path)
-        if path.casefold() in {key.casefold() for key in normalized}:
+        folded_path = path.casefold()
+        if folded_path in seen_paths:
             raise UpdateCheckError("В манифесте есть пути, конфликтующие без учёта регистра.")
+        seen_paths.add(folded_path)
         if not isinstance(record, dict):
             raise UpdateCheckError(f"Некорректная запись файла: {path}")
         size = record.get("size")
@@ -348,8 +361,19 @@ def download_update(
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
         raise UpdateCheckError("Неверно указан репозиторий обновлений.")
 
-    update_dir = (install_root / "updates" / info.latest_version).resolve()
-    updates_root = (install_root / "updates").resolve()
+    root = install_root.resolve()
+    updates_path = root / "updates"
+    if updates_path.is_symlink():
+        raise UpdateCheckError("Папка updates не должна быть символической ссылкой.")
+    updates_path.mkdir(parents=True, exist_ok=True)
+    updates_root = updates_path.resolve()
+    if updates_root.parent != root:
+        raise UpdateCheckError("Папка updates выходит за пределы install root.")
+
+    version_path = updates_path / info.latest_version
+    if version_path.is_symlink():
+        raise UpdateCheckError("Папка версии обновления не должна быть символической ссылкой.")
+    update_dir = version_path.resolve()
     if update_dir.parent != updates_root:
         raise UpdateCheckError("Папка обновления выходит за пределы install root.")
     update_dir.mkdir(parents=True, exist_ok=True)
@@ -365,12 +389,24 @@ def download_update(
         timeout_seconds,
         MAX_PACKAGE_BYTES,
     )
-    if info.package_sha256 and hashlib.sha256(raw).hexdigest() != info.package_sha256:
+    if len(raw) != info.package_asset_size:
+        raise UpdateCheckError("Размер загруженного ZIP не совпадает с GitHub Release.")
+    package_digest = hashlib.sha256(raw).hexdigest()
+    if info.package_sha256 and package_digest != info.package_sha256:
         raise UpdateCheckError("SHA-256 загруженного ZIP не совпадает с GitHub Release.")
-    partial_path.write_bytes(raw)
-    os.replace(partial_path, archive_path)
-    manifest_path.write_bytes(info.manifest_bytes)
-    signature_path.write_text(info.signature_text, encoding="ascii")
+
+    manifest_temporary = manifest_path.with_suffix(".json.tmp")
+    signature_temporary = signature_path.with_suffix(".sig.tmp")
+    try:
+        partial_path.write_bytes(raw)
+        manifest_temporary.write_bytes(info.manifest_bytes)
+        signature_temporary.write_text(info.signature_text, encoding="ascii")
+        os.replace(partial_path, archive_path)
+        os.replace(manifest_temporary, manifest_path)
+        os.replace(signature_temporary, signature_path)
+    finally:
+        for temporary in (partial_path, manifest_temporary, signature_temporary):
+            temporary.unlink(missing_ok=True)
 
     return PreparedUpdate(
         version=info.latest_version,
@@ -379,5 +415,5 @@ def download_update(
         archive_path=archive_path,
         manifest_path=manifest_path,
         signature_path=signature_path,
-        package_sha256=hashlib.sha256(raw).hexdigest(),
+        package_sha256=package_digest,
     )

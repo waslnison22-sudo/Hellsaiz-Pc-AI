@@ -19,6 +19,7 @@ from hellsaiz_pc_ai.update_client import (
     UpdateCheckError,
     _safe_manifest_path,
     _validate_manifest,
+    _version_parts,
     verify_signed_manifest,
 )
 
@@ -41,9 +42,18 @@ def _wait_for_parent(pid: int, timeout_seconds: int = 120) -> None:
     if pid <= 0 or os.name != "nt":
         return
     import ctypes
+    from ctypes import wintypes
 
-    SYNCHRONIZE = 0x00100000
-    handle = ctypes.windll.kernel32.OpenProcess(SYNCHRONIZE, False, pid)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    kernel32.WaitForSingleObject.restype = wintypes.DWORD
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+
+    synchronize = 0x00100000
+    handle = kernel32.OpenProcess(synchronize, False, pid)
     if not handle:
         error = ctypes.get_last_error()
         # ERROR_INVALID_PARAMETER means the parent has already exited.
@@ -51,11 +61,14 @@ def _wait_for_parent(pid: int, timeout_seconds: int = 120) -> None:
             return
         raise ApplyUpdateError(f"Не удалось дождаться закрытия приложения (Win32 {error}).")
     try:
-        result = ctypes.windll.kernel32.WaitForSingleObject(handle, timeout_seconds * 1000)
+        result = kernel32.WaitForSingleObject(handle, timeout_seconds * 1000)
+        if result == 0xFFFFFFFF:
+            error = ctypes.get_last_error()
+            raise ApplyUpdateError(f"Ошибка ожидания завершения приложения (Win32 {error}).")
         if result != 0:
             raise ApplyUpdateError("Приложение не закрылось вовремя. Обновление отменено.")
     finally:
-        ctypes.windll.kernel32.CloseHandle(handle)
+        kernel32.CloseHandle(handle)
 
 
 def _safe_destination(root: Path, relative: str) -> Path:
@@ -236,10 +249,14 @@ def apply_update(
         raise ApplyUpdateError("Манифест предназначен для другого приложения или платформы.")
 
     active_path = root / "active.json"
+    if active_path.is_symlink():
+        raise ApplyUpdateError("Файл active.json не должен быть символической ссылкой.")
     try:
         active = json.loads(active_path.read_text(encoding="utf-8"))
         active_version = str(active["active_version"])
-    except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+        _version_parts(active_version)
+        _version_parts(from_version)
+    except (OSError, ValueError, KeyError, json.JSONDecodeError, UpdateCheckError) as exc:
         raise ApplyUpdateError("Не удалось определить текущую установленную версию.") from exc
     if active_version != from_version:
         raise ApplyUpdateError("Текущая версия приложения изменилась. Повторите проверку обновлений.")
@@ -248,10 +265,18 @@ def apply_update(
 
     _wait_for_parent(parent_pid)
     versions_root = root / "versions"
+    if versions_root.is_symlink():
+        raise ApplyUpdateError("Папка versions не должна быть символической ссылкой.")
+    versions_root.mkdir(parents=True, exist_ok=True)
+    resolved_versions_root = versions_root.resolve()
+    if resolved_versions_root.parent != root:
+        raise ApplyUpdateError("Папка versions выходит за пределы install root.")
+
     current_dir = versions_root / active_version
     target_dir = versions_root / manifest["version"]
     stage = versions_root / f".staging-{manifest['version']}-{uuid.uuid4().hex}"
-    versions_root.mkdir(parents=True, exist_ok=True)
+    if current_dir.is_symlink() or target_dir.is_symlink():
+        raise ApplyUpdateError("Каталоги версий не должны быть символическими ссылками.")
 
     try:
         if mode == "delta":

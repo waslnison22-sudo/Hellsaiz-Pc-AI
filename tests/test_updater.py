@@ -6,12 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from hellsaiz_pc_ai.update_client import UpdateCheckError
+from hellsaiz_pc_ai.update_client import UpdateCheckError, _safe_manifest_path
 from hellsaiz_pc_ai.updater import (
     ApplyUpdateError,
     _clone_current_version,
     _extract_archive,
     _verify_payload,
+    _wait_for_parent,
 )
 
 
@@ -72,3 +73,54 @@ def test_delta_staging_does_not_modify_active_version(tmp_path: Path):
 
     assert original.read_bytes() == b"old-version"
     assert (staged / "app.exe").read_bytes() == b"new-version"
+
+
+
+@pytest.mark.parametrize(
+    "unsafe_path",
+    [
+        "../outside.txt",
+        "folder//file.dll",
+        "folder/./file.dll",
+        "folder/../file.dll",
+        "CON.txt",
+        "nested/LPT1.log",
+        "bad?.dll",
+        "bad<name>.dll",
+        "trailing./file.dll",
+    ],
+)
+def test_manifest_path_rejects_windows_unsafe_names(unsafe_path: str):
+    with pytest.raises(UpdateCheckError):
+        _safe_manifest_path(unsafe_path)
+
+
+def test_wait_for_parent_uses_pointer_sized_windows_handles(monkeypatch):
+    import ctypes
+    from ctypes import wintypes
+
+    class FakeFunction:
+        def __init__(self, result):
+            self.result = result
+            self.argtypes = None
+            self.restype = None
+            self.calls = []
+
+        def __call__(self, *args):
+            self.calls.append(args)
+            return self.result
+
+    class FakeKernel32:
+        def __init__(self):
+            self.OpenProcess = FakeFunction(0x123456789)
+            self.WaitForSingleObject = FakeFunction(0)
+            self.CloseHandle = FakeFunction(1)
+
+    kernel32 = FakeKernel32()
+    monkeypatch.setattr(ctypes, "WinDLL", lambda *_args, **_kwargs: kernel32, raising=False)
+    monkeypatch.setattr("hellsaiz_pc_ai.updater.os.name", "nt")
+    _wait_for_parent(1234)
+
+    assert kernel32.OpenProcess.restype is wintypes.HANDLE
+    assert kernel32.WaitForSingleObject.calls == [(0x123456789, 120000)]
+    assert kernel32.CloseHandle.calls == [(0x123456789,)]
