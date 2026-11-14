@@ -15,8 +15,12 @@ MODEL_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{1,63}$")
 def _safe_relative_path(value: Any, field: str) -> str:
     if not isinstance(value, str) or not value.strip() or "\x00" in value:
         raise ValueError(f"{field} must be a non-empty relative path.")
-    path = PurePosixPath(value.replace("\\", "/"))
-    if path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts):
+    normalized = value.replace("\\", "/")
+    raw_parts = normalized.split("/")
+    if normalized.startswith("/") or any(part in {"", ".", ".."} for part in raw_parts):
+        raise ValueError(f"{field} must not escape the model directory.")
+    path = PurePosixPath(normalized)
+    if path.is_absolute():
         raise ValueError(f"{field} must not escape the model directory.")
     if path.parts and ":" in path.parts[0]:
         raise ValueError(f"{field} must not contain a drive prefix.")
