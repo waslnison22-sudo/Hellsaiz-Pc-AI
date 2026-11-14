@@ -22,10 +22,6 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Install Inno Setup
-        shell: pwsh
-        run: choco install innosetup --yes --no-progress
-
       - name: Build Windows application
         shell: pwsh
         env:
@@ -71,7 +67,7 @@ jobs:
             }
           }
 
-      - name: Assemble full and delta packages and installer
+      - name: Assemble and validate ZIP packages
         shell: pwsh
         env:
           HELLSAIZ_UPDATE_SIGNING_KEY: ${{ secrets.HELLSAIZ_UPDATE_SIGNING_KEY }}
@@ -93,11 +89,10 @@ jobs:
           python @arguments
           if ($LASTEXITCODE -ne 0) { throw "Package or signature generation failed." }
 
-          $programFilesX86 = [Environment]::GetFolderPath("ProgramFilesX86")
-          $compiler = Join-Path $programFilesX86 "Inno Setup 6\ISCC.exe"
-          if (-not (Test-Path $compiler)) { throw "Inno Setup compiler not found: $compiler" }
-          & $compiler "/DAppVersion=$version" "installer/HellsaizPC_AI.iss"
-          if ($LASTEXITCODE -ne 0) { throw "Installer compilation failed." }
+          $fullPackage = "dist/release-assets/HellsaizPC_AI-windows-x64-full.zip"
+          if (-not (Test-Path $fullPackage -PathType Leaf)) { throw "Full ZIP package was not created." }
+          if ((Get-Item $fullPackage).Length -le 0) { throw "Full ZIP package is empty." }
+          Write-Host "Validated test package: $fullPackage"
 
       - name: Upload release assets
         shell: pwsh
@@ -106,9 +101,13 @@ jobs:
         run: |
           $tag = $env:GITHUB_REF_NAME
           $assets = @(
-            Get-ChildItem "dist/release-assets/*" -File | ForEach-Object { $_.FullName }
-            "dist/HellsaizPC_AI_Setup.exe"
+            Get-ChildItem "dist/release-assets/*" -File |
+              Where-Object { $_.Extension -in @(".zip", ".json", ".sig") } |
+              ForEach-Object { $_.FullName }
           )
+          if (-not ($assets | Where-Object { $_ -like "*HellsaizPC_AI-windows-x64-full.zip" })) {
+            throw "The full ZIP package is missing from release assets."
+          }
           gh release view $tag *> $null
           if ($LASTEXITCODE -eq 0) {
             gh release upload $tag @assets --clobber
