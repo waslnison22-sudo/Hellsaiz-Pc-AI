@@ -51,6 +51,11 @@ class SpeechSettings:
     vosk_model_path: Path = field(
         default_factory=lambda: user_data_dir() / "models" / "vosk-model-small-ru-0.22"
     )
+    stt_primary: str = "vosk"
+    stt_fallback: str = "none"
+    whisper_cpp_executable: Path | None = None
+    whisper_cpp_model: Path | None = None
+    recording_seconds: float = 5.0
 
 
 @dataclass(frozen=True)
@@ -177,6 +182,26 @@ def load_settings(path: Path | None = None) -> Settings:
     db_path = Path(db_value).expanduser() if db_value else user_data_dir() / "history.sqlite3"
     model_value = speech_data.get("vosk_model_path", "")
     model_path = Path(model_value).expanduser() if model_value else speech_defaults.vosk_model_path
+    raw_primary = speech_data.get("stt_primary", speech_defaults.stt_primary)
+    raw_fallback = speech_data.get("stt_fallback", speech_defaults.stt_fallback)
+    if not isinstance(raw_primary, str) or raw_primary.casefold().strip() not in {"vosk", "whisper.cpp"}:
+        raise ValueError("[speech].stt_primary must be 'vosk' or 'whisper.cpp'")
+    if not isinstance(raw_fallback, str) or raw_fallback.casefold().strip() not in {"none", "", "vosk", "whisper.cpp"}:
+        raise ValueError("[speech].stt_fallback must be 'none', 'vosk' or 'whisper.cpp'")
+    if raw_fallback.casefold().strip() == raw_primary.casefold().strip():
+        raise ValueError("[speech].stt_fallback must differ from stt_primary")
+    whisper_executable_value = speech_data.get("whisper_cpp_executable", "")
+    whisper_model_value = speech_data.get("whisper_cpp_model", "")
+    if not isinstance(whisper_executable_value, str) or not isinstance(whisper_model_value, str):
+        raise ValueError("[speech].whisper_cpp_executable and whisper_cpp_model must be text paths")
+    whisper_executable = Path(whisper_executable_value).expanduser() if whisper_executable_value.strip() else None
+    whisper_model = Path(whisper_model_value).expanduser() if whisper_model_value.strip() else None
+    raw_recording_seconds = speech_data.get("recording_seconds", speech_defaults.recording_seconds)
+    if isinstance(raw_recording_seconds, bool) or not isinstance(raw_recording_seconds, (int, float)):
+        raise ValueError("[speech].recording_seconds must be a number")
+    recording_seconds = float(raw_recording_seconds)
+    if not 1.0 <= recording_seconds <= 15.0:
+        raise ValueError("[speech].recording_seconds must be between 1 and 15")
     raw_timeout = llm_data.get("timeout_seconds", defaults.timeout_seconds)
     if isinstance(raw_timeout, bool) or not isinstance(raw_timeout, int):
         raise ValueError("[llm].timeout_seconds must be an integer")
@@ -213,6 +238,11 @@ def load_settings(path: Path | None = None) -> Settings:
             tts_rate=rate,
             tts_volume=volume,
             vosk_model_path=model_path,
+            stt_primary=raw_primary.casefold().strip(),
+            stt_fallback=raw_fallback.casefold().strip() or "none",
+            whisper_cpp_executable=whisper_executable,
+            whisper_cpp_model=whisper_model,
+            recording_seconds=recording_seconds,
         ),
         allow_remote_llm=_boolean(security, "allow_remote_llm", False),
         wake_aliases=wake_aliases,
