@@ -286,7 +286,7 @@ def main() -> int:
             QWidget,
         )
         from hellsaiz_pc_ai.workflows.qt_canvas import WorkflowCanvas
-        from hellsaiz_pc_ai.telegram.config import TelegramSettings, load_settings as load_telegram_settings, save_settings as save_telegram_settings, validate_bot_token
+        from hellsaiz_pc_ai.telegram.config import TelegramSettings, load_settings as load_telegram_settings, save_settings as save_telegram_settings
         from hellsaiz_pc_ai.telegram.worker import TelegramBotWorker
     except ImportError:
         print("PySide6 is missing. Run: pip install -e .")
@@ -320,8 +320,8 @@ def main() -> int:
     telegram_token_path = settings.workflows_path.parent / "telegram_token.dpapi"
     try:
         telegram_settings = load_telegram_settings(telegram_config_path)
-    except ValueError as exc:
-        logging.warning("Telegram settings are invalid; bot will stay disabled: %s", exc)
+    except (ValueError, SecureStoreError, OSError) as exc:
+        logging.warning("Telegram settings or DPAPI token are unavailable; bot will stay disabled: %s", exc)
         telegram_settings = TelegramSettings()
 
     network_settings_path = settings.workflows_path.parent / "network.json"
@@ -2935,7 +2935,7 @@ def main() -> int:
 
     telegram_token_status = QLabel(
         "Токен защищён DPAPI и сохранён."
-        if bool(load_secret(telegram_token_path)) else "Токен не сохранён."
+        if bool(telegram_settings.token) else "Токен не сохранён."
     )
     telegram_token_status.setStyleSheet("color:#929aa6;")
     settings_layout.addWidget(telegram_token_status)
@@ -3021,7 +3021,7 @@ def main() -> int:
             save_telegram_settings(telegram_config_path, telegram_settings)
             telegram_status.setText("Настройки Telegram сохранены.")
             return True
-        except (OSError, ValueError) as exc:
+        except (OSError, ValueError, SecureStoreError) as exc:
             telegram_status.setText(f"Не удалось сохранить Telegram: {exc}")
             return False
 
@@ -3037,7 +3037,7 @@ def main() -> int:
                 telegram_enable_check.blockSignals(False)
                 try:
                     save_telegram_settings(telegram_config_path, telegram_settings)
-                except (OSError, ValueError):
+                except (OSError, ValueError, SecureStoreError):
                     logging.exception("Could not persist stopped Telegram worker state.")
 
     def start_telegram_worker() -> bool:
@@ -3094,7 +3094,7 @@ def main() -> int:
                 telegram_settings.enabled = False
                 try:
                     save_telegram_settings(telegram_config_path, telegram_settings)
-                except (OSError, ValueError):
+                except (OSError, ValueError, SecureStoreError):
                     logging.exception("Could not persist disabled Telegram state.")
         else:
             persist_telegram_settings(enabled=False)
@@ -3132,6 +3132,10 @@ def main() -> int:
     telegram_enable_check.toggled.connect(toggle_telegram_worker)
     telegram_poll_timer.timeout.connect(reap_telegram_worker)
     telegram_poll_timer.start()
+    if telegram_settings.enabled:
+        # Restore an explicitly enabled worker after the UI has initialized.
+        # A failed network/DPAPI check keeps the local assistant fully usable.
+        QTimer.singleShot(1200, lambda: toggle_telegram_worker(True))
 
     startup_title = QLabel("АВТОЗАПУСК WINDOWS")
     startup_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
@@ -3716,6 +3720,17 @@ def main() -> int:
 
     def release_speech_runtime() -> None:
         stop_wake_listener()
+        telegram_thread = telegram_worker_state.get("worker")
+        if telegram_thread is not None:
+            try:
+                telegram_thread.stop()
+                telegram_thread.join(timeout=5)
+                if telegram_thread.is_alive():
+                    logging.warning("Telegram worker did not stop within five seconds.")
+                else:
+                    telegram_worker_state["worker"] = None
+            except Exception:
+                logging.exception("Could not stop Telegram worker during shutdown")
         worker_groups = (
             [wake_listener_state["worker"]],
             workers,
