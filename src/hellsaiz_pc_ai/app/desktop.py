@@ -240,6 +240,25 @@ def main() -> int:
         def dispatch(self, workflow_id: str, combo: str) -> None:
             self.callback(workflow_id, combo)
 
+    class VoskModelDownloadWorker(QThread):
+        completed = Signal(str)
+        failed = Signal(str)
+
+        def __init__(self, destination_dir: Path) -> None:
+            super().__init__()
+            self.destination_dir = destination_dir
+
+        def run(self) -> None:
+            try:
+                from hellsaiz_pc_ai.speech.model_library import install_vosk_small_ru
+
+                model_path = install_vosk_small_ru(self.destination_dir)
+                self.completed.emit(str(model_path))
+            except Exception as exc:
+                self.failed.emit(str(exc))
+
+    vosk_model_download_workers: list[VoskModelDownloadWorker] = []
+
     class WakeListenerWorker(QThread):
         command = Signal(str)
         status = Signal(str)
@@ -1626,10 +1645,12 @@ def main() -> int:
     vosk_model_row = QHBoxLayout()
     vosk_model_edit = QLineEdit(active_stt["vosk_model_path"])
     vosk_model_edit.setPlaceholderText("Папка распакованной русской модели Vosk")
-    choose_vosk_model_button = QPushButton("Папка Vosk…")
+    choose_vosk_model_button = QPushButton("Папка…")
+    download_vosk_model_button = QPushButton("Скачать Vosk RU")
     vosk_model_row.addWidget(QLabel("Модель Vosk"))
     vosk_model_row.addWidget(vosk_model_edit, 1)
     vosk_model_row.addWidget(choose_vosk_model_button)
+    vosk_model_row.addWidget(download_vosk_model_button)
     settings_layout.addLayout(vosk_model_row)
 
     whisper_executable_row = QHBoxLayout()
@@ -1692,6 +1713,36 @@ def main() -> int:
         )
         if selected:
             vosk_model_edit.setText(selected)
+
+    def download_vosk_model() -> None:
+        if any(worker.isRunning() for worker in vosk_model_download_workers):
+            stt_status.setText("Загрузка русской модели Vosk уже выполняется.")
+            return
+        download_vosk_model_button.setEnabled(False)
+        stt_status.setText(
+            "Загружаю официальную русскую модель Vosk small (около 45 МБ)…"
+        )
+        worker = VoskModelDownloadWorker(settings.speech.vosk_model_path.parent)
+        vosk_model_download_workers.append(worker)
+
+        def model_downloaded(model_path: str) -> None:
+            vosk_model_edit.setText(model_path)
+            stt_status.setText(
+                "Русская модель Vosk установлена локально. Проверяю настройки распознавания…"
+            )
+            save_stt_profile()
+
+        def model_download_failed(message: str) -> None:
+            stt_status.setText(f"Не удалось установить модель Vosk: {message}")
+
+        worker.completed.connect(model_downloaded)
+        worker.failed.connect(model_download_failed)
+        worker.finished.connect(lambda: download_vosk_model_button.setEnabled(True))
+        worker.finished.connect(
+            lambda: vosk_model_download_workers.remove(worker)
+            if worker in vosk_model_download_workers else None
+        )
+        worker.start()
 
     def choose_whisper_executable() -> None:
         selected, _ = QFileDialog.getOpenFileName(
@@ -1881,6 +1932,7 @@ def main() -> int:
             QTimer.singleShot(350, start_wake_listener)
 
     choose_vosk_model_button.clicked.connect(choose_vosk_model)
+    download_vosk_model_button.clicked.connect(download_vosk_model)
     choose_whisper_executable_button.clicked.connect(choose_whisper_executable)
     choose_whisper_model_button.clicked.connect(choose_whisper_model)
     save_stt_button.clicked.connect(save_stt_profile)
