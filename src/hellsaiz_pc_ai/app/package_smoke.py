@@ -13,6 +13,7 @@ PACKAGED_RUNTIME_MODULES = (
     "hellsaiz_pc_ai.tools.ui_automation",
     "hellsaiz_pc_ai.companion.controller",
     "hellsaiz_pc_ai.companion.model_manifest",
+    "hellsaiz_pc_ai.startup_task",
     "pywinauto",
     "cryptography.hazmat.primitives.asymmetric.ed25519",
     "numpy",
