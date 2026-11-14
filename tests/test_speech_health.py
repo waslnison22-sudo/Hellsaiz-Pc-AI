@@ -1,10 +1,15 @@
 from pathlib import Path
 
 from hellsaiz_pc_ai.app.health import collect_speech_health
+from hellsaiz_pc_ai.speech.capture import InputDevice
 
 
 def test_health_reports_missing_vosk_and_optional_fallback(tmp_path: Path, monkeypatch):
     monkeypatch.setattr("hellsaiz_pc_ai.app.health._module_available", lambda name: name == "sounddevice")
+    monkeypatch.setattr(
+        "hellsaiz_pc_ai.speech.capture.list_input_devices",
+        lambda: [InputDevice(0, "USB Mic", "WASAPI", 1, 48000)],
+    )
     checks = collect_speech_health(
         stt_primary="vosk",
         stt_fallback="whisper.cpp",
@@ -36,9 +41,7 @@ def test_health_reports_installed_local_engines(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(
         "hellsaiz_pc_ai.speech.capture.list_input_devices",
         lambda: [
-            __import__("hellsaiz_pc_ai.speech.capture", fromlist=["InputDevice"]).InputDevice(
-                0, "USB Mic", "WASAPI", 1, 48000
-            )
+            InputDevice(0, "USB Mic", "WASAPI", 1, 48000)
         ],
     )
 
