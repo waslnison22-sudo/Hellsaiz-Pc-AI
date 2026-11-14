@@ -337,14 +337,6 @@ def main() -> int:
             "require_proxy_for_telegram": True,
             "launch_on_start": False,
         }
-    telegram_settings_path = settings.workflows_path.parent / "telegram.json"
-    try:
-        telegram_settings = load_telegram_settings(telegram_settings_path)
-    except ValueError as exc:
-        logging.warning("Telegram settings are invalid; Telegram remains disabled: %s", exc)
-        telegram_settings = TelegramSettings()
-    if not telegram_settings.allowed_user_ids or not telegram_settings.allowed_chat_ids:
-        telegram_settings.enabled = False
     raw_tts_rate = profile_data.get("tts_rate", settings.speech.tts_rate)
     tts_rate = (
         int(raw_tts_rate)
