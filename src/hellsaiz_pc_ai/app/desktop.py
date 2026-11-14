@@ -31,12 +31,14 @@ from hellsaiz_pc_ai.core.orchestrator import AssistantOrchestrator
 from hellsaiz_pc_ai.core.registry import ToolRegistry
 from hellsaiz_pc_ai.hotkeys import GlobalHotkeyService, HotkeyUnavailableError
 from hellsaiz_pc_ai.providers.openai_compatible import OpenAICompatibleProvider, ProviderError
+from hellsaiz_pc_ai.providers.gigachat import GigaChatProvider
 from hellsaiz_pc_ai.provider_profiles import (
     active_profile as get_active_provider_profile,
     default_profile_store,
     load_profile_store,
     save_profile_store,
     upsert_profile,
+    provider_credential_path,
 )
 from hellsaiz_pc_ai.storage.reminders import ReminderStore
 from hellsaiz_pc_ai.storage.sqlite_store import ChatStore
@@ -144,16 +146,42 @@ def build_runtime(settings: Settings):
     profile_model = str(profile_data.get("model") or settings.llm.model)
     assistant = None
     if profile_enabled:
-        provider = OpenAICompatibleProvider(
-            profile_base_url,
-            profile_model,
-            settings.llm.api_key,
-            settings.llm.timeout_seconds,
-            settings.allow_remote_llm,
-        )
-        assistant = AssistantOrchestrator(
-            provider, registry, settings.llm.system_prompt, settings.llm.max_tool_rounds
-        )
+        try:
+            provider_type = str(profile_data.get("provider") or "lm-studio")
+            if provider_type == "gigachat":
+                profile_name = str(profile_data.get("name") or "GigaChat")
+                credential_path = provider_credential_path(
+                    settings.workflows_path.parent, profile_name
+                )
+                authorization_key = load_secret(credential_path)
+                if not authorization_key:
+                    logging.warning(
+                        "GigaChat profile '%s' is enabled but has no DPAPI-protected authorization key.",
+                        profile_name,
+                    )
+                else:
+                    provider = GigaChatProvider(
+                        authorization_key,
+                        profile_model,
+                        base_url=profile_base_url or GigaChatProvider.DEFAULT_BASE_URL,
+                        timeout_seconds=settings.llm.timeout_seconds,
+                    )
+                    assistant = AssistantOrchestrator(
+                        provider, registry, settings.llm.system_prompt, settings.llm.max_tool_rounds
+                    )
+            else:
+                provider = OpenAICompatibleProvider(
+                    profile_base_url,
+                    profile_model,
+                    settings.llm.api_key,
+                    settings.llm.timeout_seconds,
+                    settings.allow_remote_llm,
+                )
+                assistant = AssistantOrchestrator(
+                    provider, registry, settings.llm.system_prompt, settings.llm.max_tool_rounds
+                )
+        except (ProviderError, SecureStoreError, ValueError) as exc:
+            logging.warning("The active AI profile could not be initialized: %s", exc)
 
     store = ChatStore(settings.database_path)
     if assistant is not None:
@@ -614,6 +642,7 @@ def main() -> int:
     provider_combo.addItem("LM Studio", "lm-studio")
     provider_combo.addItem("Ollama", "ollama")
     provider_combo.addItem("llama.cpp", "llama.cpp")
+    provider_combo.addItem("GigaChat API", "gigachat")
     provider_combo.addItem("Другой OpenAI-совместимый", "custom")
     provider_combo.setMinimumWidth(180)
     endpoint_edit = QLineEdit()
@@ -623,6 +652,18 @@ def main() -> int:
     provider_row.addWidget(provider_combo)
     provider_row.addWidget(endpoint_edit, 1)
     profile_layout.addLayout(provider_row)
+
+    gigachat_key_row = QHBoxLayout()
+    gigachat_key_label = QLabel("Ключ GigaChat")
+    gigachat_key_label.setMinimumWidth(95)
+    gigachat_key_edit = QLineEdit()
+    gigachat_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+    gigachat_key_edit.setPlaceholderText("Authorization key из кабинета GigaChat API")
+    gigachat_key_status = QLabel("Ключ хранится через Windows DPAPI.")
+    gigachat_key_status.setStyleSheet("color:#89919d; font-size:11px;")
+    gigachat_key_row.addWidget(gigachat_key_label)
+    gigachat_key_row.addWidget(gigachat_key_edit, 1)
+    profile_layout.addLayout(gigachat_key_row)
 
     model_row = QHBoxLayout()
     model_label = QLabel("Модель")
@@ -694,6 +735,7 @@ def main() -> int:
         "lm-studio": "http://127.0.0.1:1234/v1",
         "ollama": "http://127.0.0.1:11434/v1",
         "llama.cpp": settings.llm.base_url,
+        "gigachat": GigaChatProvider.DEFAULT_BASE_URL,
         "custom": settings.llm.base_url,
     }
 
@@ -725,6 +767,19 @@ def main() -> int:
         model_edit.setText(saved_profile["model"])
         ai_enabled_check.setChecked(saved_profile["enabled"])
         named_profile_name.setText(saved_profile["name"])
+        provider_changed()
+        if saved_profile["provider"] == "gigachat":
+            stored_key_path = provider_credential_path(
+                settings.workflows_path.parent, saved_profile["name"]
+            )
+            try:
+                has_key = bool(load_secret(stored_key_path))
+            except SecureStoreError:
+                has_key = False
+            gigachat_key_status.setText(
+                "Ключ сохранён через DPAPI. Введи новый, чтобы заменить."
+                if has_key else "Ключ ещё не сохранён. Вставь Authorization key."
+            )
         profile_status.setText(f"Выбран профиль «{saved_profile['name']}». Нажми «Применить и сохранить».")
 
     refresh_named_profile_combo(provider_profile_store["active_profile"])
@@ -743,8 +798,15 @@ def main() -> int:
         provider = str(provider_combo.currentData() or "custom")
         if provider != "custom":
             endpoint_edit.setText(endpoint_defaults[provider])
+        is_gigachat = provider == "gigachat"
+        gigachat_key_label.setVisible(is_gigachat)
+        gigachat_key_edit.setVisible(is_gigachat)
+        gigachat_key_status.setVisible(is_gigachat)
+        if is_gigachat:
+            endpoint_edit.setText(GigaChatProvider.DEFAULT_BASE_URL)
 
     provider_combo.currentIndexChanged.connect(provider_changed)
+    provider_changed()
 
     def toggle_profile_menu() -> None:
         profile_animation.stop()
@@ -813,16 +875,36 @@ def main() -> int:
             profile_status.setText("Укажи корректный адрес сервера и имя модели.")
             return
 
+        selected_provider = str(provider_combo.currentData() or "custom")
         new_assistant = None
+        pending_gigachat_key = ""
         if enabled:
             try:
-                provider = OpenAICompatibleProvider(
-                    endpoint,
-                    model,
-                    settings.llm.api_key,
-                    settings.llm.timeout_seconds,
-                    settings.allow_remote_llm,
-                )
+                if selected_provider == "gigachat":
+                    credential_path = provider_credential_path(
+                        settings.workflows_path.parent, profile_name
+                    )
+                    pending_gigachat_key = gigachat_key_edit.text().strip()
+                    authorization_key = pending_gigachat_key or load_secret(credential_path)
+                    if not authorization_key:
+                        profile_status.setText(
+                            "Для GigaChat нужен Authorization key. Ключ будет защищён DPAPI."
+                        )
+                        return
+                    provider = GigaChatProvider(
+                        authorization_key,
+                        model,
+                        base_url=endpoint or GigaChatProvider.DEFAULT_BASE_URL,
+                        timeout_seconds=settings.llm.timeout_seconds,
+                    )
+                else:
+                    provider = OpenAICompatibleProvider(
+                        endpoint,
+                        model,
+                        settings.llm.api_key,
+                        settings.llm.timeout_seconds,
+                        settings.allow_remote_llm,
+                    )
                 new_assistant = AssistantOrchestrator(
                     provider, registry, settings.llm.system_prompt, settings.llm.max_tool_rounds
                 )
@@ -833,7 +915,7 @@ def main() -> int:
 
         provider_profile = {
             "name": profile_name,
-            "provider": str(provider_combo.currentData() or "custom"),
+            "provider": selected_provider,
             "base_url": endpoint or settings.llm.base_url,
             "model": model or settings.llm.model,
             "enabled": enabled,
@@ -846,6 +928,18 @@ def main() -> int:
             return
         provider_profile_store = updated_store
         refresh_named_profile_combo(profile_name)
+        if selected_provider == "gigachat":
+            try:
+                if pending_gigachat_key:
+                    save_secret(
+                        provider_credential_path(settings.workflows_path.parent, profile_name),
+                        pending_gigachat_key,
+                    )
+                    gigachat_key_edit.clear()
+                gigachat_key_status.setText("Ключ защищён DPAPI для текущей учётной записи Windows.")
+            except SecureStoreError as exc:
+                profile_status.setText(f"AI-профиль сохранён, но ключ не сохранён: {exc}")
+                return
 
         assistant = new_assistant
         selected_voice = voice_combo.currentText()
