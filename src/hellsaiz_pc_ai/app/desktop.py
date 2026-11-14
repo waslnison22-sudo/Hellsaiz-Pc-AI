@@ -3110,11 +3110,14 @@ def main() -> int:
             if value:
                 from hellsaiz_pc_ai.telegram.config import validate_bot_token
                 validate_bot_token(value)
-            save_secret(telegram_token_path, value)
+            if value:
+                save_secret(telegram_token_path, value)
+                telegram_token_status.setText("Токен защищён DPAPI и сохранён.")
+            else:
+                from hellsaiz_pc_ai.telegram.config import delete_saved_token
+                delete_saved_token(telegram_config_path)
+                telegram_token_status.setText("Токен удалён.")
             telegram_token_input.clear()
-            telegram_token_status.setText(
-                "Токен защищён DPAPI и сохранён." if value else "Токен удалён."
-            )
         except (SecureStoreError, ValueError) as exc:
             telegram_token_status.setText(f"Не удалось сохранить токен: {exc}")
 
