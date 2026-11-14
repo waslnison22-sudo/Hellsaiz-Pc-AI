@@ -1702,10 +1702,7 @@ def main() -> int:
         )
         worker.start()
 
-    def save_voice_profile(engine: str, voice_id: str | None = None) -> None:
-        profile_data["tts_engine"] = engine
-        if voice_id:
-            profile_data["piper_voice_id"] = voice_id
+    def persist_voice_profile() -> None:
         profile_path = settings.workflows_path.parent / "ai_profile.json"
         profile_path.parent.mkdir(parents=True, exist_ok=True)
         temporary = profile_path.with_suffix(".json.tmp")
@@ -1714,6 +1711,115 @@ def main() -> int:
             encoding="utf-8",
         )
         temporary.replace(profile_path)
+
+    def save_voice_profile(engine: str, voice_id: str | None = None) -> None:
+        profile_data["tts_engine"] = engine
+        profile_data["voice_name"] = active_voice["name"]
+        profile_data["tts_rate"] = active_tts["rate"]
+        profile_data["tts_volume"] = active_tts["volume"]
+        if voice_id:
+            profile_data["piper_voice_id"] = voice_id
+        persist_voice_profile()
+
+    def save_sapi_options() -> None:
+        active_tts["rate"] = int(sapi_rate_combo.currentData())
+        active_tts["volume"] = float(sapi_volume_combo.currentData()) / 100.0
+        profile_data["tts_rate"] = active_tts["rate"]
+        profile_data["tts_volume"] = active_tts["volume"]
+        try:
+            persist_voice_profile()
+            voices_status.setText(
+                f"Параметры SAPI5 сохранены: {active_tts['rate']} слов/мин, "
+                f"{round(active_tts['volume'] * 100)}% громкости."
+            )
+        except OSError as exc:
+            voices_status.setText(f"Не удалось сохранить параметры речи: {exc}")
+
+    def refresh_system_voice_list() -> None:
+        if any(worker.isRunning() for worker in sapi_inventory_workers):
+            voices_status.setText("Список системных голосов уже обновляется.")
+            return
+        refresh_system_voices_button.setEnabled(False)
+        voices_status.setText("Получаю список установленных голосов Windows SAPI5…")
+        worker = SapiVoiceListWorker()
+        sapi_inventory_workers.append(worker)
+
+        def loaded(voices: Any) -> None:
+            system_voice_combo.clear()
+            system_voice_combo.addItem("Системный голос по умолчанию", "")
+            selected_index = 0
+            saved_voice = active_voice["name"].casefold().strip()
+            for voice in voices:
+                system_voice_combo.addItem(voice.name, voice.id)
+                if voice.id.casefold() == saved_voice or voice.name.casefold() == saved_voice:
+                    selected_index = system_voice_combo.count() - 1
+            system_voice_combo.setCurrentIndex(selected_index)
+            voices_status.setText(
+                f"Найдено системных голосов SAPI5: {len(voices)}. "
+                "Выбери голос и нажми «Использовать голос Windows»."
+            )
+            if saved_voice and selected_index == 0:
+                voices_status.setText(
+                    f"Сохранённый голос «{active_voice['name']}» не найден среди "
+                    f"установленных. Найдено голосов: {len(voices)}."
+                )
+
+        def failed(message: str) -> None:
+            voices_status.setText(f"Не удалось получить системные голоса: {message}")
+
+        worker.completed.connect(loaded)
+        worker.failed.connect(failed)
+        worker.finished.connect(lambda: refresh_system_voices_button.setEnabled(True))
+        worker.finished.connect(
+            lambda: sapi_inventory_workers.remove(worker)
+            if worker in sapi_inventory_workers else None
+        )
+        worker.start()
+
+    def start_voice_test(engine: str) -> None:
+        if workers:
+            voices_status.setText("Дождись завершения текущей команды помощника.")
+            return
+        if any(worker.isRunning() for worker in voice_test_workers):
+            voices_status.setText("Проверка голосового движка уже выполняется.")
+            return
+        model_path = None
+        voice_name = active_voice["name"]
+        if engine == "piper":
+            item = installed_voices_list.currentItem()
+            if item is None:
+                voices_status.setText("Сначала выбери установленную модель Piper.")
+                return
+            voice_id = str(item.data(Qt.ItemDataRole.UserRole))
+            model_path = voice_library_dir / f"{voice_id}.onnx"
+        elif engine == "sapi5":
+            voice_name = str(system_voice_combo.currentData() or "")
+        worker = VoiceTestWorker(
+            engine,
+            voice_name,
+            model_path,
+            active_tts["rate"],
+            active_tts["volume"],
+        )
+        voice_test_workers.append(worker)
+        test_piper_voice_button.setEnabled(False)
+        test_system_voice_button.setEnabled(False)
+        voices_status.setText(f"Проверяю голосовой движок {engine}…")
+        worker.completed.connect(voices_status.setText)
+        worker.failed.connect(
+            lambda message: voices_status.setText(
+                f"Не удалось проверить {engine}: {message}"
+            )
+        )
+
+        def test_finished() -> None:
+            test_piper_voice_button.setEnabled(True)
+            test_system_voice_button.setEnabled(True)
+            if worker in voice_test_workers:
+                voice_test_workers.remove(worker)
+
+        worker.finished.connect(test_finished)
+        worker.start()
 
     def use_selected_piper_voice() -> None:
         item = installed_voices_list.currentItem()
@@ -1728,33 +1834,32 @@ def main() -> int:
             voices_status.setText(f"Не удалось сохранить голос: {exc}")
 
     def test_selected_piper_voice() -> None:
-        item = installed_voices_list.currentItem()
-        if item is None:
-            voices_status.setText("Сначала выбери установленную модель.")
-            return
-        voice_id = str(item.data(Qt.ItemDataRole.UserRole))
-        model = voice_library_dir / f"{voice_id}.onnx"
-        try:
-            PiperSynthesizer(model).speak(
-                "Привет. Я Хеллсайз. Проверка установленного голоса завершена."
-            )
-            voices_status.setText(f"Голос {voice_id} воспроизведён.")
-        except Exception as exc:
-            voices_status.setText(f"Не удалось проверить голос: {exc}")
+        start_voice_test("piper")
+
+    def test_selected_system_voice() -> None:
+        start_voice_test("sapi5")
 
     def use_windows_voice() -> None:
+        active_voice["name"] = str(system_voice_combo.currentData() or "")
         try:
             save_voice_profile("sapi5")
-            voices_status.setText("Для ответов помощника выбран системный голос Windows SAPI5.")
+            selected_name = system_voice_combo.currentText()
+            voices_status.setText(
+                f"Для ответов помощника выбран системный голос: {selected_name}."
+            )
         except OSError as exc:
             voices_status.setText(f"Не удалось сохранить настройку: {exc}")
 
     download_voice_button.clicked.connect(download_selected_voice)
     use_voice_button.clicked.connect(use_selected_piper_voice)
     test_piper_voice_button.clicked.connect(test_selected_piper_voice)
+    test_system_voice_button.clicked.connect(test_selected_system_voice)
     use_system_voice_button.clicked.connect(use_windows_voice)
+    refresh_system_voices_button.clicked.connect(refresh_system_voice_list)
+    save_sapi_options_button.clicked.connect(save_sapi_options)
     refresh_voice_library()
     tabs.addTab(voices_page, "Голоса")
+    refresh_system_voice_list()
 
     settings_page = QWidget()
     settings_layout = QVBoxLayout(settings_page)
