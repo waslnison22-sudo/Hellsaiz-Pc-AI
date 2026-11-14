@@ -11,6 +11,8 @@ PACKAGED_RUNTIME_MODULES = (
     "PySide6.QtWidgets",
     "hellsaiz_pc_ai.providers.gigachat",
     "hellsaiz_pc_ai.tools.ui_automation",
+    "hellsaiz_pc_ai.tools.file_system",
+    "hellsaiz_pc_ai.app.file_access",
     "hellsaiz_pc_ai.companion.controller",
     "hellsaiz_pc_ai.companion.model_manifest",
     "hellsaiz_pc_ai.startup_task",
