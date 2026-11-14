@@ -82,7 +82,7 @@ def test_enabled_ocr_tool_uses_local_reader(monkeypatch):
     monkeypatch.setattr(
         screen_ocr,
         "read_primary_screen_text",
-        lambda: ToolResult(True, "Visible text", {"sent_to_network": False}),
+        lambda **_kwargs: ToolResult(True, "Visible text", {"sent_to_network": False}),
     )
 
     result = registry.execute("read_screen_text", {})
@@ -90,3 +90,26 @@ def test_enabled_ocr_tool_uses_local_reader(monkeypatch):
     assert result.ok
     assert result.output == "Visible text"
     assert result.data["sent_to_network"] is False
+
+
+def test_enabled_ocr_tool_passes_user_model_directory_to_reader(monkeypatch, tmp_path):
+    from hellsaiz_pc_ai.core.models import ToolResult
+    from hellsaiz_pc_ai.tools import screen_ocr
+
+    received = {}
+    registry = ToolRegistry()
+    register_screen_ocr_tools(
+        registry,
+        enabled=lambda: True,
+        model_root=tmp_path,
+    )
+
+    def fake_reader(*, model_root=None):
+        received["model_root"] = model_root
+        return ToolResult(True, "Visible text")
+
+    monkeypatch.setattr(screen_ocr, "read_primary_screen_text", fake_reader)
+    result = registry.execute("read_screen_text", {})
+
+    assert result.ok
+    assert received["model_root"] == tmp_path
