@@ -17,6 +17,7 @@ from hellsaiz_pc_ai.speech.capture import (
 class FakeSoundDevice:
     def __init__(self):
         self.record_calls = []
+        self.supported_rates = {16000, 48000}
         self.input_devices = [
             {"name": "USB Mic", "max_input_channels": 1, "hostapi": 0, "default_samplerate": 48000},
             {"name": "Speakers", "max_input_channels": 0, "hostapi": 0, "default_samplerate": 48000},
@@ -29,7 +30,8 @@ class FakeSoundDevice:
         return self.input_devices[int(device)]
 
     def check_input_settings(self, **kwargs):
-        return None
+        if kwargs["samplerate"] not in self.supported_rates:
+            raise ValueError("unsupported sample rate")
 
     def query_hostapis(self):
         return [{"name": "WASAPI"}, {"name": "MME"}]
@@ -85,3 +87,17 @@ def test_record_microphone_passes_selected_device_to_sounddevice(tmp_path, monke
 def test_record_microphone_rejects_invalid_sample_rate(tmp_path):
     with pytest.raises(ValueError, match="Sample rate"):
         record_microphone(tmp_path / "bad.wav", sample_rate=1000)
+
+
+def test_capture_falls_back_to_native_device_sample_rate(tmp_path, monkeypatch):
+    fake = FakeSoundDevice()
+    fake.supported_rates = {48000}
+    monkeypatch.setitem(sys.modules, "sounddevice", fake)
+    output = tmp_path / "native-rate.wav"
+
+    result = record_microphone(output, duration_seconds=1.0, device="USB Mic")
+
+    assert result == output
+    assert fake.record_calls[0]["samplerate"] == 48000
+    with wave.open(str(output), "rb") as audio:
+        assert audio.getframerate() == 48000
