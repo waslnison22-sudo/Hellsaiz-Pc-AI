@@ -1396,11 +1396,17 @@ def main() -> int:
             install_update_button.setEnabled(
                 bool(info.update_available and install_root is not None and info.package_asset_id)
             )
-            if info.update_available:
+            if info.update_available and install_root is None:
+                update_status.setText(
+                    f"Доступна версия {info.latest_version}, но приложение запущено напрямую, "
+                    "без Launcher. Для автообновления скачай portable ZIP, распакуй его "
+                    "целиком и запускай HellsaizLauncher.exe из корневой папки."
+                )
+            elif info.update_available:
                 package_kind = "дельта-пакет" if info.package_mode == "delta" else "полный пакет"
                 update_status.setText(
                     f"Доступна версия {info.latest_version}. Подпись проверена. "
-                    f"Подготовлен {package_kind}; можно установить."
+                    f"Подготовлен {package_kind}; можно скачать и установить."
                 )
             else:
                 update_status.setText(f"Установлена последняя версия: {info.current_version}.")
