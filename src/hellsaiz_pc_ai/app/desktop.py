@@ -31,6 +31,13 @@ from hellsaiz_pc_ai.core.orchestrator import AssistantOrchestrator
 from hellsaiz_pc_ai.core.registry import ToolRegistry
 from hellsaiz_pc_ai.hotkeys import GlobalHotkeyService, HotkeyUnavailableError
 from hellsaiz_pc_ai.providers.openai_compatible import OpenAICompatibleProvider, ProviderError
+from hellsaiz_pc_ai.provider_profiles import (
+    active_profile as get_active_provider_profile,
+    default_profile_store,
+    load_profile_store,
+    save_profile_store,
+    upsert_profile,
+)
 from hellsaiz_pc_ai.storage.reminders import ReminderStore
 from hellsaiz_pc_ai.storage.sqlite_store import ChatStore
 from hellsaiz_pc_ai.tools.clipboard import register_clipboard_tools
@@ -110,6 +117,27 @@ def build_runtime(settings: Settings):
                 profile_data = loaded_profile
         except (OSError, ValueError, json.JSONDecodeError):
             logging.warning("Saved AI profile is invalid; using config.toml defaults.")
+
+    provider_profiles_path = settings.workflows_path.parent / "provider_profiles.json"
+    try:
+        provider_profile_store = load_profile_store(
+            provider_profiles_path,
+            legacy_profile={
+                **profile_data,
+                "base_url": profile_data.get("base_url") or settings.llm.base_url,
+                "model": profile_data.get("model") or settings.llm.model,
+                "enabled": profile_data.get("enabled", settings.llm.enabled),
+            },
+        )
+        profile_data.update(get_active_provider_profile(provider_profile_store))
+    except ValueError as exc:
+        logging.warning("Named AI profiles are invalid; using a clean default: %s", exc)
+        provider_profile_store = default_profile_store(
+            base_url=settings.llm.base_url,
+            model=settings.llm.model,
+            enabled=settings.llm.enabled,
+        )
+        profile_data.update(get_active_provider_profile(provider_profile_store))
 
     profile_enabled = bool(profile_data.get("enabled", settings.llm.enabled))
     profile_base_url = str(profile_data.get("base_url") or settings.llm.base_url).rstrip("/")
