@@ -152,6 +152,13 @@ def main() -> int:
         manifest, ensure_ascii=False, sort_keys=True, separators=(",", ":")
     ).encode("utf-8")
     signature = base64.b64encode(private_key.sign(manifest_bytes)).decode("ascii")
+    try:
+        verify_signed_manifest(manifest_bytes, signature)
+    except UpdateCheckError as exc:
+        raise SystemExit(
+            "The release signing key does not match the public key embedded in the application. "
+            "Refusing to publish an update that installed clients cannot verify."
+        ) from exc
 
     release_assets = output / "release-assets"
     release_assets.mkdir(parents=True, exist_ok=True)
