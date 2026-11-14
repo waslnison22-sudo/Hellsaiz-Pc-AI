@@ -44,6 +44,14 @@ class CommandRouter:
         "кс2": "cs2",
         "кс 2": "cs2",
         "контр страйк 2": "cs2",
+        "диспетчер задач": "task_manager",
+        "диспетчер": "task_manager",
+        "task manager": "task_manager",
+        "настройки": "settings",
+        "параметры": "settings",
+        "windows settings": "settings",
+        "панель управления": "control_panel",
+        "control panel": "control_panel",
     }
     PROCESS_SYNONYMS = {
         "дискорд": "discord",
