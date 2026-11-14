@@ -139,3 +139,38 @@ def test_ui_automation_tool_schemas_validate_arguments():
         "type_into_window_control",
         {"window_title": "App", "control_name": "Search", "text": "x" * 4001},
     ).ok is False
+
+
+def test_keyboard_shortcut_targets_one_window_and_uses_whitelist(monkeypatch):
+    class FakeWindow:
+        def __init__(self):
+            self.focused = False
+            self.sent = []
+
+        def window_text(self):
+            return "Browser"
+
+        def set_focus(self):
+            self.focused = True
+
+        def type_keys(self, sequence, set_foreground=False):
+            self.sent.append((sequence, set_foreground))
+
+    window = FakeWindow()
+    monkeypatch.setattr(ui_automation, "_desktop", lambda: FakeDesktop([window]))
+
+    result = ui_automation._send_keyboard_shortcut("Browser", "ctrl+l")
+
+    assert result.ok
+    assert window.focused
+    assert window.sent == [("^l", True)]
+
+
+def test_keyboard_shortcut_refuses_shell_and_arbitrary_key_combinations(monkeypatch):
+    window = FakeWindow("Browser", [])
+    monkeypatch.setattr(ui_automation, "_desktop", lambda: FakeDesktop([window]))
+
+    result = ui_automation._send_keyboard_shortcut("Browser", "WIN+R")
+
+    assert not result.ok
+    assert "не разрешено" in result.output.casefold()
