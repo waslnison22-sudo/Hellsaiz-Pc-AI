@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import atexit
 import json
 import logging
 import tempfile
@@ -38,6 +39,7 @@ from hellsaiz_pc_ai.tools.system import register_system_tools
 from hellsaiz_pc_ai.tools.public_info import register_public_info_tools
 from hellsaiz_pc_ai.app.wallpaper import WallpaperError, WallpaperStore
 from hellsaiz_pc_ai.app.shortcuts import ensure_desktop_shortcut
+from hellsaiz_pc_ai.app.single_instance import SingleInstanceLock
 from hellsaiz_pc_ai.speech.voice_library import (
     VoiceLibraryError, download_voice, list_installed_voices,
 )
@@ -168,6 +170,18 @@ def main() -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     settings = load_settings()
+    app = QApplication.instance() or QApplication([])
+    instance_lock = SingleInstanceLock(settings.workflows_path.parent / "assistant.lock")
+    if not instance_lock.acquire():
+        QMessageBox.information(
+            None,
+            "Hellsaiz PC AI",
+            "Помощник уже запущен. Используй открытое окно приложения.",
+        )
+        return 0
+    atexit.register(instance_lock.release)
+    app.aboutToQuit.connect(instance_lock.release)
+
     (
         router, assistant, store, workflow_library, workflow_runner, registry,
         reminder_store, allowed_apps, profile_data
@@ -203,7 +217,6 @@ def main() -> int:
     if install_root is not None:
         ensure_desktop_shortcut(install_root / "HellsaizLauncher.exe")
 
-    app = QApplication.instance() or QApplication([])
     window = QMainWindow()
     window.setWindowTitle(settings.app_name)
     window.resize(1240, 820)
