@@ -87,7 +87,7 @@ def unregister_startup_task(
     *,
     runner: Runner = subprocess.run,
 ) -> None:
-    if os.name != "nt":
+    if sys.platform != "win32":
         raise StartupTaskError("Автозапуск через Планировщик поддерживается только в Windows.")
     result = _run(
         ["schtasks.exe", "/Delete", "/TN", TASK_NAME, "/F"],
