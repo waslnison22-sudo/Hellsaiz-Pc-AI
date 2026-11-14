@@ -228,7 +228,7 @@ class CommandRouter:
             return self._execute("list_windows", {}, confirm)
 
         focus_match = re.fullmatch(
-            r"(?:переключись на|активируй окно|перейди в окно|покажи окно)\\s+(.+)",
+            r"(?:переключись на|активируй окно|перейди в окно|покажи окно)\s+(.+)",
             command,
         )
         if focus_match:
