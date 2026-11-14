@@ -39,7 +39,7 @@ jobs:
 
       - name: Build application, launcher and updater
         shell: pwsh
-        run: .\\scripts\\build_preview.ps1
+        run: ./scripts/build_preview.ps1
 
       - name: Upload unsigned preview package
         uses: actions/upload-artifact@v4
