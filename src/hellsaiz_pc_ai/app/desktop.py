@@ -1917,6 +1917,7 @@ def main() -> int:
             ),
             tts_engine=str(profile_data.get("tts_engine") or "sapi5"),
             piper_model_path=selected_model.model_path if selected_model else None,
+            microphone_device=active_microphone["name"],
             wake_enabled=always_listen_check.isChecked(),
         )
         labels = {"ok": "OK", "warning": "WARN", "error": "ERROR"}
