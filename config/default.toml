@@ -3,6 +3,9 @@ name = "Hellsaiz PC AI"
 language = "ru-RU"
 log_level = "INFO"
 
+[assistant]
+wake_aliases = ["Хеллсайз", "Хелсайз", "Хелл", "Hellsaiz", "Hell"]
+
 [llm]
 enabled = false
 base_url = "http://127.0.0.1:1234/v1"
@@ -29,6 +32,15 @@ vosk_model_path = ""
 notepad = ["notepad.exe"]
 calculator = ["calc.exe"]
 explorer = ["explorer.exe"]
+
+[windows.app_aliases]
+notepad = ["блокнот", "notepad"]
+calculator = ["калькулятор", "calculator"]
+explorer = ["проводник", "файловый менеджер", "explorer"]
+
+# Add Steam and games to windows.allowed_apps before adding their phrase aliases.
+# Example: steam = ["стим", "steam client", "игровой клиент"]
+# Example: cs2 = ["кс2", "кс 2", "cs2", "контр страйк 2"]
 
 [windows.allowed_processes]
 discord = "Discord.exe"
