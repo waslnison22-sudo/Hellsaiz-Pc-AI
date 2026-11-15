@@ -256,7 +256,7 @@ def _type_into_control(title_query: str, name_query: str, text: str) -> ToolResu
         setter(text)
         return ToolResult(
             True,
-            f"Текст введён в поле «{snapshot.name}» окна «{window.window_text()}».,
+            f"Текст введён в поле «{snapshot.name}» окна «{window.window_text()}».",
         )
     except OSError as exc:
         return ToolResult(False, str(exc))
