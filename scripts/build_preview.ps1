@@ -1,6 +1,9 @@
 $ErrorActionPreference = "Stop"
 Set-Location (Join-Path $PSScriptRoot "..")
 
+python scripts/apply_pending_patches.py
+if ($LASTEXITCODE -ne 0) { throw "Pending patches failed to apply; check docs/patches/." }
+
 python -m pip install --upgrade pip
 if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed." }
 
