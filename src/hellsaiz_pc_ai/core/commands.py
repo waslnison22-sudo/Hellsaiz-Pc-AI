@@ -3,12 +3,104 @@ from __future__ import annotations
 import random
 import re
 import unicodedata
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from hellsaiz_pc_ai.core.models import ToolResult
 from hellsaiz_pc_ai.core.intent_engine import build_default_intent_engine
 from hellsaiz_pc_ai.core.registry import ConfirmCallback, ToolRegistry
+
+
+def _current_time() -> datetime:
+    """Точка времени для напоминаний; заменяется в тестах для детерминизма."""
+    return datetime.now()
+
+
+def _normalize_expression(expr: str) -> str:
+    text = unicodedata.normalize("NFKC", expr).casefold().replace("ё", "е")
+    text = text.replace(",", ".")
+    text = re.sub(r"\bплюс\b", "+", text)
+    text = re.sub(r"\bминус\b", "-", text)
+    text = re.sub(r"\bумножить(?:\s+на)?|\bумнож(?:ить|ь)?(?:\s+на)?|×|[*x]", "*", text)
+    text = re.sub(r"\bразделить(?:\s+на)?|\bделить(?:\s+на)?|÷|/", "/", text)
+    text = re.sub(r"\bпроцентов?\s+от\b", " %OF% ", text)
+    text = re.sub(r"\bна\b", "*", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _evaluate_expression(expr: str) -> str | None:
+    """Безопасный детерминированный калькулятор: без eval(), только + - * / и проценты."""
+    text = _normalize_expression(expr)
+    if not text:
+        return None
+    tokens = re.findall(r"\d+(?:\.\d+)?|%OF%|[+\-*/]", text)
+    compact = text.replace(" ", "")
+    if "".join(tokens) != compact:
+        return None
+    values: list[float] = []
+    operators: list[str] = []
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "%OF%":
+            return None
+        try:
+            values.append(float(token))
+        except ValueError:
+            return None
+        if index + 1 < len(tokens):
+            operator = tokens[index + 1]
+            if operator == "%OF%":
+                values[-1] = values[-1] / 100.0
+                operator = "*"
+            elif operator not in {"+", "-", "*", "/"}:
+                return None
+            operators.append(operator)
+        index += 2
+    if not values:
+        return None
+    if len(operators) != len(values) - 1:
+        return None
+
+    def apply(left: float, op: str, right: float) -> float:
+        if op == "+":
+            return left + right
+        if op == "-":
+            return left - right
+        if op == "*":
+            return left * right
+        if op == "/":
+            if right == 0:
+                raise ZeroDivisionError
+            return left / right
+        raise ValueError
+
+    try:
+        current = values[0]
+        pending: list[float] = []
+        pending_ops: list[str] = []
+        for op, value in zip(operators, values[1:]):
+            if op in {"*", "/"}:
+                current = apply(current, op, value)
+            else:
+                pending.append(current)
+                pending_ops.append(op)
+                current = value
+        pending.append(current)
+        total = pending[0]
+        for op, value in zip(pending_ops, pending[1:]):
+            total = apply(total, op, value)
+        result = total
+    except ZeroDivisionError:
+        return "На ноль делить нельзя."
+    except (TypeError, ValueError):
+        return None
+    if abs(result - round(result)) < 1e-9:
+        formatted = str(int(round(result)))
+    else:
+        formatted = f"{result:.4f}".rstrip("0").rstrip(".")
+    return f"Результат: {formatted}"
 
 
 HELP_TEXT = (
@@ -18,7 +110,8 @@ HELP_TEXT = (
     "• «открой диспетчер задач», «открой настройки», «панель управления»\n"
     "• «установи громкость на 30 процентов», «громкость на максимум», «выключи звук»\n"
     "• «прочитай буфер обмена», «скопируй текст»\n"
-    "• «напомни через 5 минут…», «мои напоминания»\n"
+    "• «напомни через 5 минут…», «напомни в 22:00 …», «мои напоминания»\n"
+    "• «сколько будет 12 умножить на 3», «15 процентов от 200»\n"
     "• «открой сайт example.com»\n"
     "• «найди в интернете…», «поищи информацию о…»\n"
     "• «погода в Москве», «курс доллара к рублю»\n"
@@ -171,6 +264,11 @@ class CommandRouter:
         # Resolve the utterance to an intent and extract typed slots before execution.
         intent = self.intent_engine.resolve(command)
         if intent is not None:
+            if intent.name == "calculator":
+                answer = _evaluate_expression(intent.slots.get("expression", ""))
+                if answer is not None:
+                    return answer
+                # Выражение не разобралось — фразу обрабатывают обычные правила ниже.
             if intent.name == "web_search":
                 query = intent.slots.get("query", "").strip()
                 return self._execute("web_search", {"query": query}, confirm) if query else (
@@ -183,10 +281,12 @@ class CommandRouter:
                 return self._execute("get_weather", {"city": city}, confirm)
             if intent.name == "exchange_rate":
                 currency_names = {
-                    "доллар": "USD", "доллара": "USD", "доллары": "USD", "usd": "USD",
-                    "евро": "EUR", "eur": "EUR", "юань": "CNY", "юаня": "CNY", "cny": "CNY",
-                    "рубль": "RUB", "рубля": "RUB", "рублю": "RUB", "rub": "RUB",
-                    "фунт": "GBP", "фунта": "GBP", "gbp": "GBP",
+                    "доллар": "USD", "доллара": "USD", "доллары": "USD", "долларов": "USD",
+                    "usd": "USD",
+                    "евро": "EUR", "eur": "EUR", "юань": "CNY", "юаня": "CNY", "юаней": "CNY",
+                    "cny": "CNY",
+                    "рубль": "RUB", "рубля": "RUB", "рублю": "RUB", "рублей": "RUB", "rub": "RUB",
+                    "фунт": "GBP", "фунта": "GBP", "фунтов": "GBP", "gbp": "GBP",
                 }
                 base = currency_names[intent.slots["base"]]
                 quote_currency = currency_names.get(intent.slots.get("quote", "рубль"), "RUB")
@@ -208,17 +308,46 @@ class CommandRouter:
                 "dismiss_reminder", {"reminder_id": int(dismiss_match.group(1))}, confirm
             )
 
+        time_reminder_match = re.match(
+            r"^напомни(?: мне)?\s+(завтра\s+)?в\s+(\d{1,2})[:.](\d{2})\s+(.+?)\s*$",
+            self.strip_wake_name(text),
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        if time_reminder_match:
+            hour = int(time_reminder_match.group(2))
+            minute = int(time_reminder_match.group(3))
+            if not (0 <= hour <= 23 and 0 <= minute <= 59):
+                return "Время напоминания должно быть в формате ЧЧ:ММ, например 22:00."
+            now = _current_time()
+            target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            if time_reminder_match.group(1) or target <= now:
+                target += timedelta(days=1)
+            seconds = int((target - now).total_seconds())
+            if seconds < 10:
+                seconds += 86_400
+            message = time_reminder_match.group(4).strip()
+            return self._execute(
+                "create_reminder", {"seconds": seconds, "message": message}, confirm
+            )
+
         reminder_match = re.match(
-            r"^напомни(?: мне)?\s+через\s+(\d{1,5})\s+"
-            r"(секунд(?:у|ы|а)?|сек|минут(?:у|ы|а)?|мин|час(?:а|ов)?|ч)\s+(.+?)\s*$",
+            r"^напомни(?: мне)?\s+через\s+(?:(\d{1,5})\s+)?"
+            r"(секунд(?:у|ы|а)?|сек|минут(?:у|ы|а)?|мин|полчаса|полчасика|полтора часа|час(?:а|ов)?|ч)\s+(.+?)\s*$",
             self.strip_wake_name(text),
             flags=re.IGNORECASE | re.DOTALL,
         )
         if reminder_match:
-            amount = int(reminder_match.group(1))
             unit = reminder_match.group(2).casefold()
-            factor = 1 if unit.startswith("сек") else 60 if unit.startswith("мин") else 3600
-            seconds = amount * factor
+            if unit in {"полчаса", "полчасика"}:
+                seconds = 1800
+            elif unit.startswith("полтора"):
+                seconds = 5400
+            else:
+                amount_text = reminder_match.group(1)
+                if not amount_text:
+                    return None
+                factor = 1 if unit.startswith("сек") else 60 if unit.startswith("мин") else 3600
+                seconds = int(amount_text) * factor
             if not 10 <= seconds <= 2_592_000:
                 return "Время напоминания должно быть от 10 секунд до 30 дней."
             message = reminder_match.group(3).strip()
@@ -287,17 +416,6 @@ class CommandRouter:
                 confirm,
             )
 
-        click_match = re.fullmatch(r"нажми (.+?) в окне (.+)", command)
-        if click_match:
-            return self._execute(
-                "click_window_control",
-                {
-                    "control_name": click_match.group(1).strip(),
-                    "window_title": click_match.group(2).strip(),
-                },
-                confirm,
-            )
-
         raw_command = self.strip_wake_name(text).strip()
         shortcut_match = re.fullmatch(
             r"(?:нажми сочетание|отправь сочетание|нажми клавиши) (.+?) в окне (.+)",
@@ -310,6 +428,32 @@ class CommandRouter:
                 {
                     "shortcut": shortcut_match.group(1).strip().upper(),
                     "window_title": shortcut_match.group(2).strip(),
+                },
+                confirm,
+            )
+
+        bare_key_match = re.fullmatch(
+            r"нажми\s+([^ ]+)\s+в окне\s+(.+)",
+            raw_command,
+            flags=re.IGNORECASE,
+        )
+        if bare_key_match and self._SHORTCUT_TOKEN.fullmatch(bare_key_match.group(1)):
+            return self._execute(
+                "send_keyboard_shortcut",
+                {
+                    "shortcut": bare_key_match.group(1).upper(),
+                    "window_title": bare_key_match.group(2).strip(),
+                },
+                confirm,
+            )
+
+        click_match = re.fullmatch(r"нажми (.+?) в окне (.+)", command)
+        if click_match:
+            return self._execute(
+                "click_window_control",
+                {
+                    "control_name": click_match.group(1).strip(),
+                    "window_title": click_match.group(2).strip(),
                 },
                 confirm,
             )
