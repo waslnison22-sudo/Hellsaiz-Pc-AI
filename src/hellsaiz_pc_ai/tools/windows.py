@@ -69,6 +69,49 @@ def register_windows_tools(
             return ToolResult(False, f"Не удалось изменить громкость ({type(exc).__name__}): {exc}")
         return ToolResult(True, f"Системная громкость установлена на {percent}%.")
 
+    MEDIA_KEYS = {
+        "play_pause": 0xB3,
+        "next_track": 0xB5,
+        "previous_track": 0xB4,
+        "stop": 0xB2,
+    }
+
+    def send_media_key(arguments: dict[str, object]) -> ToolResult:
+        if os.name != "nt":
+            return ToolResult(False, "Медиа-клавиши поддерживаются только в Windows.")
+        key = str(arguments["key"])
+        vk = MEDIA_KEYS.get(key)
+        if vk is None:
+            return ToolResult(False, f"Неизвестная медиа-клавиша: {key}.")
+        user32 = ctypes.windll.user32
+        user32.keybd_event(vk, 0, 0, 0)
+        user32.keybd_event(vk, 0, 2, 0)
+        return ToolResult(True, f"Нажата медиа-клавиша: {key}.")
+
+    def adjust_volume(arguments: dict[str, object]) -> ToolResult:
+        if os.name != "nt":
+            return ToolResult(False, "Управление громкостью поддерживается только в Windows.")
+        delta = int(arguments["delta"])
+        if delta == 0:
+            return ToolResult(False, "Шаг изменения громкости равен нулю.")
+        try:
+            from pycaw.pycaw import AudioUtilities
+        except ImportError:
+            return ToolResult(
+                False,
+                'Не найден модуль pycaw. Установите поддержку Windows: pip install -e ".[windows]".',
+            )
+        try:
+            device = AudioUtilities.GetSpeakers()
+            current = int(device.volume_percent)
+            target = max(0, min(100, current + delta))
+            if target == current:
+                return ToolResult(True, f"Громкость уже на границе диапазона: {current}%.")
+            device.volume_percent = target
+        except Exception as exc:
+            return ToolResult(False, f"Не удалось изменить громкость ({type(exc).__name__}): {exc}")
+        return ToolResult(True, f"Громкость изменена на {target}% (было {current}%).")
+
     def close_process(arguments: dict[str, object]) -> ToolResult:
         if os.name != "nt":
             return ToolResult(False, "Завершение процессов поддерживается только в Windows.")
@@ -146,6 +189,35 @@ def register_windows_tools(
         },
         risk=RiskLevel.CONFIRM,
         handler=set_volume,
+    ))
+    registry.register(ToolSpec(
+        name="send_media_key",
+        description="Отправить системную медиа-клавишу Windows: play_pause, next_track, previous_track или stop.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string",
+                    "enum": ["play_pause", "next_track", "previous_track", "stop"],
+                }
+            },
+            "required": ["key"],
+            "additionalProperties": False,
+        },
+        risk=RiskLevel.SAFE,
+        handler=send_media_key,
+    ))
+    registry.register(ToolSpec(
+        name="adjust_volume",
+        description="Изменить системную громкость на дельту (целое число, может быть отрицательным).",
+        parameters={
+            "type": "object",
+            "properties": {"delta": {"type": "integer", "minimum": -100, "maximum": 100}},
+            "required": ["delta"],
+            "additionalProperties": False,
+        },
+        risk=RiskLevel.CONFIRM,
+        handler=adjust_volume,
     ))
     registry.register(ToolSpec(
         name="close_process",

@@ -24,6 +24,7 @@ class Sapi5Synthesizer:
     """Offline Windows SAPI5 TTS adapter (for example, an installed RHVoice voice)."""
 
     _lock = threading.RLock()
+    _engine_cache: dict[tuple[str, int, float], object] = {}
 
     def __init__(self, voice_name: str = "Aleksandr", rate: int = 175, volume: float = 0.9) -> None:
         if not 80 <= rate <= 300:
@@ -51,17 +52,33 @@ class Sapi5Synthesizer:
         if not _is_windows():
             raise SpeechSynthesisError("Windows SAPI5 is available only on Windows.")
         with self._lock:
+            engine = self._get_engine()
+            voices = []
+            for item in engine.getProperty("voices"):
+                languages = tuple(
+                    str(language) for language in getattr(item, "languages", ()) or ()
+                )
+                voices.append(SapiVoice(str(item.id), str(item.name), languages))
+            return voices
+
+    def _get_engine(self):
+        key = (self.voice_name.casefold(), self.rate, self.volume)
+        with self._lock:
+            engine = self._engine_cache.get(key)
+            if engine is not None:
+                return engine
             engine = self._create_engine()
-            try:
-                voices = []
-                for item in engine.getProperty("voices"):
-                    languages = tuple(
-                        str(language) for language in getattr(item, "languages", ()) or ()
-                    )
-                    voices.append(SapiVoice(str(item.id), str(item.name), languages))
-                return voices
-            finally:
-                engine.stop()
+            self._engine_cache[key] = engine
+            return engine
+
+    def stop(self) -> None:
+        """Прервать текущее воспроизведение (безопасно, если ничего не звучит)."""
+        with self._lock:
+            for engine in self._engine_cache.values():
+                try:
+                    engine.stop()
+                except Exception:
+                    pass
 
     def speak(self, text: str) -> None:
         text = text.strip()
@@ -73,7 +90,7 @@ class Sapi5Synthesizer:
             raise SpeechSynthesisError("Windows SAPI5 is available only on Windows.")
 
         with self._lock:
-            engine = self._create_engine()
+            engine = self._get_engine()
             try:
                 voices = list(engine.getProperty("voices"))
                 selected = None
@@ -102,5 +119,3 @@ class Sapi5Synthesizer:
                 raise
             except Exception as exc:
                 raise SpeechSynthesisError(f"SAPI5 speech failed: {exc}") from exc
-            finally:
-                engine.stop()

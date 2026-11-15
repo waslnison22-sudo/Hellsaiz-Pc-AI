@@ -40,6 +40,16 @@ class SpeechOutputRouter:
         ):
             raise ValueError("Neither the selected TTS engine nor its fallback is available.")
 
+    def stop(self) -> None:
+        """Прервать текущее воспроизведение на всех движках (barge-in)."""
+        for engine in self.engines.values():
+            stop = getattr(engine, "stop", None)
+            if callable(stop):
+                try:
+                    stop()
+                except Exception:
+                    pass
+
     def speak(self, text: str) -> SpeechOutputResult:
         if not text.strip():
             return SpeechOutputResult(self.primary, False)

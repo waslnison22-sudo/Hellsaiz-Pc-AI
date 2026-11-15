@@ -1,11 +1,21 @@
 import pytest
+from datetime import datetime
+from urllib.parse import quote_plus
+
 from hellsaiz_pc_ai.core.commands import CommandRouter
 from hellsaiz_pc_ai.core.models import RiskLevel, ToolResult
 from hellsaiz_pc_ai.core.intent_engine import build_default_intent_engine
 from hellsaiz_pc_ai.core.registry import ToolRegistry, ToolSpec
 
 
-def make_router(allowed_apps=None, app_aliases=None, wake_aliases=None):
+ACKNOWLEDGMENTS = ("Готово.", "Сделано.", "Готово!", "Выполнено.", "Хорошо, сделано.")
+
+
+def ack_variants(suffix: str) -> set[str]:
+    return {f"{ack} {suffix}" for ack in ACKNOWLEDGMENTS}
+
+
+def make_router(allowed_apps=None, app_aliases=None, wake_aliases=None, allowed_processes=None, persona=None, volume_step=10, followup_enabled=False):
     registry = ToolRegistry()
     registry.register(ToolSpec(
         "get_local_time", "time",
@@ -21,6 +31,41 @@ def make_router(allowed_apps=None, app_aliases=None, wake_aliases=None):
         "open_app", "open",
         {"type": "object", "properties": {"app": {"type": "string"}}, "required": ["app"]},
         RiskLevel.CONFIRM, lambda args: ToolResult(True, f"opened {args['app']}"),
+    ))
+    registry.register(ToolSpec(
+        "open_url", "open url",
+        {"type": "object", "properties": {"url": {"type": "string"}}, "required": ["url"]},
+        RiskLevel.SAFE, lambda args: ToolResult(True, f"opened url {args['url']}"),
+    ))
+    registry.register(ToolSpec(
+        "send_media_key", "media key",
+        {"type": "object", "properties": {"key": {"type": "string"}}, "required": ["key"]},
+        RiskLevel.SAFE, lambda args: ToolResult(True, f"media {args['key']}"),
+    ))
+    registry.register(ToolSpec(
+        "start_vpn", "start vpn",
+        {"type": "object", "properties": {}, "additionalProperties": False},
+        RiskLevel.SAFE, lambda _: ToolResult(True, "vpn started"),
+    ))
+    registry.register(ToolSpec(
+        "stop_vpn", "stop vpn",
+        {"type": "object", "properties": {}, "additionalProperties": False},
+        RiskLevel.CONFIRM, lambda _: ToolResult(True, "vpn stopped"),
+    ))
+    registry.register(ToolSpec(
+        "vpn_status", "vpn status",
+        {"type": "object", "properties": {}, "additionalProperties": False},
+        RiskLevel.SAFE, lambda _: ToolResult(True, "vpn status ok"),
+    ))
+    registry.register(ToolSpec(
+        "type_text_global", "type global",
+        {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]},
+        RiskLevel.CONFIRM, lambda args: ToolResult(True, f"typed {args['text']}"),
+    ))
+    registry.register(ToolSpec(
+        "adjust_volume", "adjust volume",
+        {"type": "object", "properties": {"delta": {"type": "integer"}}, "required": ["delta"]},
+        RiskLevel.CONFIRM, lambda args: ToolResult(True, f"adjusted {args['delta']}"),
     ))
     registry.register(ToolSpec(
         "set_volume", "volume",
@@ -108,9 +153,12 @@ def make_router(allowed_apps=None, app_aliases=None, wake_aliases=None):
         allowed_apps
         if allowed_apps is not None
         else {"notepad": ("notepad.exe",), "calculator": ("calc.exe",)},
-        {"discord": "Discord.exe"},
+        allowed_processes if allowed_processes is not None else {"discord": "Discord.exe"},
         app_aliases,
         wake_aliases,
+        persona,
+        volume_step,
+        followup_enabled,
     )
 
 
@@ -127,13 +175,13 @@ def test_help_is_local_and_does_not_need_model():
 
 
 def test_time_command_routes_to_registered_tool():
-    assert make_router().route("Хеллсайз, который час?") == "Готово. 13.11.2026 12:00"
+    assert make_router().route("Хеллсайз, который час?") in ack_variants("13.11.2026 12:00")
 
 
 def test_open_app_runs_without_confirmation():
     router = make_router()
-    assert router.route("открой блокнот") == "Готово. opened notepad"
-    assert router.route("открой блокнот", deny) == "Готово. opened notepad"
+    assert router.route("открой блокнот") in ack_variants("opened notepad")
+    assert router.route("открой блокнот", deny) in ack_variants("opened notepad")
 
 
 def test_common_windows_system_tools_resolve_through_the_allowlist():
@@ -145,9 +193,9 @@ def test_common_windows_system_tools_resolve_through_the_allowlist():
         }
     )
 
-    assert router.route("открой диспетчер задач") == "Готово. opened task_manager"
-    assert router.route("запусти параметры") == "Готово. opened settings"
-    assert router.route("открой панель управления") == "Готово. opened control_panel"
+    assert router.route("открой диспетчер задач") in ack_variants("opened task_manager")
+    assert router.route("запусти параметры") in ack_variants("opened settings")
+    assert router.route("открой панель управления") in ack_variants("opened control_panel")
 
 
 def test_unlisted_app_does_not_execute():
@@ -160,8 +208,81 @@ def test_unknown_text_is_not_guessed():
 
 def test_volume_command_is_deterministic_and_range_checked():
     router = make_router()
-    assert router.route("установи громкость на 30 процентов", approve) == "Готово. volume 30"
+    assert router.route("установи громкость на 30 процентов", approve) in ack_variants("volume 30")
     assert "от 0 до 100" in router.route("установи громкость на 150").casefold()
+
+
+def test_volume_extremes_route_without_numbers():
+    router = make_router()
+    assert router.route("громкость на максимум", approve) in ack_variants("volume 100")
+    assert router.route("громкость на полную", approve) in ack_variants("volume 100")
+    assert router.route("громкость на минимум", approve) in ack_variants("volume 0")
+    assert router.route("выключи звук", approve) in ack_variants("volume 0")
+
+
+def test_media_keys_map_to_send_media_key():
+    router = make_router()
+    assert router.route("пауза", approve) in ack_variants("media play_pause")
+    assert router.route("продолжи", approve) in ack_variants("media play_pause")
+    assert router.route("следующий трек", approve) in ack_variants("media next_track")
+    assert router.route("предыдущая песня", approve) in ack_variants("media previous_track")
+
+
+def test_relative_volume_uses_adjust_volume():
+    router = make_router()
+    assert router.route("громче", approve) in ack_variants("adjusted 10")
+    assert router.route("тише", approve) in ack_variants("adjusted -10")
+    assert router.route("громче на 20", approve) in ack_variants("adjusted 20")
+    assert router.route("убавь громкость на 5", approve) in ack_variants("adjusted -5")
+    step_router = make_router(volume_step=25)
+    assert step_router.route("громче", approve) in ack_variants("adjusted 25")
+
+
+def test_vpn_commands_route_to_vpn_tools():
+    router = make_router()
+    assert router.route("включи впн", approve) in ack_variants("vpn started")
+    assert router.route("подключи vpn", deny) in ack_variants("vpn started")
+    assert router.route("выключи впн", deny) in ack_variants("vpn stopped")
+    assert router.route("проверь впн", approve) in ack_variants("vpn status ok")
+
+
+def test_type_text_global_routes_explicit_command():
+    router = make_router()
+    assert router.route("напечатай: Привет мир", deny) in ack_variants("typed Привет мир")
+    assert router.route("Хеллсайз, напечатай текст Заметка про CI", deny) in ack_variants(
+        "typed Заметка про CI"
+    )
+
+
+def test_other_assistant_address_is_not_executed():
+    router = make_router()
+    phrases = (
+        "алиса, какая погода",
+        "Алиса открой блокнот",
+        "окей гугл, погода",
+        "hey siri, который час",
+        "АЛЕКСА, громче",
+        "Хеллсайз, алиса, который час",
+    )
+    for phrase in phrases:
+        response = router.route(phrase, approve)
+        assert response and "другому ассистенту" in response.casefold(), phrase
+
+
+def test_assistant_names_inside_commands_still_execute():
+    router = make_router()
+    assert router.route("включи музыку алиса", approve) in {
+        f"{ack} opened url https://music.yandex.ru/search?text={quote_plus('алиса')}"
+        for ack in ACKNOWLEDGMENTS
+    }
+
+
+def test_followup_question_appended_when_enabled():
+    router = make_router(followup_enabled=True)
+    response = router.route("который час")
+    assert response.endswith("Что-нибудь ещё?")
+    quiet = make_router()
+    assert not quiet.route("который час").endswith("Что-нибудь ещё?")
 
 
 def test_close_process_runs_immediately_but_keeps_allowlist():
@@ -170,11 +291,19 @@ def test_close_process_runs_immediately_but_keeps_allowlist():
     assert "не добавлен" in router.route("закрой powershell").casefold()
 
 
+def test_more_process_synonyms_resolve_via_allowlist():
+    router = make_router(allowed_processes={"telegram": "Telegram.exe", "discord": "Discord.exe"})
+    assert "closed telegram" in router.route("закрой телеграм").casefold()
+    assert "closed telegram" in router.route("закрой тг").casefold()
+    assert "closed telegram" in router.route("закрой телега").casefold()
+    assert "closed discord" in router.route("закрой дискорд").casefold()
+
+
 def test_read_clipboard_requires_an_explicit_command():
     router = make_router()
 
-    assert router.route("прочитай буфер обмена") == "Готово. clipboard text"
-    assert router.route("что скопировано") == "Готово. clipboard text"
+    assert router.route("прочитай буфер обмена") in ack_variants("clipboard text")
+    assert router.route("что скопировано") in ack_variants("clipboard text")
     assert router.route("поговори со мной") is None
 
 
@@ -182,9 +311,9 @@ def test_write_clipboard_runs_on_explicit_command_without_confirmation():
     router = make_router()
 
     result = router.route("скопируй: Hello, World!")
-    assert result == "Готово. clipboard updated"
-    assert router.route("Хеллсайз, скопируй Привет, Мир!", deny) == (
-        "Готово. clipboard updated"
+    assert result in ack_variants("clipboard updated")
+    assert router.route("Хеллсайз, скопируй Привет, Мир!", deny) in ack_variants(
+        "clipboard updated"
     )
 
 
@@ -192,26 +321,48 @@ def test_write_clipboard_accepts_multiline_payload():
     router = make_router()
     result = router.route("скопируй Первая строка\nВторая строка", approve)
 
-    assert result == "Готово. clipboard updated"
+    assert result in ack_variants("clipboard updated")
 
 
 def test_reminder_command_parses_seconds_minutes_and_hours():
     router = make_router()
-    assert router.route("напомни через 30 секунд проверить") == (
-        "Готово. reminder 30: проверить"
+    assert router.route("напомни через 30 секунд проверить") in ack_variants(
+        "reminder 30: проверить"
     )
-    assert router.route("Хеллсайз, напомни мне через 5 минут Проверить чайник", approve) == (
-        "Готово. reminder 300: Проверить чайник"
+    assert router.route("Хеллсайз, напомни мне через 5 минут Проверить чайник", approve) in ack_variants(
+        "reminder 300: Проверить чайник"
     )
-    assert router.route("напомни через 2 часа сделать перерыв", approve) == (
-        "Готово. reminder 7200: сделать перерыв"
+    assert router.route("напомни через 2 часа сделать перерыв", approve) in ack_variants(
+        "reminder 7200: сделать перерыв"
+    )
+
+
+def test_reminder_at_specific_time_computes_delay(monkeypatch):
+    import hellsaiz_pc_ai.core.commands as commands_mod
+    monkeypatch.setattr(commands_mod, "_current_time", lambda: datetime(2026, 11, 15, 12, 0, 0))
+    router = make_router()
+    assert router.route("напомни в 22:00 выключить свет", approve) in ack_variants(
+        "reminder 36000: выключить свет"
+    )
+    assert router.route("напомни завтра в 09:00 зарядка", approve) in ack_variants(
+        "reminder 75600: зарядка"
+    )
+
+
+def test_reminder_half_hour_phrases():
+    router = make_router()
+    assert router.route("напомни через полчаса проверить чайник", approve) in ack_variants(
+        "reminder 1800: проверить чайник"
+    )
+    assert router.route("напомни через полтора часа перерыв", approve) in ack_variants(
+        "reminder 5400: перерыв"
     )
 
 
 def test_reminder_command_runs_immediately_and_validates_delay():
     router = make_router()
-    assert router.route("напомни через 5 минут позвонить", deny) == (
-        "Готово. reminder 300: позвонить"
+    assert router.route("напомни через 5 минут позвонить", deny) in ack_variants(
+        "reminder 300: позвонить"
     )
     assert "от 10 секунд" in router.route("напомни через 3 секунды позвонить").casefold()
     assert "формат" in router.route("напомни завтра позвонить").casefold()
@@ -219,8 +370,8 @@ def test_reminder_command_runs_immediately_and_validates_delay():
 
 def test_list_and_dismiss_reminders_are_explicit():
     router = make_router()
-    assert router.route("мои напоминания") == "Готово. no reminders"
-    assert router.route("удали напоминание 12") == "Готово. dismissed 12"
+    assert router.route("мои напоминания") in ack_variants("no reminders")
+    assert router.route("удали напоминание 12") in ack_variants("dismissed 12")
 
 
 def test_multiple_wake_names_are_normalized_before_routing():
@@ -233,7 +384,7 @@ def test_multiple_wake_names_are_normalized_before_routing():
         "Hell, который час?",
         "Hellsaiz, который час?",
     ):
-        assert router.route(phrase) == "Готово. 13.11.2026 12:00"
+        assert router.route(phrase) in ack_variants("13.11.2026 12:00")
 
 
 def test_many_launch_verbs_resolve_to_the_same_allowed_app():
@@ -247,7 +398,7 @@ def test_many_launch_verbs_resolve_to_the_same_allowed_app():
         "стартуй блокнот",
         "открой мне блокнот",
     ):
-        assert router.route(phrase, approve) == "Готово. opened notepad"
+        assert router.route(phrase, approve) in ack_variants("opened notepad")
 
 
 def test_user_app_aliases_resolve_to_one_canonical_game_or_client():
@@ -259,10 +410,10 @@ def test_user_app_aliases_resolve_to_one_canonical_game_or_client():
         },
     )
 
-    assert router.route("Хелл, открой стим", approve) == "Готово. opened steam"
-    assert router.route("запусти игровой клиент", approve) == "Готово. opened steam"
-    assert router.route("запусти кс 2", approve) == "Готово. opened cs2"
-    assert router.route("включи контр страйк 2", approve) == "Готово. opened cs2"
+    assert router.route("Хелл, открой стим", approve) in ack_variants("opened steam")
+    assert router.route("запусти игровой клиент", approve) in ack_variants("opened steam")
+    assert router.route("запусти кс 2", approve) in ack_variants("opened cs2")
+    assert router.route("включи контр страйк 2", approve) in ack_variants("opened cs2")
 
 
 def test_user_app_aliases_reject_ambiguous_mapping():
@@ -300,19 +451,25 @@ def test_alice_style_search_phrasings_resolve_to_one_skill():
         "что известно про локальные нейросети",
     )
     for phrase in phrases:
-        assert router.route(phrase) == "Готово. search: локальные нейросети"
+        assert router.route(phrase) in ack_variants("search: локальные нейросети")
 
 
-def test_weather_skill_extracts_city_and_asks_when_missing():
+def test_weather_skill_extracts_city_or_uses_default():
     router = make_router()
-    assert router.route("какая погода в Москве") == "Готово. weather: москве"
-    assert "для какого города" in router.route("Хелп, погода").casefold()
+    assert router.route("какая погода в Москве") in ack_variants("weather: москве")
+    assert router.route("Хелп, погода") in ack_variants("weather: Ставрополь")
 
 
 def test_currency_skill_extracts_base_and_quote_currency():
     router = make_router()
-    assert router.route("курс доллара к рублю") == "Готово. rate: USD/RUB"
-    assert router.route("сколько стоит евро") == "Готово. rate: EUR/RUB"
+    assert router.route("курс доллара к рублю") in ack_variants("rate: USD/RUB")
+    assert router.route("сколько стоит евро") in ack_variants("rate: EUR/RUB")
+
+
+def test_currency_plural_forms():
+    router = make_router()
+    assert router.route("курс долларов к рублю") in ack_variants("rate: USD/RUB")
+    assert router.route("сколько стоит евро") in ack_variants("rate: EUR/RUB")
 
 
 def test_intent_engine_extracts_named_slots():
@@ -331,10 +488,99 @@ def test_intent_engine_extracts_named_slots():
     assert rate.slots["quote"] == "доллар"
 
 
+def test_intent_engine_extracts_calculator_and_percent():
+    engine = build_default_intent_engine()
+
+    calc = engine.resolve("сколько будет 12 умножить на 3")
+    assert calc.name == "calculator"
+    assert calc.slots["expression"] == "12 умножить на 3"
+
+    percent = engine.resolve("15 процентов от 200")
+    assert percent.name == "calculator"
+    assert percent.slots["expression"] == "15 процентов от 200"
+
+    assert engine.resolve("сколько времени") is None
+
+
+def test_calculator_answers_basic_math():
+    router = make_router()
+    assert router.route("сколько будет 12 умножить на 3") == "Результат: 36"
+    assert router.route("сколько будет 10 разделить на 4") == "Результат: 2.5"
+    assert router.route("посчитай 2 плюс 2 умножить на 3") == "Результат: 8"
+    assert router.route("сколько будет 2+2*2") == "Результат: 6"
+    assert router.route("сколько будет 1 на 3") == "Результат: 3"
+
+
+def test_calculator_percentages():
+    router = make_router()
+    assert router.route("сколько будет 15 процентов от 200") == "Результат: 30"
+    assert router.route("15 процентов от 200") == "Результат: 30"
+
+
+def test_calculator_rejects_garbage_and_zero_division():
+    router = make_router()
+    assert router.route("сколько будет раз два три") is None
+    assert router.route("сколько будет 5 разделить на 0") == "На ноль делить нельзя."
+    assert router.route("сколько времени") in ack_variants("13.11.2026 12:00")
+
+
+def test_walk_phrase_reports_weather_for_default_city():
+    router = make_router()
+    assert router.route("я иду гулять", approve) in ack_variants("weather: Ставрополь")
+    assert router.route("собираюсь погулять", approve) in ack_variants("weather: Ставрополь")
+
+
+def test_music_command_opens_yandex_music_search():
+    router = make_router()
+    expected = f"opened url https://music.yandex.ru/search?text={quote_plus('егор крид')}"
+    assert router.route("включи музыку егор крид", approve) in ack_variants(expected)
+    expected_bare = "opened url https://music.yandex.ru"
+    assert router.route("включи яндекс музыку", approve) in ack_variants(expected_bare)
+
+
+def test_persona_changes_acknowledgment_style():
+    from hellsaiz_pc_ai.core.commands import PERSONA_ACKS
+    router = make_router(persona="джарвис")
+    response = router.route("который час")
+    assert response.startswith(PERSONA_ACKS["джарвис"])
+    neutral = make_router().route("который час")
+    assert neutral.startswith(ACKNOWLEDGMENTS)
+
+
 def test_command_normalization_handles_unicode_width_yo_and_punctuation():
     router = make_router()
 
-    assert router.route("  ПОГОДА В МОСКВЕ?  ") == "Готово. weather: москве"
-    assert router.route("найди в интернете ONNX Runtime.") == "Готово. search: onnx runtime"
-    assert router.route("ｏｐｅｎ БЛОКНОТ") == "Готово. opened notepad"
+    assert router.route("  ПОГОДА В МОСКВЕ?  ") in ack_variants("weather: москве")
+    assert router.route("найди в интернете ONNX Runtime.") in ack_variants("search: onnx runtime")
+    assert router.route("ｏｐｅｎ БЛОКНОТ") in ack_variants("opened notepad")
 
+
+def test_stt_typo_fixups_apply_to_known_words():
+    router = make_router(allowed_processes={"telegram": "Telegram.exe"})
+    assert router.route("установи гроукость на 30 процентов", approve) in ack_variants("volume 30")
+    assert router.route("закрой тэлеграм", approve) in ack_variants("closed telegram")
+    assert router.route("сколько будет 2 плюс 2") == "Результат: 4"
+
+
+def test_fuzzy_app_name_correction():
+    router = make_router()
+    assert router.route("открой блакнот", approve) in ack_variants("opened notepad")
+    assert router.route("запусти калькулятор", approve) in ack_variants("opened calculator")
+    assert router.route("открой блакнотэ", approve) in ack_variants("opened notepad")
+
+
+def test_fuzzy_process_name_correction():
+    router = make_router(allowed_processes={"telegram": "Telegram.exe"})
+    assert router.route("закрой телегром", approve) in ack_variants("closed telegram")
+
+
+def test_fuzzy_wake_name_strip():
+    router = make_router()
+    assert router.route("Хелсайзе, который час") in ack_variants("13.11.2026 12:00")
+    assert router.route("Хелсайзе который час") in ack_variants("13.11.2026 12:00")
+
+
+def test_fuzzy_does_not_guess_unknown_apps():
+    router = make_router()
+    response = router.route("открой браузер новый", approve)
+    assert "не добавлено" in response.casefold()

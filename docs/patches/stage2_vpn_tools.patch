@@ -1,0 +1,21 @@
+# Патч этапа 2: голосовое управление v2RayTun.
+# Применяется поверх этапа 1 (stage1_desktop_ui_workers.patch) конвейером
+# apply_pending_patches.py перед тестами и сборкой.
+--- a/src/hellsaiz_pc_ai/app/desktop.py
++++ b/src/hellsaiz_pc_ai/app/desktop.py
+@@ -67,6 +67,7 @@
+     VoiceLibraryError, download_voice, list_installed_voices,
+ )
+ from hellsaiz_pc_ai.speech.piper import PiperSynthesizer
++from hellsaiz_pc_ai.tools.vpn import register_vpn_tools
+ from hellsaiz_pc_ai.tools.windows import register_windows_tools
+ from hellsaiz_pc_ai.tools.window_control import register_window_tools
+ from hellsaiz_pc_ai.tools.file_system import register_file_system_tools
+@@ -125,6 +126,7 @@
+     register_window_tools(registry)
+     register_ui_automation_tools(registry)
+     register_clipboard_tools(registry)
++    register_vpn_tools(registry, settings.workflows_path.parent / "network.json")
+ 
+     file_access_path = settings.workflows_path.parent / "file_access.json"
+     try:

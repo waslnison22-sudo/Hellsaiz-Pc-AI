@@ -1,13 +1,108 @@
 from __future__ import annotations
 
+import random
 import re
 import unicodedata
+from datetime import datetime, timedelta
+from difflib import get_close_matches
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote_plus
 
 from hellsaiz_pc_ai.core.models import ToolResult
 from hellsaiz_pc_ai.core.intent_engine import build_default_intent_engine
 from hellsaiz_pc_ai.core.registry import ConfirmCallback, ToolRegistry
+
+
+def _current_time() -> datetime:
+    """Точка времени для напоминаний; заменяется в тестах для детерминизма."""
+    return datetime.now()
+
+
+def _normalize_expression(expr: str) -> str:
+    text = unicodedata.normalize("NFKC", expr).casefold().replace("ё", "е")
+    text = text.replace(",", ".")
+    text = re.sub(r"\bплюс\b", "+", text)
+    text = re.sub(r"\bминус\b", "-", text)
+    text = re.sub(r"\bумножить(?:\s+на)?|\bумнож(?:ить|ь)?(?:\s+на)?|×|[*x]", "*", text)
+    text = re.sub(r"\bразделить(?:\s+на)?|\bделить(?:\s+на)?|÷|/", "/", text)
+    text = re.sub(r"\bпроцентов?\s+от\b", " %OF% ", text)
+    text = re.sub(r"\bна\b", "*", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _evaluate_expression(expr: str) -> str | None:
+    """Безопасный детерминированный калькулятор: без eval(), только + - * / и проценты."""
+    text = _normalize_expression(expr)
+    if not text:
+        return None
+    tokens = re.findall(r"\d+(?:\.\d+)?|%OF%|[+\-*/]", text)
+    compact = text.replace(" ", "")
+    if "".join(tokens) != compact:
+        return None
+    values: list[float] = []
+    operators: list[str] = []
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "%OF%":
+            return None
+        try:
+            values.append(float(token))
+        except ValueError:
+            return None
+        if index + 1 < len(tokens):
+            operator = tokens[index + 1]
+            if operator == "%OF%":
+                values[-1] = values[-1] / 100.0
+                operator = "*"
+            elif operator not in {"+", "-", "*", "/"}:
+                return None
+            operators.append(operator)
+        index += 2
+    if not values:
+        return None
+    if len(operators) != len(values) - 1:
+        return None
+
+    def apply(left: float, op: str, right: float) -> float:
+        if op == "+":
+            return left + right
+        if op == "-":
+            return left - right
+        if op == "*":
+            return left * right
+        if op == "/":
+            if right == 0:
+                raise ZeroDivisionError
+            return left / right
+        raise ValueError
+
+    try:
+        current = values[0]
+        pending: list[float] = []
+        pending_ops: list[str] = []
+        for op, value in zip(operators, values[1:]):
+            if op in {"*", "/"}:
+                current = apply(current, op, value)
+            else:
+                pending.append(current)
+                pending_ops.append(op)
+                current = value
+        pending.append(current)
+        total = pending[0]
+        for op, value in zip(pending_ops, pending[1:]):
+            total = apply(total, op, value)
+        result = total
+    except ZeroDivisionError:
+        return "На ноль делить нельзя."
+    except (TypeError, ValueError):
+        return None
+    if abs(result - round(result)) < 1e-9:
+        formatted = str(int(round(result)))
+    else:
+        formatted = f"{result:.4f}".rstrip("0").rstrip(".")
+    return f"Результат: {formatted}"
 
 
 HELP_TEXT = (
@@ -15,9 +110,14 @@ HELP_TEXT = (
     "• «открой блокнот», «запусти калькулятор», «открой проводник»\n"
     "• «закрой дискорд» (только разрешённые процессы)\n"
     "• «открой диспетчер задач», «открой настройки», «панель управления»\n"
-    "• «установи громкость на 30 процентов»\n"
+    "• «установи громкость на 30 процентов», «громкость на максимум», «выключи звук»\n"
+    "• «громче», «тише», «громче на 20» — шаг изменения громкости\n"
+    "• «включи впн», «выключи впн», «проверь впн» — VPN-клиент v2RayTun\n"
+    "• «пауза», «продолжи», «следующий трек», «предыдущий трек» — медиа-клавиши\n"
     "• «прочитай буфер обмена», «скопируй текст»\n"
-    "• «напомни через 5 минут…», «мои напоминания»\n"
+    "• «напомни через 5 минут…», «напомни в 22:00 …», «мои напоминания»\n"
+    "• «сколько будет 12 умножить на 3», «15 процентов от 200»\n"
+    "• «включи музыку дождь», «включи песню Егор Крид» — Яндекс Музыка\n"
     "• «открой сайт example.com»\n"
     "• «найди в интернете…», «поищи информацию о…»\n"
     "• «погода в Москве», «курс доллара к рублю»\n"
@@ -27,6 +127,7 @@ HELP_TEXT = (
     "• «прочитай текст на экране», «что написано на экране» — локальный OCR по запросу\n"
     "• «введи текст ... в поле Поиск окна Проводник»\n"
     "• «нажми сочетание Ctrl+L в окне Браузер», «нажми F5 в окне Проводник»\n"
+    "• «напечатай текст ...» — печать в активное окно (с подтверждением)\n"
     "• «покажи файлы в папке Документы», «найди файл план в папке Документы»\n"
     "• «прочитай файл ...», «открой папку ...»\n"
     "• Создание папок и новых текстовых файлов — только при включённом разрешении на запись.\n"
@@ -36,6 +137,59 @@ HELP_TEXT = (
     "Команды выполняются локально по заранее заданным правилам. "
     "Произвольный код и команды оболочки не запускаются."
 )
+
+
+# Вариативные ответы без ИИ: выбор случаен, но пул фиксирован и не требует модели.
+ACKNOWLEDGMENTS = (
+    "Готово.",
+    "Сделано.",
+    "Готово!",
+    "Выполнено.",
+    "Хорошо, сделано.",
+)
+FAILURES = (
+    "Не выполнено.",
+    "Не получилось.",
+    "Не вышло.",
+)
+
+# Манера подтверждений зависит от выбранного голоса/профиля ассистента.
+# Новые персоны добавляются сюда же; неизвестная персона получает нейтральный пул.
+PERSONA_ACKS: dict[str, tuple[str, ...]] = {
+    "джарвис": ("Принято.", "Выполняю.", "Сделано, сэр.", "Есть.", "Готово, сэр."),
+    "хеллсайз": ("Готово.", "Сделано.", "Готово!", "Выполнено.", "Хорошо, сделано."),
+}
+# Город по умолчанию для погоды, пока пользователь не задаёт его в настройках.
+DEFAULT_CITY = "Ставрополь"
+
+# Частые ослышанные слова после STT: вариант -> каноническое слово.
+# Применяется к нормализованной команде до сопоставления с правилами.
+STT_FIXUPS = {
+    "гроукость": "громкость",
+    "громкасть": "громкость",
+    "громкост": "громкость",
+    "громкостьь": "громкость",
+    "глокость": "громкость",
+    "блакнот": "блокнот",
+    "блокно": "блокнот",
+    "колькулятор": "калькулятор",
+    "кулькулятор": "калькулятор",
+    "диспечер": "диспетчер",
+    "диспетчир": "диспетчер",
+    "телегром": "телеграм",
+    "тэлеграм": "телеграм",
+    "дискор": "дискорд",
+    "дискордь": "дискорд",
+    "спотифы": "спотифай",
+    "впина": "впн",
+    "впна": "впн",
+    "напомниь": "напомни",
+    "напоминь": "напомни",
+    "почеми": "который",
+    "погоде": "погода",
+    "погодаь": "погода",
+    "тэмпература": "погода",
+}
 
 
 class CommandRouter:
@@ -63,18 +217,43 @@ class CommandRouter:
         "windows settings": "settings",
         "панель управления": "control_panel",
         "control panel": "control_panel",
+        "мой компьютер": "explorer",
+        "этот компьютер": "explorer",
+        "проводник виндовс": "explorer",
+        "параметры виндовс": "settings",
+        "настройки виндовс": "settings",
+        "контр-страйк 2": "cs2",
+        "контрстрайк 2": "cs2",
+        "диспетчер задач windows": "task_manager",
     }
     PROCESS_SYNONYMS = {
         "дискорд": "discord",
         "discord": "discord",
         "spotify": "spotify",
         "спотифай": "spotify",
+        "телеграм": "telegram",
+        "тг": "telegram",
+        "телега": "telegram",
+        "telegram": "telegram",
     }
     OPEN_PREFIXES = (
         "открой мне ", "открыть мне ", "запусти мне ", "запустить мне ",
+        "открой-ка ", "открыть-ка ", "запусти-ка ", "запустить-ка ",
         "открой ", "открыть ", "запусти ", "запустить ", "запускай ",
-        "включи ", "включить ", "вруби ", "стартуй ", "старт ", "подними ",
+        "включи ", "включить ", "вруби ", "вруби-ка ", "стартуй ", "старт ", "подними ",
         "загрузи ", "open ", "launch ", "start ", "run ",
+    )
+
+    # Одиночные клавиши и комбинации: латиница/цифры/F-клавиши; русские названия
+    # кнопок («Сохранить») остаются текстом для клика.
+    _SHORTCUT_TOKEN = re.compile(
+        r"(?:F\d{1,2}|[A-Za-z]+|\d{1,2})(?:\s*[+\-]\s*(?:F\d{1,2}|[A-Za-z]+|\d{1,2}))*"
+    )
+
+    # Обращения к чужим ассистентам: команда не должна исполняться молча.
+    OTHER_ASSISTANT_PREFIX = re.compile(
+        r"^(?:окей\s+гугл|okay\s+google|hey\s+siri|эй\s+сири|"
+        r"алиса|алекса|сири|сирена|кортана|гугл ассистент|гугл)\b\s*[,\-:]?\s+"
     )
 
     def __init__(
@@ -84,8 +263,14 @@ class CommandRouter:
         allowed_processes: dict[str, str] | None = None,
         app_aliases: dict[str, tuple[str, ...]] | None = None,
         wake_aliases: tuple[str, ...] | list[str] | None = None,
+        persona: str | None = None,
+        volume_step: int = 10,
+        followup_enabled: bool = False,
     ) -> None:
         self.registry = registry
+        self.persona = (persona or "хеллсайз").casefold().strip()
+        self.volume_step = max(1, min(100, int(volume_step)))
+        self.followup_enabled = bool(followup_enabled)
         self.allowed_apps = {name.casefold(): command for name, command in allowed_apps.items()}
         aliases = wake_aliases or ("Хеллсайз", "Хелсайз", "Хелл", "Hellsaiz", "Hell", "Хелп", "Help")
         self.wake_aliases = tuple(
@@ -127,22 +312,69 @@ class CommandRouter:
             )
             if match:
                 return value[match.end():].lstrip(" \t,.:;!?-")
+        # Ослышанное имя ассистента: сравнение первого слова по похожести.
+        tokens = value.split(" ", 1)
+        if len(tokens) == 2 and len(tokens[0]) >= 4:
+            candidate = self._normalize_phrase(tokens[0])
+            best = get_close_matches(candidate, self.wake_aliases, n=1, cutoff=0.75)
+            if best:
+                return tokens[1].lstrip(" \t,.:;!?-")
         return value
+
+    def _app_vocabulary(self) -> dict[str, str]:
+        vocabulary: dict[str, str] = {}
+        for canonical in self.allowed_apps:
+            vocabulary.setdefault(self._normalize_phrase(canonical), canonical)
+        for synonym, canonical in self.APP_SYNONYMS.items():
+            if canonical in self.allowed_apps:
+                vocabulary.setdefault(self._normalize_phrase(synonym), canonical)
+        for phrase, canonical in self.app_alias_lookup.items():
+            vocabulary.setdefault(phrase, canonical)
+        return vocabulary
+
+    def _fuzzy_app(self, target: str) -> str | None:
+        if len(target) < 4:
+            return None
+        vocabulary = self._app_vocabulary()
+        best = get_close_matches(target, vocabulary, n=1, cutoff=0.72)
+        return vocabulary[best[0]] if best else None
+
+    def _fuzzy_process(self, target: str) -> str | None:
+        if len(target) < 4:
+            return None
+        best = get_close_matches(target, self.allowed_processes, n=1, cutoff=0.72)
+        return best[0] if best else None
 
     def normalize(self, text: str) -> str:
         value = self.strip_wake_name(text)
         value = unicodedata.normalize("NFKC", value).casefold().replace("ё", "е")
-        return re.sub(r"[\s.,!?;:]+", " ", value).strip()
+        value = re.sub(r"[\s.,!?;:]+", " ", value).strip()
+        if value:
+            words = value.split(" ")
+            corrected = [STT_FIXUPS.get(word, word) for word in words]
+            value = " ".join(corrected)
+        return value
 
     def route(self, text: str, confirm: ConfirmCallback | None = None) -> str | None:
         command = self.normalize(text)
         if not command:
             return "Скажите или напишите команду. Для списка возможностей введите «помощь»."
 
+        other_assistant = self.OTHER_ASSISTANT_PREFIX.match(command)
+        if other_assistant:
+            return (
+                "Похоже, вы обращаетесь к другому ассистенту. Я — Hellsaiz: "
+                "повторите команду без чужого имени, я её выполню."
+            )
 
         # Resolve the utterance to an intent and extract typed slots before execution.
         intent = self.intent_engine.resolve(command)
         if intent is not None:
+            if intent.name == "calculator":
+                answer = _evaluate_expression(intent.slots.get("expression", ""))
+                if answer is not None:
+                    return answer
+                # Выражение не разобралось — фразу обрабатывают обычные правила ниже.
             if intent.name == "web_search":
                 query = intent.slots.get("query", "").strip()
                 return self._execute("web_search", {"query": query}, confirm) if query else (
@@ -150,15 +382,17 @@ class CommandRouter:
                 )
             if intent.name == "weather":
                 city = re.sub(r"\s+(?:сейчас|сегодня)$", "", intent.slots.get("city", "")).strip()
-                if not city:
-                    return "Для какого города узнать погоду?"
-                return self._execute("get_weather", {"city": city}, confirm)
+                return self._execute(
+                    "get_weather", {"city": city or DEFAULT_CITY}, confirm
+                )
             if intent.name == "exchange_rate":
                 currency_names = {
-                    "доллар": "USD", "доллара": "USD", "доллары": "USD", "usd": "USD",
-                    "евро": "EUR", "eur": "EUR", "юань": "CNY", "юаня": "CNY", "cny": "CNY",
-                    "рубль": "RUB", "рубля": "RUB", "рублю": "RUB", "rub": "RUB",
-                    "фунт": "GBP", "фунта": "GBP", "gbp": "GBP",
+                    "доллар": "USD", "доллара": "USD", "доллары": "USD", "долларов": "USD",
+                    "usd": "USD",
+                    "евро": "EUR", "eur": "EUR", "юань": "CNY", "юаня": "CNY", "юаней": "CNY",
+                    "cny": "CNY",
+                    "рубль": "RUB", "рубля": "RUB", "рублю": "RUB", "рублей": "RUB", "rub": "RUB",
+                    "фунт": "GBP", "фунта": "GBP", "фунтов": "GBP", "gbp": "GBP",
                 }
                 base = currency_names[intent.slots["base"]]
                 quote_currency = currency_names.get(intent.slots.get("quote", "рубль"), "RUB")
@@ -167,6 +401,14 @@ class CommandRouter:
                     {"base": base, "quote_currency": quote_currency},
                     confirm,
                 )
+
+        if re.fullmatch(
+            r"(?:я\s+)?(?:сейчас\s+)?(?:собираюсь|иду|пойду|выхожу|хочу)\s+(?:сейчас\s+)?"
+            r"(?:на\s+|в\s+)?(?:погулять|гулять|прогуляться)",
+            command,
+        ):
+            # Собирается на улицу — сначала погода, город по умолчанию.
+            return self._execute("get_weather", {"city": DEFAULT_CITY}, confirm)
 
         if command in {"помощь", "команды", "список команд", "что умеешь", "help", "/help"}:
             return HELP_TEXT
@@ -180,17 +422,46 @@ class CommandRouter:
                 "dismiss_reminder", {"reminder_id": int(dismiss_match.group(1))}, confirm
             )
 
+        time_reminder_match = re.match(
+            r"^напомни(?: мне)?\s+(завтра\s+)?в\s+(\d{1,2})[:.](\d{2})\s+(.+?)\s*$",
+            self.strip_wake_name(text),
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        if time_reminder_match:
+            hour = int(time_reminder_match.group(2))
+            minute = int(time_reminder_match.group(3))
+            if not (0 <= hour <= 23 and 0 <= minute <= 59):
+                return "Время напоминания должно быть в формате ЧЧ:ММ, например 22:00."
+            now = _current_time()
+            target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            if time_reminder_match.group(1) or target <= now:
+                target += timedelta(days=1)
+            seconds = int((target - now).total_seconds())
+            if seconds < 10:
+                seconds += 86_400
+            message = time_reminder_match.group(4).strip()
+            return self._execute(
+                "create_reminder", {"seconds": seconds, "message": message}, confirm
+            )
+
         reminder_match = re.match(
-            r"^напомни(?: мне)?\s+через\s+(\d{1,5})\s+"
-            r"(секунд(?:у|ы|а)?|сек|минут(?:у|ы|а)?|мин|час(?:а|ов)?|ч)\s+(.+?)\s*$",
+            r"^напомни(?: мне)?\s+через\s+(?:(\d{1,5})\s+)?"
+            r"(секунд(?:у|ы|а)?|сек|минут(?:у|ы|а)?|мин|полчаса|полчасика|полтора часа|час(?:а|ов)?|ч)\s+(.+?)\s*$",
             self.strip_wake_name(text),
             flags=re.IGNORECASE | re.DOTALL,
         )
         if reminder_match:
-            amount = int(reminder_match.group(1))
             unit = reminder_match.group(2).casefold()
-            factor = 1 if unit.startswith("сек") else 60 if unit.startswith("мин") else 3600
-            seconds = amount * factor
+            if unit in {"полчаса", "полчасика"}:
+                seconds = 1800
+            elif unit.startswith("полтора"):
+                seconds = 5400
+            else:
+                amount_text = reminder_match.group(1)
+                if not amount_text:
+                    return None
+                factor = 1 if unit.startswith("сек") else 60 if unit.startswith("мин") else 3600
+                seconds = int(amount_text) * factor
             if not 10 <= seconds <= 2_592_000:
                 return "Время напоминания должно быть от 10 секунд до 30 дней."
             message = reminder_match.group(3).strip()
@@ -224,9 +495,20 @@ class CommandRouter:
         if command == "скопируй":
             return "Укажи текст после команды «скопируй»."
 
+        type_global_match = re.match(
+            r"^\s*напечатай(?:\s+текст)?\s*[:,\-]?\s*(.+?)\s*$",
+            self.strip_wake_name(text),
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        if type_global_match:
+            global_text = type_global_match.group(1).strip()
+            if global_text:
+                return self._execute("type_text_global", {"text": global_text}, confirm)
+
         if command in {
             "который час", "сколько времени", "текущее время", "время", "какая дата",
             "какое сегодня число", "дата", "дата и время", "время и дата",
+            "сколько сейчас времени", "который сейчас час", "какое сейчас время",
         }:
             return self._execute("get_local_time", {}, confirm)
 
@@ -258,17 +540,6 @@ class CommandRouter:
                 confirm,
             )
 
-        click_match = re.fullmatch(r"нажми (.+?) в окне (.+)", command)
-        if click_match:
-            return self._execute(
-                "click_window_control",
-                {
-                    "control_name": click_match.group(1).strip(),
-                    "window_title": click_match.group(2).strip(),
-                },
-                confirm,
-            )
-
         raw_command = self.strip_wake_name(text).strip()
         shortcut_match = re.fullmatch(
             r"(?:нажми сочетание|отправь сочетание|нажми клавиши) (.+?) в окне (.+)",
@@ -281,6 +552,32 @@ class CommandRouter:
                 {
                     "shortcut": shortcut_match.group(1).strip().upper(),
                     "window_title": shortcut_match.group(2).strip(),
+                },
+                confirm,
+            )
+
+        bare_key_match = re.fullmatch(
+            r"нажми\s+([^ ]+)\s+в окне\s+(.+)",
+            raw_command,
+            flags=re.IGNORECASE,
+        )
+        if bare_key_match and self._SHORTCUT_TOKEN.fullmatch(bare_key_match.group(1)):
+            return self._execute(
+                "send_keyboard_shortcut",
+                {
+                    "shortcut": bare_key_match.group(1).upper(),
+                    "window_title": bare_key_match.group(2).strip(),
+                },
+                confirm,
+            )
+
+        click_match = re.fullmatch(r"нажми (.+?) в окне (.+)", command)
+        if click_match:
+            return self._execute(
+                "click_window_control",
+                {
+                    "control_name": click_match.group(1).strip(),
+                    "window_title": click_match.group(2).strip(),
                 },
                 confirm,
             )
@@ -421,8 +718,18 @@ class CommandRouter:
         if command in {"заблокируй компьютер", "заблокировать компьютер", "заблокируй пк"}:
             return self._execute("lock_pc", {}, confirm)
 
-        volume_match = re.search(
-            r"(?:установи|сделай|поставь)?\s*(?:системную\s+)?громкость(?:\s+на|\s+до)?\s+(\d{1,3})\s*(?:%|процентов?)?$",
+        volume_extremes_match = re.fullmatch(
+            r"(?:громкость|звук)\s+на\s+(максимум|полную|минимум|ноль|нуль)|"
+            r"(?:выключи|отключи)\s+звук",
+            command,
+        )
+        if volume_extremes_match:
+            loud = volume_extremes_match.group(1) in {"максимум", "полную"}
+            return self._execute("set_volume", {"percent": 100 if loud else 0}, confirm)
+
+        volume_match = re.fullmatch(
+            r"(?:установи|выстави|выставь|сделай|поставь)?\s*(?:системную\s+)?"
+            r"громкость(?:\s+на|\s+до|\s+)?\s*(\d{1,3})\s*(?:%|процентов?)?",
             command,
         )
         if volume_match:
@@ -431,13 +738,65 @@ class CommandRouter:
                 return "Громкость должна быть от 0 до 100 процентов."
             return self._execute("set_volume", {"percent": percent}, confirm)
 
+        if command in {
+            "пауза", "сделай паузу", "поставь на паузу",
+            "поставь музыку на паузу", "поставь трек на паузу", "поставь видео на паузу",
+        }:
+            return self._execute("send_media_key", {"key": "play_pause"}, confirm)
+
+        if command in {
+            "возобнови", "продолжи", "сними с паузы", "продолжи музыку",
+            "продолжи видео", "продолжить воспроизведение",
+        }:
+            return self._execute("send_media_key", {"key": "play_pause"}, confirm)
+
+        if command in {"следующий трек", "следующая песня", "следующий", "включи следующий трек"}:
+            return self._execute("send_media_key", {"key": "next_track"}, confirm)
+
+        if command in {"предыдущий трек", "предыдущая песня", "предыдущий", "верни предыдущий трек"}:
+            return self._execute("send_media_key", {"key": "previous_track"}, confirm)
+
+        louder_match = re.fullmatch(
+            r"(?:громче|прибавь громкость|сделай погромче|увеличь громкость|подними громкость|повысь громкость)"
+            r"(?:\s+на\s+(\d{1,3}))?",
+            command,
+        )
+        quieter_match = re.fullmatch(
+            r"(?:тише|убавь громкость|сделай потише|уменьши громкость|опусти громкость|понизь громкость)"
+            r"(?:\s+на\s+(\d{1,3}))?",
+            command,
+        )
+        if louder_match or quieter_match:
+            match = louder_match or quieter_match
+            sign = 1 if louder_match else -1
+            explicit = match.group(1)
+            step = int(explicit) if explicit else self.volume_step
+            if not 1 <= step <= 100:
+                return "Шаг громкости должен быть от 1 до 100 процентов."
+            return self._execute("adjust_volume", {"delta": sign * step}, confirm)
+
+        if command in {
+            "включи впн", "включи vpn", "подключи впн", "подключи vpn",
+            "запусти впн", "запусти vpn",
+        }:
+            return self._execute("start_vpn", {}, confirm)
+
+        if command in {"выключи впн", "отключи впн", "выключи vpn", "отключи vpn"}:
+            return self._execute("stop_vpn", {}, confirm)
+
+        if command in {"проверь впн", "статус впн", "vpn статус", "впн работает"}:
+            return self._execute("vpn_status", {}, confirm)
+
         for prefix in ("закрой ", "заверши "):
             if command.startswith(prefix):
                 target = command[len(prefix):].strip()
                 alias = self.PROCESS_SYNONYMS.get(target, target)
                 if alias not in self.allowed_processes:
-                    options = ", ".join(sorted(self.allowed_processes)) or "список пуст"
-                    return f"Процесс «{target}» не добавлен в allowlist. Доступно: {options}."
+                    fuzzy_process = self._fuzzy_process(target)
+                    if fuzzy_process is None:
+                        options = ", ".join(sorted(self.allowed_processes)) or "список пуст"
+                        return f"Процесс «{target}» не добавлен в allowlist. Доступно: {options}."
+                    alias = fuzzy_process
                 return self._execute("close_process", {"process": alias}, confirm)
 
         for prefix in self.OPEN_PREFIXES:
@@ -451,14 +810,32 @@ class CommandRouter:
                     return self._execute("open_url", {"url": target[7:].strip()}, confirm)
                 if target in {"youtube", "ютуб"}:
                     return self._execute("open_url", {"url": "https://www.youtube.com"}, confirm)
+                music_match = re.fullmatch(
+                    r"(?:музыку|музыка|песню|песенку|трек|композицию|сингл)\s+(.+)",
+                    target,
+                )
+                if music_match:
+                    query = quote_plus(music_match.group(1).strip())
+                    return self._execute(
+                        "open_url",
+                        {"url": f"https://music.yandex.ru/search?text={query}"},
+                        confirm,
+                    )
+                if target in {"музыка", "музыку", "яндекс музыка", "яндекс музыку"}:
+                    return self._execute(
+                        "open_url", {"url": "https://music.yandex.ru"}, confirm
+                    )
                 normalized_target = self._normalize_phrase(target)
                 alias = self.app_alias_lookup.get(
                     normalized_target,
                     self.APP_SYNONYMS.get(normalized_target, normalized_target),
                 )
                 if alias not in self.allowed_apps:
-                    options = ", ".join(sorted(self.allowed_apps)) or "нет разрешённых приложений"
-                    return f"Приложение «{target}» не добавлено в список разрешённых. Доступно: {options}."
+                    fuzzy_alias = self._fuzzy_app(normalized_target)
+                    if fuzzy_alias is None:
+                        options = ", ".join(sorted(self.allowed_apps)) or "нет разрешённых приложений"
+                        return f"Приложение «{target}» не добавлено в список разрешённых. Доступно: {options}."
+                    alias = fuzzy_alias
                 return self._execute("open_app", {"app": alias}, confirm)
 
         return None
@@ -467,5 +844,8 @@ class CommandRouter:
         self, name: str, arguments: dict[str, Any], confirm: ConfirmCallback | None
     ) -> str:
         result: ToolResult = self.registry.execute(name, arguments, confirm)
-        prefix = "Готово. " if result.ok else "Не выполнено. "
-        return prefix + result.output
+        ack_pool = PERSONA_ACKS.get(self.persona, ACKNOWLEDGMENTS) if result.ok else FAILURES
+        response = f"{random.choice(ack_pool)} " + result.output
+        if result.ok and self.followup_enabled:
+            response += "\nЧто-нибудь ещё?"
+        return response

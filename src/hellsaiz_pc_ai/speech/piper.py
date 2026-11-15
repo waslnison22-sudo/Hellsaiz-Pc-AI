@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+import hashlib
 import subprocess
-import tempfile
 import threading
 import wave
 from pathlib import Path
@@ -21,6 +21,9 @@ class PiperSynthesizer:
     _voice_cache: dict[Path, object] = {}
     _cache_lock = threading.RLock()
     _max_cached_voices = 2
+    _synthesis_cache: dict[tuple[str, str], Path] = {}
+    _max_cached_wav = 48
+    _cache_dir: Path | None = None
 
     def __init__(
         self,
@@ -62,11 +65,42 @@ class PiperSynthesizer:
             self._voice_cache[key] = voice
             return voice
 
+    def _wav_cache_path(self, text: str) -> Path:
+        key_text = hashlib.sha256(text.encode("utf-8")).hexdigest()[:24]
+        key_model = hashlib.sha256(str(self.voice_model.resolve()).encode("utf-8")).hexdigest()[:12]
+        cache_dir = self._cache_dir
+        if cache_dir is None:
+            cache_dir = self.voice_model.resolve().parent / "piper-tts-cache"
+        return cache_dir / f"{key_model}-{key_text}.wav"
+
+    @classmethod
+    def _trim_wav_cache(cls) -> None:
+        """Держать кэш синтеза в разумных пределах: старые WAV удаляются с диска."""
+        entries = sorted(cls._synthesis_cache.items(), key=lambda item: item[1].stat().st_mtime)
+        while len(entries) > cls._max_cached_wav:
+            _, oldest_path = entries.pop(0)
+            cls._synthesis_cache = {k: v for k, v in cls._synthesis_cache.items() if v != oldest_path}
+            try:
+                oldest_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
     @classmethod
     def clear_voice_cache(cls) -> None:
         """Release cached native Piper/ONNX sessions during orderly shutdown."""
         with cls._cache_lock:
             cls._voice_cache.clear()
+
+    def stop(self) -> None:
+        """Прервать воспроизведение WAV (Windows). Безопасно, если ничего не звучит."""
+        try:
+            import winsound
+        except ImportError:
+            return
+        try:
+            winsound.PlaySound(None, winsound.SND_PURGE)
+        except Exception:
+            pass
 
     def synthesize(self, text: str, output_file: Path) -> Path:
         text = text.strip()
@@ -118,14 +152,23 @@ class PiperSynthesizer:
             raise SpeechSynthesisError(
                 "Piper audio playback is currently supported on Windows."
             ) from exc
-        temporary_path: Path | None = None
+        with self._cache_lock:
+            cache_key = (
+                hashlib.sha256(str(self.voice_model.resolve()).encode("utf-8")).hexdigest()[:12],
+                text,
+            )
+            cached_path = self._synthesis_cache.get(cache_key)
+        if cached_path is not None and cached_path.is_file():
+            winsound.PlaySound(str(cached_path), winsound.SND_FILENAME)
+            return
+        cached_wav = self._wav_cache_path(text)
+        cached_wav.parent.mkdir(parents=True, exist_ok=True)
         try:
-            with tempfile.NamedTemporaryFile(
-                prefix="hellsaiz-tts-", suffix=".wav", delete=False
-            ) as file:
-                temporary_path = Path(file.name)
-            self.synthesize(text, temporary_path)
-            winsound.PlaySound(str(temporary_path), winsound.SND_FILENAME)
-        finally:
-            if temporary_path is not None:
-                temporary_path.unlink(missing_ok=True)
+            self.synthesize(text, cached_wav)
+            with self._cache_lock:
+                self._synthesis_cache[cache_key] = cached_wav
+                self._trim_wav_cache()
+        except Exception:
+            cached_wav.unlink(missing_ok=True)
+            raise
+        winsound.PlaySound(str(cached_wav), winsound.SND_FILENAME)
