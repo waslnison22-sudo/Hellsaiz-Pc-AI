@@ -55,6 +55,7 @@ from hellsaiz_pc_ai.tools.reminders import register_reminder_tools
 from hellsaiz_pc_ai.tools.system import register_system_tools
 from hellsaiz_pc_ai.tools.public_info import register_public_info_tools
 from hellsaiz_pc_ai.app.wallpaper import WallpaperError, WallpaperStore
+from hellsaiz_pc_ai.app.theme import build_dark_stylesheet
 from hellsaiz_pc_ai.app.file_access import (
     FileAccessSettings,
     load_file_access_settings,
@@ -3621,6 +3622,12 @@ def main() -> int:
     page_stack = QStackedWidget()
     navigation = QListWidget()
     navigation.setObjectName("mainNavigation")
+    navigation.setAccessibleName("Основная навигация")
+    navigation.setAccessibleDescription(
+        "Разделы приложения. Используй стрелки вверх и вниз для переключения между разделами."
+    )
+    navigation.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+    navigation.setTabKeyNavigation(True)
     navigation.setFixedWidth(194)
     navigation.setSpacing(5)
     page_titles = []
@@ -3715,35 +3722,7 @@ def main() -> int:
             wallpaper_layer.setStyleSheet("background:#080b11;")
 
     apply_wallpaper()
-    window.setStyleSheet(
-        "QMainWindow, QWidget { background:transparent; color:#e8edf4; font-family:'Segoe UI'; }"
-        "QFrame#sidebar { background:rgba(10,14,20,224); border:1px solid rgba(218,230,246,42); border-radius:20px; }"
-        "QFrame#contentFrame { background:rgba(7,10,15,190); border:1px solid rgba(218,230,246,35); border-radius:20px; }"
-        "QFrame#wallpaperPreview, QFrame#profilePanel { background:rgba(24,30,39,196); border:1px solid rgba(215,228,245,55); border-radius:16px; }"
-        "QFrame#softDivider { background:rgba(210,225,245,30); border:0; max-height:1px; }"
-        "QLabel#brandMark { background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 rgba(248,251,255,245),stop:1 rgba(126,139,158,200)); color:#111722; border-radius:12px; font-size:23px; font-weight:800; }"
-        "QListWidget#mainNavigation { background:transparent; border:0; padding:0; outline:0; }"
-        "QListWidget#mainNavigation::item { color:#aab4c1; padding:12px 12px; border-radius:11px; margin:2px 0; }"
-        "QListWidget#mainNavigation::item:hover { background:rgba(218,230,246,24); color:#f4f7fb; }"
-        "QListWidget#mainNavigation::item:selected { background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 rgba(215,228,245,50),stop:1 rgba(145,159,180,28)); color:#f5f8fc; border:1px solid rgba(221,233,250,70); }"
-        "QTextEdit,QLineEdit,QPlainTextEdit,QComboBox,QListWidget { background:rgba(15,20,28,224); color:#edf2f8; border:1px solid rgba(204,219,239,48); border-radius:12px; padding:10px; selection-background-color:#465265; }"
-        "QTextEdit { background:rgba(9,13,19,155); border:1px solid rgba(211,225,244,25); padding:14px; }"
-        "QLineEdit { min-height:24px; }"
-        "QPushButton { background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 rgba(48,57,70,224),stop:1 rgba(27,34,44,238)); color:#e8edf4; border:1px solid rgba(211,225,244,55); border-radius:11px; padding:10px 15px; font-weight:550; }"
-        "QPushButton:hover { background:rgba(91,105,126,210); border-color:rgba(233,241,251,120); }"
-        "QPushButton:disabled { color:#6f7a89; background:rgba(28,34,43,150); border-color:rgba(155,169,188,25); }"
-        "QPushButton#sendButton, QPushButton#primaryButton { background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #f7f9fc,stop:1 #c8d1de); color:#101721; border:1px solid #ffffff; font-weight:700; }"
-        "QPushButton#sendButton:hover, QPushButton#primaryButton:hover { background:#ffffff; }"
-        "QPushButton#profileButton, QPushButton#voiceButton { background:rgba(24,30,39,222); color:#d5deea; border:1px solid rgba(213,226,244,54); }"
-        "QComboBox::drop-down { border:0; width:24px; }"
-        "QListWidget::item { padding:9px 10px; border-radius:9px; }"
-        "QListWidget::item:selected { background:rgba(207,222,243,42); color:#ffffff; }"
-        "QLabel { color:#d7e0eb; background:transparent; }"
-        "QCheckBox { color:#d2dbe7; spacing:8px; }"
-        "QCheckBox::indicator { width:16px; height:16px; border:1px solid #8793a3; border-radius:5px; background:rgba(16,21,29,230); }"
-        "QCheckBox::indicator:checked { background:#e7edf5; border-color:#e7edf5; }"
-        "QSplitter::handle { background:rgba(190,207,229,70); }"
-    )
+    window.setStyleSheet(build_dark_stylesheet())
 
     workers: list[Worker] = []
 

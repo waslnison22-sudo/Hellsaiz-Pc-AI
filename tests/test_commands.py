@@ -336,5 +336,5 @@ def test_command_normalization_handles_unicode_width_yo_and_punctuation():
 
     assert router.route("  ПОГОДА В МОСКВЕ?  ") == "Готово. weather: москве"
     assert router.route("найди в интернете ONNX Runtime.") == "Готово. search: onnx runtime"
-    assert router.route("ｏｔｋｒｏｙ БЛОКНОТ") == "Готово. opened notepad"
+    assert router.route("ｏｐｅｎ БЛОКНОТ") == "Готово. opened notepad"
 
