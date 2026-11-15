@@ -37,7 +37,22 @@ References:
 - Before click or text entry, recheck that the selected control is still visible and enabled. If it changed, abort instead of acting on a stale match.
 - This is an operation-local Python snapshot, not a native COM IUIAutomationCacheRequest. Native bulk caching and UIA event-driven invalidation remain a separate optimization to research with pywinauto/backend constraints and Windows integration tests.
 
-## 3. Deterministic language handling for side effects
+## 3. AI tool-call boundary and bounded execution
+
+**Implementation**
+
+- Validate the complete provider tool-call batch before executing any handler.
+- Maximum 8 calls in one model response and 16 calls across one user reply.
+- Require unique, non-empty call IDs and a non-empty function name.
+- Limit serialized argument JSON size before parsing.
+- Reject malformed JSON, duplicate object keys, non-standard numeric constants, oversized values and non-object arguments before side effects.
+- The ToolRegistry applies a second schema/type/depth/collection validation gate before invoking each registered handler.
+
+**Rationale**
+
+The tool-call limit is separate from the model round limit. A provider response may contain multiple calls in one round; a round limit alone does not bound the number of side effects. Batch validation avoids executing the first items when a later item in the same batch is malformed.
+
+## 4. Deterministic language handling for side effects
 
 **Engineering decision**
 
@@ -46,7 +61,7 @@ References:
 - Do not introduce fuzzy matching that could turn an uncertain transcript into an unintended app launch, click or file operation.
 - Use clarification or a clear not-in-allowlist result when an entity is unknown or ambiguous.
 
-## 4. Interface clarity and accessibility
+## 5. Interface clarity and accessibility
 
 **Implementation**
 
@@ -62,7 +77,7 @@ References:
 - Focus contrast and reduced-motion preferences.
 - Responsive behavior on smaller laptop windows.
 
-## 5. Next mechanics to investigate
+## 6. Next mechanics to investigate
 
 1. Native UIA CacheRequest and UIA event subscriptions, with cache invalidation rather than holding stale controls.
 2. Qt QThreadPool/QRunnable for short independent background operations, while keeping long-running listeners separately managed.
