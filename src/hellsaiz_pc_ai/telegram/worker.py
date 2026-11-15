@@ -207,15 +207,13 @@ class TelegramBotWorker(threading.Thread):
             self._status("Telegram выключен: обязательный прокси не настроен.")
             return
         try:
-            if not self._network_ready():
-                while not self._stop_event.wait(self.network_retry_seconds):
-                    if self._network_ready():
-                        break
-                else:
+            while not self._stop_event.is_set():
+                if self._network_ready():
+                    break
+                if self._stop_event.wait(self.network_retry_seconds):
                     return
-                if not self._network_ready():
-                    self._status("Telegram остаётся на паузе: прокси недоступен.")
-                    return
+            if self._stop_event.is_set():
+                return
             self._api_call("getMe", {})
         except TelegramWorkerError as exc:
             self._status(f"Telegram не запущен: {exc}")

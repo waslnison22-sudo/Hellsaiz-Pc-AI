@@ -240,6 +240,34 @@ def test_worker_does_not_run_poll_without_required_proxy():
     assert any("ожидает" in item for item in statuses)
 
 
+def test_worker_retries_proxy_health_until_it_is_stable():
+    calls = []
+    health_states = iter([False, True])
+
+    def network_checker(*_args):
+        return type(
+            "Health",
+            (),
+            {"ok": next(health_states), "latency_ms": 1},
+        )()
+
+    def api_call(method, _payload):
+        calls.append(method)
+        if method == "getUpdates":
+            worker.stop()
+            return {"ok": True, "result": []}
+        return {"ok": True, "result": {}}
+
+    worker = make_worker(
+        api_call=api_call,
+        network_checker=network_checker,
+        network_retry_seconds=0,
+    )
+    worker.run()
+
+    assert calls == ["getMe", "getUpdates"]
+
+
 def test_worker_run_polls_and_replies_only_to_an_authorized_safe_command():
     calls = []
     worker_holder = {}
