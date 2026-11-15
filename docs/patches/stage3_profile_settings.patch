@@ -1,10 +1,11 @@
-# Патч этапа 3: настройки профиля (персона и шаг громкости).
+# Патч этапа 3: настройки профиля (персона, шаг громкости, follow-up).
 # Применяется после stage1_desktop_ui_workers.patch и stage2_vpn_tools.patch
 # конвейером apply_pending_patches.py перед тестами и сборкой.
-# Ключи ai_profile.json: persona ("хеллсайз"|"джарвис"), volume_step (1..100).
+# Ключи ai_profile.json: persona ("хеллсайз"|"джарвис"), volume_step (1..100),
+# followup_enabled (bool, по умолчанию включён).
 --- a/src/hellsaiz_pc_ai/app/desktop.py
 +++ b/src/hellsaiz_pc_ai/app/desktop.py
-@@ -163,12 +163,31 @@
+@@ -163,12 +163,33 @@
  
      reminder_store = ReminderStore(settings.database_path)
      register_reminder_tools(registry, reminder_store)
@@ -25,6 +26,8 @@
 +        router_volume_step = max(1, min(100, int(profile_early.get("volume_step", 10))))
 +    except (TypeError, ValueError):
 +        router_volume_step = 10
++    raw_followup = profile_early.get("followup_enabled")
++    router_followup_enabled = True if raw_followup is None else bool(raw_followup)
      router = CommandRouter(
          registry,
          allowed_apps,
@@ -33,10 +36,11 @@
          settings.wake_aliases,
 +        persona=router_persona,
 +        volume_step=router_volume_step,
++        followup_enabled=router_followup_enabled,
      )
  
      profile_path = settings.workflows_path.parent / "ai_profile.json"
-@@ -719,6 +738,33 @@
+@@ -719,6 +740,36 @@
      voice_row.addWidget(speak_toggle)
      profile_layout.addLayout(voice_row)
  
@@ -65,17 +69,21 @@
 +    if step_index >= 0:
 +        volume_step_combo.setCurrentIndex(step_index)
 +    persona_row.addWidget(volume_step_combo)
++    followup_check = QCheckBox("Спрашивать «Что-нибудь ещё?»")
++    followup_check.setChecked(bool(profile_data.get("followup_enabled", True)))
++    persona_row.addWidget(followup_check)
 +    profile_layout.addLayout(persona_row)
 +
      profile_footer = QHBoxLayout()
      profile_status = QLabel("Параметры сохраняются локально.")
      profile_status.setStyleSheet("color:#89919d; font-size:11px;")
-@@ -1062,6 +1108,8 @@
+@@ -1062,6 +1118,9 @@
              **provider_profile,
              "voice_name": active_voice["name"],
              "auto_speak": speak_toggle.isChecked(),
 +            "persona": str(persona_combo.currentData() or "хеллсайз"),
 +            "volume_step": int(volume_step_combo.currentData() or 10),
++            "followup_enabled": followup_check.isChecked(),
          })
          profile_path = settings.workflows_path.parent / "ai_profile.json"
          try:
