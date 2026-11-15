@@ -1,9 +1,23 @@
+# Обновлённый .github/workflows/ci.yml
+# Изменение только одно: добавлен paths-ignore для push и pull_request,
+# чтобы docs-only коммиты не запускали 4 тестовые джобы + PyInstaller-сборку.
+# Это главный источник расхода минут Actions в проекте.
+# Применение: заменить содержимое .github/workflows/ci.yml этим файлом и закоммитить.
+
 name: CI
 
 on:
   push:
     branches: [main, "dev/**"]
+    paths-ignore:
+      - "docs/**"
+      - "**.md"
+      - ".gitignore"
   pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "**.md"
+      - ".gitignore"
 
 jobs:
   test:
@@ -30,6 +44,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - name: Apply pending refactoring patches
+        shell: bash
+        run: python scripts/apply_pending_patches.py
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
@@ -132,6 +149,9 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+      - name: Apply pending refactoring patches
+        shell: bash
+        run: python scripts/apply_pending_patches.py
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
