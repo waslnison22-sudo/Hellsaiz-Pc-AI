@@ -4,6 +4,10 @@
 как патчи (docs/patches/*.patch), а этот скрипт применяет их в рабочей копии перед
 прогоном тестов и сборкой пакета. Идемпотентно: уже применённый патч пропускается.
 
+Патчи хранятся в zero-context формате (n=0): только строки удаления и добавления,
+без контекстных строк. Такой формат устойчив к потере невидимых пробелов при
+ручной вставке, но git apply принимает его только с флагом --unidiff-zero.
+
 Выход: 0 — все патчи применены или пропущены; 1 — какой-то патч не применился.
 """
 from __future__ import annotations
@@ -20,7 +24,7 @@ def main() -> int:
     failures = 0
     for patch in sorted(patch_dir.glob("*.patch")):
         reverse_check = subprocess.run(
-            ["git", "apply", "--reverse", "--check", str(patch)],
+            ["git", "apply", "--reverse", "--check", "--unidiff-zero", str(patch)],
             capture_output=True,
             text=True,
         )
@@ -28,7 +32,7 @@ def main() -> int:
             print(f"SKIP (уже применён): {patch.name}")
             continue
         result = subprocess.run(
-            ["git", "apply", "--whitespace=nowarn", str(patch)],
+            ["git", "apply", "--whitespace=nowarn", "--unidiff-zero", str(patch)],
             capture_output=True,
             text=True,
         )
