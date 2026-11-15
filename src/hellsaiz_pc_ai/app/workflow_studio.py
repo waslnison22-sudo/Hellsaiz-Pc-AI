@@ -695,6 +695,14 @@ class WorkflowStudioPage(QWidget):
         self.builder_fields_layout = QVBoxLayout(self.builder_fields)
         self.builder_fields_layout.setContentsMargins(4, 4, 8, 8)
         self.builder_fields_layout.setSpacing(12)
+        name_group = QGroupBox("Название сценария")
+        name_group.setObjectName("scenarioCard")
+        name_layout = QVBoxLayout(name_group)
+        self.name_edit = QLineEdit()
+        self.name_edit.setPlaceholderText("Например, Тихий вечер или Игровой режим")
+        name_layout.addWidget(self.name_edit)
+        self.builder_fields_layout.addWidget(name_group)
+        self.name_edit.textChanged.connect(self._mark_dirty)
         self._build_trigger_section()
         self._build_condition_section()
         self._build_action_sections()
@@ -731,9 +739,7 @@ class WorkflowStudioPage(QWidget):
         self.technical_json.setPlaceholderText("Схема появится после создания или выбора сценария.")
         technical_layout.addWidget(self.technical_json, 1)
         copy_json_button = QPushButton("Скопировать схему")
-        copy_json_button.clicked.connect(
-            lambda: self.technical_json.selectAll() or self.technical_json.copy()
-        )
+        copy_json_button.clicked.connect(self._copy_technical_schema)
         technical_layout.addWidget(copy_json_button)
         self.detail_tabs.addTab(technical_tab, "Технические детали")
 
@@ -763,6 +769,10 @@ class WorkflowStudioPage(QWidget):
         self.scenario_list.itemSelectionChanged.connect(self.load_selected)
         self.fit_button.clicked.connect(self.graph_view.fit_graph)
         self.reset_layout_button.clicked.connect(self._reset_canvas_layout)
+
+    def _copy_technical_schema(self) -> None:
+        self.technical_json.selectAll()
+        self.technical_json.copy()
 
     def _build_trigger_section(self) -> None:
         group = QGroupBox("1. Когда запускать сценарий?")
