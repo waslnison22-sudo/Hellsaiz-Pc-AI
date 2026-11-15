@@ -3,14 +3,14 @@
 This roadmap separates source changes from verified release acceptance. A feature is not complete for release merely because its module or UI exists.
 
 ## P0 — stability
-Implemented: deterministic local command router, single-instance lock, SQLite history, reminders, workflow library/scheduler, app/process allowlists, clipboard/system tools and background-worker cleanup.
+Implemented: deterministic local command router, single-instance lock, SQLite history, reminders, workflow library/scheduler, app/process allowlists, clipboard/system tools and background-worker cleanup; bounded tool argument size/depth and finite-number validation before handlers.
 Still required: real Windows CI on Python 3.11/3.12 and live tests of reminders, clipboard, workflows, shutdown, microphone and TTS.
 
 ## P1 — platform foundations
 Implemented: provider/speech/wake-name separation, DPAPI-backed secrets, Vosk/Whisper.cpp STT paths, SAPI5/Piper TTS, voice profiles and local command routing.
 
 ## P2 — language and intent
-Implemented: Russian deterministic intent/slot routes, wake aliases, app aliases, and refusal to guess ambiguous app/window matches.
+Implemented: Russian deterministic intent/slot routes, wake aliases, app aliases, NFKC/casefold plus ё/е normalization, and refusal to guess ambiguous app/window matches. Fuzzy matching is deliberately not used for side-effecting app launches.
 Still required: broaden phrase coverage, noisy-ASR tests for every intent and a fuller editable entity catalog.
 
 ## P3 — optional AI and voice engines
@@ -18,9 +18,10 @@ Implemented: LM Studio, Ollama and llama.cpp OpenAI-compatible profiles; native 
 Still required: live tests against configured engines and a real GigaChat account; verify primary/fallback behavior and no replay after uncertain tool timeouts.
 
 ## P4 — Windows control plane
-Implemented: process/window inventory, focus/minimize/maximize/restore/close; UI Automation inspection/click/type; scoped keyboard shortcut allowlist; folder-scoped file list/search/read/open; optional creation of new folders/text files without delete/overwrite; optional local Russian OCR.
+Implemented: process/window inventory, focus/minimize/maximize/restore/close; UI Automation inspection/click/type with operation-local property snapshots and live visibility/enabled rechecks; scoped keyboard shortcut allowlist; folder-scoped file list/search/read/open; optional creation of new folders/text files without delete/overwrite; optional local Russian OCR.
 OCR setup: PP-OCRv5 detection, orientation and Cyrillic recognition models are installed only after explicit user action, checked by SHA-256, then run via ONNX Runtime CPU. OCR stays disabled until models are present and user opt-in is enabled.
-Still required: live tests in Notepad, Explorer, Settings and a browser; protected/custom UI limitations; Russian OCR checks at different DPI scales and multi-monitor layouts.
+Visual foundation: shared monochrome theme module, visible keyboard focus states, accessible navigation label and styled scrollbars.
+Still required: live tests in Notepad, Explorer, Settings and a browser; protected/custom UI limitations; Russian OCR checks at different DPI scales and multi-monitor layouts; keyboard-only and Narrator accessibility review.
 
 ## P5 — packaging and update
 Implemented in source: Windows PyInstaller onedir app, stable launcher/updater, Inno installer, signed manifest, verified extraction, staged apply-after-exit, rollback and data separation; startup task support.
