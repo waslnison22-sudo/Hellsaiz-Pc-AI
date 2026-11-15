@@ -90,7 +90,7 @@ def test_draft_round_trip_preserves_supported_scenario():
     assert rebuilt == original
 
 
-def test_draft_reader_expands_existing_repeat_block():
+def test_draft_reader_preserves_existing_repeat_block():
     graph = build_workflow_graph(
         name="Повтор",
         trigger_kind="text",
@@ -101,9 +101,14 @@ def test_draft_reader_expands_existing_repeat_block():
     draft = workflow_to_draft(graph)
 
     assert draft["actions"] == [
-        {"kind": "tool", "name": "set_volume", "arguments": {"percent": 40}},
-        {"kind": "tool", "name": "set_volume", "arguments": {"percent": 40}},
+        {
+            "kind": "repeat",
+            "name": "set_volume",
+            "arguments": {"percent": 40},
+            "count": 2,
+        }
     ]
+    assert build_workflow_graph(**draft) == graph
 
 
 def test_invalid_trigger_and_empty_linear_scenario_are_rejected():

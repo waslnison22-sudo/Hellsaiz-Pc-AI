@@ -186,12 +186,14 @@ def _read_action_chain(
                 "seconds": node.config["seconds"],
             })
         elif node.kind == "action.repeat":
-            for _ in range(node.config["count"]):
-                actions.append({
-                    "kind": "tool",
-                    "name": node.config["name"],
-                    "arguments": dict(node.config["arguments"]),
-                })
+            # Preserve the repeat block as one editable action. Expanding it
+            # into N tool nodes loses the user's original repeat setting.
+            actions.append({
+                "kind": "repeat",
+                "name": node.config["name"],
+                "arguments": dict(node.config["arguments"]),
+                "count": node.config["count"],
+            })
         else:
             raise ValueError(
                 "В этом сценарии есть сложный блок. Его можно запускать и просматривать, "
@@ -260,6 +262,10 @@ def describe_trigger(graph: WorkflowGraph) -> str:
 def describe_action(node: GraphNode) -> str:
     if node.kind == "action.wait":
         return f"Пауза: {node.config.get('seconds', 0):g} сек."
+    if node.kind == "action.repeat":
+        name = str(node.config.get("name", ""))
+        label = ACTION_LABELS.get(name, "действие")
+        return f"Повторить: {label.lower()} · {node.config.get('count', 1)} раз"
     if node.kind == "condition.hour":
         operators = {"gte": "не раньше", "gt": "позже", "eq": "ровно", "lte": "не позже", "lt": "раньше"}
         return f"Если час {operators[node.config['operator']]} {node.config['value']}:00"
