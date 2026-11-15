@@ -2368,12 +2368,63 @@ def main() -> int:
     wake_listener_status.setWordWrap(True)
     wake_listener_status.setStyleSheet("color:#929aa6;")
     settings_layout.addWidget(wake_listener_status)
-    speech_health_button = QPushButton("Проверить голосовую систему")
+    speech_health_button = QPushButton("Проверить состояние приложения")
     settings_layout.addWidget(speech_health_button)
-    speech_health_status = QLabel("Диагностика ещё не запускалась.")
+    health_summary_status = QLabel("Диагностика ещё не запускалась.")
+    health_summary_status.setStyleSheet("font-weight:650; color:#d7e0eb;")
+    settings_layout.addWidget(health_summary_status)
+    speech_health_status = QLabel(
+        "Проверяются голосовые компоненты, SQLite, сценарии и пользовательское хранилище."
+    )
     speech_health_status.setWordWrap(True)
     speech_health_status.setStyleSheet("color:#929aa6;")
     settings_layout.addWidget(speech_health_status)
+    system_health_workers: list[QThread] = []
+
+    class SystemHealthWorker(QThread):
+        completed = Signal(object)
+        failed = Signal(str)
+
+        def __init__(self, stt_profile, microphone_device, wake_enabled, voice_id, tts_engine):
+            super().__init__()
+            self.stt_profile = dict(stt_profile)
+            self.microphone_device = microphone_device
+            self.wake_enabled = wake_enabled
+            self.voice_id = voice_id
+            self.tts_engine = tts_engine
+
+        def run(self) -> None:
+            try:
+                from hellsaiz_pc_ai.app.health import collect_speech_health, collect_storage_health
+                voice_models = list_installed_voices(settings.workflows_path.parent / "voices")
+                selected_model = next(
+                    (voice for voice in voice_models if voice.voice_id == self.voice_id), None
+                )
+                checks = collect_speech_health(
+                    stt_primary=self.stt_profile["primary"],
+                    stt_fallback=self.stt_profile["fallback"],
+                    vosk_model_path=Path(self.stt_profile["vosk_model_path"]),
+                    whisper_executable=(
+                        Path(self.stt_profile["whisper_cpp_executable"])
+                        if self.stt_profile["whisper_cpp_executable"] else None
+                    ),
+                    whisper_model=(
+                        Path(self.stt_profile["whisper_cpp_model"])
+                        if self.stt_profile["whisper_cpp_model"] else None
+                    ),
+                    tts_engine=self.tts_engine,
+                    piper_model_path=selected_model.model_path if selected_model else None,
+                    microphone_device=self.microphone_device,
+                    wake_enabled=self.wake_enabled,
+                )
+                checks.extend(collect_storage_health(
+                    database_path=settings.database_path,
+                    workflows_path=settings.workflows_path,
+                ))
+                self.completed.emit(checks)
+            except Exception as exc:
+                logging.exception("System diagnostics failed")
+                self.failed.emit(f"{type(exc).__name__}: {exc}")
 
     def refresh_microphone_devices() -> None:
         saved_name = active_microphone["name"]
@@ -2506,7 +2557,7 @@ def main() -> int:
             stt_status.setText(
                 f"Настройки распознавания сохранены. Основной движок: {primary}; резервный: {fallback}."
             )
-            refresh_speech_health()
+            refresh_system_health()
             if always_listen_check.isChecked():
                 start_wake_listener()
             else:
@@ -2514,41 +2565,49 @@ def main() -> int:
         except OSError as exc:
             stt_status.setText(f"Не удалось сохранить настройки: {exc}")
 
-    def refresh_speech_health() -> None:
-        from hellsaiz_pc_ai.app.health import collect_speech_health
-
-        voice_id = str(profile_data.get("piper_voice_id") or "")
-        voice_models = list_installed_voices(settings.workflows_path.parent / "voices")
-        selected_model = next(
-            (voice for voice in voice_models if voice.voice_id == voice_id), None
-        )
-        checks = collect_speech_health(
-            stt_primary=active_stt["primary"],
-            stt_fallback=active_stt["fallback"],
-            vosk_model_path=Path(active_stt["vosk_model_path"]),
-            whisper_executable=(
-                Path(active_stt["whisper_cpp_executable"])
-                if active_stt["whisper_cpp_executable"] else None
-            ),
-            whisper_model=(
-                Path(active_stt["whisper_cpp_model"])
-                if active_stt["whisper_cpp_model"] else None
-            ),
-            tts_engine=str(profile_data.get("tts_engine") or "sapi5"),
-            piper_model_path=selected_model.model_path if selected_model else None,
-            microphone_device=active_microphone["name"],
-            wake_enabled=always_listen_check.isChecked(),
-        )
-        labels = {"ok": "OK", "warning": "WARN", "error": "ERROR"}
+    def show_system_health(checks: list[Any]) -> None:
+        from hellsaiz_pc_ai.app.health import summarize_health
+        level, summary = summarize_health(checks)
+        labels = {"ok": "ВСЁ В ПОРЯДКЕ", "warning": "ЕСТЬ ПРЕДУПРЕЖДЕНИЯ", "error": "ОБНАРУЖЕНЫ ОШИБКИ"}
+        health_summary_status.setText(f"{labels[level]} · {summary}")
+        detail_labels = {"ok": "OK", "warning": "WARN", "error": "ERROR"}
         speech_health_status.setText(
             "\\n".join(
-                f"[{labels[item.level]}] {item.component}: {item.message}"
+                f"[{detail_labels[item.level]}] {item.component}: {item.message}"
                 for item in checks
             )
         )
 
-    speech_health_button.clicked.connect(refresh_speech_health)
-    refresh_speech_health()
+    def refresh_system_health() -> None:
+        if any(worker.isRunning() for worker in system_health_workers):
+            return
+        speech_health_button.setEnabled(False)
+        health_summary_status.setText("ВЫПОЛНЯЕТСЯ ДИАГНОСТИКА…")
+        speech_health_status.setText("Проверка не открывает микрофон и не изменяет историю или сценарии.")
+        worker = SystemHealthWorker(
+            active_stt.copy(),
+            active_microphone["name"],
+            always_listen_check.isChecked(),
+            str(profile_data.get("piper_voice_id") or ""),
+            str(profile_data.get("tts_engine") or "sapi5"),
+        )
+        system_health_workers.append(worker)
+
+        def on_failed(message: str) -> None:
+            health_summary_status.setText("ДИАГНОСТИКА НЕ ЗАВЕРШЕНА")
+            speech_health_status.setText(f"Не удалось выполнить диагностику: {message}")
+
+        worker.completed.connect(show_system_health)
+        worker.failed.connect(on_failed)
+        worker.finished.connect(lambda: speech_health_button.setEnabled(True))
+        worker.finished.connect(
+            lambda: system_health_workers.remove(worker)
+            if worker in system_health_workers else None
+        )
+        worker.start()
+
+    speech_health_button.clicked.connect(refresh_system_health)
+    refresh_system_health()
 
     def stop_wake_listener() -> None:
         worker = wake_listener_state["worker"]
@@ -3867,6 +3926,7 @@ def main() -> int:
             workers,
             update_workers,
             provider_health_workers,
+            system_health_workers,
             startup_workers,
             network_workers,
             ocr_model_workers,

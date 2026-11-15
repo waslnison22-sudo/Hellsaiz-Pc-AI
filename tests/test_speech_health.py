@@ -1,7 +1,16 @@
 from pathlib import Path
 
-from hellsaiz_pc_ai.app.health import collect_speech_health
+from hellsaiz_pc_ai.app.health import (
+    HealthItem,
+    collect_speech_health,
+    collect_storage_health,
+    summarize_health,
+)
 from hellsaiz_pc_ai.speech.capture import InputDevice
+from hellsaiz_pc_ai.storage.reminders import ReminderStore
+from hellsaiz_pc_ai.storage.sqlite_store import ChatStore
+from hellsaiz_pc_ai.workflows.graph import WorkflowGraph
+from hellsaiz_pc_ai.workflows.library import WorkflowLibrary
 
 
 def test_health_reports_missing_vosk_and_optional_fallback(tmp_path: Path, monkeypatch):
@@ -57,3 +66,74 @@ def test_health_reports_installed_local_engines(tmp_path: Path, monkeypatch):
     )
 
     assert all(item.level == "ok" for item in checks)
+
+def test_storage_health_checks_sqlite_and_workflows_read_only(tmp_path: Path):
+    database = tmp_path / "data folder" / "history.sqlite3"
+    ChatStore(database)
+    ReminderStore(database)
+    workflow_dir = tmp_path / "data folder" / "workflows"
+    library = WorkflowLibrary(workflow_dir)
+    graph = WorkflowGraph.from_dict({
+        "name": "Open notepad",
+        "nodes": [
+            {"id": "start", "type": "trigger.text", "config": {"phrase": "блокнот"}},
+            {"id": "open", "type": "action.tool", "config": {"name": "open_app", "arguments": {"app": "notepad"}}},
+        ],
+        "edges": [{"from": "start", "to": "open"}],
+    })
+    library.save("test", graph)
+
+    checks = collect_storage_health(database_path=database, workflows_path=workflow_dir)
+    by_component = {item.component: item for item in checks}
+
+    assert by_component["История SQLite"].level == "ok"
+    assert by_component["Библиотека сценариев"].level == "ok"
+    assert by_component["Пользовательское хранилище"].level == "ok"
+    ChatStore(database).add_message("user", "после диагностики")
+    assert ChatStore(database).recent_messages()[-1]["content"] == "после диагностики"
+
+
+def test_storage_health_reports_corrupt_database_and_invalid_workflow(tmp_path: Path):
+    database = tmp_path / "history.sqlite3"
+    database.write_bytes(b"not a sqlite database")
+    workflow_dir = tmp_path / "workflows"
+    workflow_dir.mkdir()
+    (workflow_dir / "broken.json").write_text("{invalid", encoding="utf-8")
+
+    checks = collect_storage_health(database_path=database, workflows_path=workflow_dir)
+    by_component = {item.component: item for item in checks}
+
+    assert by_component["История SQLite"].level == "error"
+    assert by_component["Библиотека сценариев"].level == "warning"
+
+
+def test_storage_health_reports_missing_database_and_uninitialized_workflows(tmp_path: Path):
+    checks = collect_storage_health(
+        database_path=tmp_path / "missing" / "history.sqlite3",
+        workflows_path=tmp_path / "missing" / "workflows",
+    )
+    by_component = {item.component: item for item in checks}
+
+    assert by_component["История SQLite"].level == "error"
+    assert by_component["Библиотека сценариев"].level == "warning"
+    assert by_component["Пользовательское хранилище"].level == "error"
+
+
+def test_health_summary_uses_worst_level_and_counts():
+    checks = [
+        HealthItem("a", "ok", "ok"),
+        HealthItem("b", "warning", "warn"),
+        HealthItem("c", "error", "error"),
+    ]
+
+    level, summary = summarize_health(checks)
+
+    assert level == "error"
+    assert summary == "OK: 1 · предупреждения: 1 · ошибки: 1"
+
+
+def test_empty_health_summary_is_warning():
+    level, summary = summarize_health([])
+
+    assert level == "warning"
+    assert "не вернула результатов" in summary.casefold()

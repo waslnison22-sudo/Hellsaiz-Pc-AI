@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
+import shutil
+import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -142,3 +145,152 @@ def collect_speech_health(
             "TTS", "warning", f"Неизвестный выбранный движок: {tts_engine}",
         ))
     return checks
+
+def collect_storage_health(
+    *, database_path: Path, workflows_path: Path, low_disk_warning_bytes: int = 128 * 1024 * 1024
+) -> list[HealthItem]:
+    """Inspect local storage without creating, migrating, or modifying user data."""
+    database_path = Path(database_path)
+    workflows_path = Path(workflows_path)
+    checks: list[HealthItem] = []
+
+    if not database_path.is_file():
+        checks.append(HealthItem(
+            "История SQLite", "error",
+            f"Файл базы истории не найден: {database_path}",
+        ))
+    else:
+        connection: sqlite3.Connection | None = None
+        try:
+            database_uri = database_path.resolve().as_uri() + "?mode=ro"
+            connection = sqlite3.connect(database_uri, uri=True, timeout=1.5)
+            connection.execute("PRAGMA query_only = ON")
+            integrity = connection.execute("PRAGMA quick_check(1)").fetchone()
+            if not integrity or integrity[0] != "ok":
+                detail = str(integrity[0])[:240] if integrity else "нет результата"
+                checks.append(HealthItem(
+                    "История SQLite", "error",
+                    f"Проверка целостности не пройдена: {detail}",
+                ))
+            else:
+                tables = {
+                    str(row[0])
+                    for row in connection.execute(
+                        "SELECT name FROM sqlite_master WHERE type = 'table'"
+                    ).fetchall()
+                }
+                missing = {"messages", "reminders"} - tables
+                if missing:
+                    checks.append(HealthItem(
+                        "История SQLite", "error",
+                        "Не найдены таблицы: " + ", ".join(sorted(missing)),
+                    ))
+                else:
+                    checks.append(HealthItem(
+                        "История SQLite", "ok",
+                        "База открывается только для чтения; quick_check и схема пройдены.",
+                    ))
+        except (sqlite3.Error, OSError, ValueError) as exc:
+            checks.append(HealthItem(
+                "История SQLite", "error",
+                f"Не удалось безопасно проверить базу: {type(exc).__name__}: {exc}",
+            ))
+        finally:
+            if connection is not None:
+                connection.close()
+
+    if not workflows_path.exists():
+        checks.append(HealthItem(
+            "Библиотека сценариев", "warning",
+            "Папка сценариев ещё не создана; она появится при инициализации библиотеки.",
+        ))
+    elif not workflows_path.is_dir():
+        checks.append(HealthItem(
+            "Библиотека сценариев", "error",
+            f"Путь сценариев не является папкой: {workflows_path}",
+        ))
+    else:
+        from hellsaiz_pc_ai.workflows.graph import WorkflowGraph
+
+        valid_count = 0
+        invalid_names: list[str] = []
+        try:
+            for path in sorted(workflows_path.glob("*.json")):
+                try:
+                    graph_data = json.loads(path.read_text(encoding="utf-8"))
+                    WorkflowGraph.from_dict(graph_data)
+                    valid_count += 1
+                except (OSError, TypeError, ValueError, json.JSONDecodeError):
+                    invalid_names.append(path.name)
+        except OSError as exc:
+            checks.append(HealthItem(
+                "Библиотека сценариев", "error",
+                f"Не удалось прочитать папку сценариев: {exc}",
+            ))
+        else:
+            if invalid_names:
+                examples = ", ".join(invalid_names[:4])
+                suffix = " …" if len(invalid_names) > 4 else ""
+                checks.append(HealthItem(
+                    "Библиотека сценариев", "warning",
+                    f"Рабочих сценариев: {valid_count}; повреждённых файлов: "
+                    f"{len(invalid_names)} ({examples}{suffix}).",
+                ))
+            else:
+                checks.append(HealthItem(
+                    "Библиотека сценариев", "ok",
+                    f"Папка доступна; корректных сценариев: {valid_count}.",
+                ))
+
+    data_root = database_path.parent
+    if not data_root.is_dir():
+        checks.append(HealthItem(
+            "Пользовательское хранилище", "error",
+            f"Каталог данных недоступен: {data_root}",
+        ))
+    elif not os.access(data_root, os.W_OK):
+        checks.append(HealthItem(
+            "Пользовательское хранилище", "error",
+            f"Нет прав на запись в каталог данных: {data_root}",
+        ))
+    else:
+        try:
+            free_bytes = shutil.disk_usage(data_root).free
+            free_mib = free_bytes / (1024 * 1024)
+            if free_bytes < low_disk_warning_bytes:
+                checks.append(HealthItem(
+                    "Свободное место", "warning",
+                    f"Осталось {free_mib:.0f} МиБ; загрузка моделей и обновлений может не поместиться.",
+                ))
+            else:
+                checks.append(HealthItem(
+                    "Пользовательское хранилище", "ok",
+                    f"Каталог доступен для записи; свободно {free_mib:.0f} МиБ.",
+                ))
+        except OSError as exc:
+            checks.append(HealthItem(
+                "Пользовательское хранилище", "warning",
+                f"Не удалось определить свободное место: {exc}",
+            ))
+    return checks
+
+
+def summarize_health(checks: list[HealthItem]) -> tuple[HealthLevel, str]:
+    """Return the worst observed level and compact counts for the settings UI."""
+    counts = {
+        level: sum(item.level == level for item in checks)
+        for level in ("ok", "warning", "error")
+    }
+    if counts["error"]:
+        level: HealthLevel = "error"
+    elif counts["warning"] or not checks:
+        level = "warning"
+    else:
+        level = "ok"
+    summary = (
+        f"OK: {counts['ok']} · предупреждения: {counts['warning']} · "
+        f"ошибки: {counts['error']}"
+    )
+    if not checks:
+        summary = "Диагностика не вернула результатов."
+    return level, summary
