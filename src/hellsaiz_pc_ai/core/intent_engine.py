@@ -33,7 +33,8 @@ class IntentEngine:
 
     def resolve(self, utterance: str) -> IntentMatch | None:
         normalized = unicodedata.normalize("NFKC", utterance).casefold().replace("ё", "е")
-        normalized = " ".join(normalized.split()).strip(" \\t\\r\\n.,!?;:…")
+        normalized = " ".join(normalized.split())
+        normalized = re.sub(r"^[\s.,!?;:…]+|[\s.,!?;:…]+$", "", normalized)
         for item in self._patterns:
             match = item.pattern.fullmatch(normalized)
             if match is None:
@@ -69,7 +70,7 @@ def build_default_intent_engine() -> IntentEngine:
     engine = IntentEngine()
     engine.register(
         "web_search",
-        r"(?:найди(?:\s+в\s+(?:интернете|сети))?|поищи(?:\s+в\s+(?:интернете|сети))?|загугли|поиск)\s+(?P<query>.+)",
+        r"(?:найди(?!\s+(?:файл|папку|элемент)\s+.+\s+в\s+папке)(?:\s+в\s+(?:интернете|сети))?|поищи(?:\s+в\s+(?:интернете|сети))?|загугли|поиск)\s+(?P<query>.+)",
         r"(?:найди информацию|поищи информацию|что известно|расскажи|проверь в интернете)\s+(?:о|об|про)?\s*(?P<query>.+)",
     )
     engine.register(
