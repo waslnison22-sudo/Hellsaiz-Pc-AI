@@ -107,3 +107,19 @@ Qt documents that GUI classes must stay on the main thread and recommends worker
 5. A typed capability/permission layer for future plugins, preserving the existing allowlist and argument-schema gate.
 
 These investigations must be followed by unit tests and Windows integration checks before being marked complete.
+
+## 8. Hands-free audio capture and callback isolation
+
+**Implementation**
+
+- Wake-word capture uses blocking RawInputStream.read() inside the dedicated listener worker instead of a PortAudio callback plus a Python queue.
+- Vosk recognition, status notifications and wake/command state transitions all run outside the real-time audio callback path.
+- The read loop checks the stop event between fixed 4000-frame reads; at the supported 8–48 kHz sample-rate range this bounds stop responsiveness to at most about half a second, excluding device/driver stalls.
+- PortAudio input overflow is now reported to the user instead of silently replacing old queued blocks.
+- Audio remains in memory and is not persisted.
+
+**External guidance**
+
+python-sounddevice documents blocking RawInputStream.read() as returning a buffer and an overflow flag. It also warns that callback streams run at very high/real-time priority and should avoid operations that may block or take unpredictable time:
+- https://python-sounddevice.readthedocs.io/en/latest/api/raw-streams.html
+- https://python-sounddevice.readthedocs.io/en/latest/api/streams.html

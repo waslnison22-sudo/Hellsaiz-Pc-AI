@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import queue
 import re
 import threading
 import time
@@ -38,10 +37,10 @@ def extract_wake_command(
 class WakeWordListener:
     """Explicitly enabled, local Vosk wake-word listener.
 
-    Audio is processed from an in-memory queue, never written to disk. After the
-    wake alias is detected, the next utterance is captured as a command. An
-    utterance that contains both the wake alias and the command is dispatched
-    immediately.
+    Blocking RawInputStream reads keep recognition work out of PortAudio's
+    real-time callback. Audio stays in memory and is never written to disk.
+    After the wake alias is detected, the next utterance is captured as a
+    command. A single utterance containing both is dispatched immediately.
     """
 
     def __init__(
@@ -52,7 +51,6 @@ class WakeWordListener:
         on_status: Callable[[str], None] | None = None,
         sample_rate: int = 16000,
         command_timeout_seconds: float = 8.0,
-        queue_blocks: int = 64,
         device: str | int | None = None,
     ) -> None:
         self.model_dir = Path(model_dir)
@@ -67,7 +65,6 @@ class WakeWordListener:
         self.on_status = on_status or (lambda _: None)
         self.sample_rate = sample_rate
         self.command_timeout_seconds = command_timeout_seconds
-        self.queue_blocks = max(8, min(int(queue_blocks), 256))
         self.device = device
         self._stop = threading.Event()
 
@@ -86,24 +83,6 @@ class WakeWordListener:
                 'Для фоновой активации установи голосовые зависимости: pip install -e ".[voice]"'
             ) from exc
 
-        audio_queue: queue.Queue[bytes] = queue.Queue(maxsize=self.queue_blocks)
-
-        def audio_callback(indata, frames, timing, status) -> None:
-            if status:
-                self.on_status(f"Микрофон: {status}")
-            block = bytes(indata)
-            try:
-                audio_queue.put_nowait(block)
-            except queue.Full:
-                try:
-                    audio_queue.get_nowait()
-                except queue.Empty:
-                    pass
-                try:
-                    audio_queue.put_nowait(block)
-                except queue.Full:
-                    pass
-
         try:
             from hellsaiz_pc_ai.speech.capture import resolve_input_sample_rate
 
@@ -118,24 +97,23 @@ class WakeWordListener:
             awaiting_command = False
             command_deadline = 0.0
             self.on_status("Ожидаю обращение «Хеллсайз»…")
+            read_frames = 4000
             with sd.RawInputStream(
                 samplerate=sample_rate,
-                blocksize=4000,
+                blocksize=read_frames,
                 channels=1,
                 dtype="int16",
                 device=selected_device,
-                callback=audio_callback,
-            ):
+            ) as stream:
                 while not self._stop.is_set():
-                    try:
-                        block = audio_queue.get(timeout=0.2)
-                    except queue.Empty:
-                        if awaiting_command and time.monotonic() >= command_deadline:
-                            awaiting_command = False
-                            recognizer = KaldiRecognizer(model, sample_rate)
-                            self.on_status("Ожидаю обращение…")
-                        continue
-
+                    block, overflowed = stream.read(read_frames)
+                    if self._stop.is_set():
+                        break
+                    if overflowed:
+                        self.on_status(
+                            "Микрофон: входной аудиобуфер переполнился; часть сигнала могла потеряться. "
+                            "Уменьши нагрузку на компьютер или проверь устройство."
+                        )
                     if not recognizer.AcceptWaveform(block):
                         continue
                     result = json.loads(recognizer.Result())

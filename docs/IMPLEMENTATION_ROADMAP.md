@@ -7,7 +7,7 @@ Implemented: deterministic local command router, single-instance lock, SQLite hi
 Still required: real Windows CI on Python 3.11/3.12 and live tests of reminders, clipboard, workflows, shutdown, microphone and TTS; verify the diagnostics worker and GUI signal delivery on Windows.
 
 ## P1 — platform foundations
-Implemented: provider/speech/wake-name separation, DPAPI-backed secrets, Vosk/Whisper.cpp STT paths, SAPI5/Piper TTS, voice profiles and local command routing.
+Implemented: provider/speech/wake-name separation, DPAPI-backed secrets, Vosk/Whisper.cpp STT paths, SAPI5/Piper TTS, voice profiles and local command routing; Hands-free reads from a blocking RawInputStream in its worker thread and reports input overflow.
 
 ## P2 — language and intent
 Implemented: Russian deterministic intent/slot routes, wake aliases, app aliases, NFKC/casefold plus ё/е normalization, and refusal to guess ambiguous app/window matches. Fuzzy matching is deliberately not used for side-effecting app launches.

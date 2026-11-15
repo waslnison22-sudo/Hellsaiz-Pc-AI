@@ -59,13 +59,20 @@ def test_listener_opens_selected_microphone_device(tmp_path, monkeypatch):
             self.model = model
             self.sample_rate = sample_rate
 
+        def AcceptWaveform(self, _block):
+            return False
+
     class FakeStream:
         def __init__(self, **kwargs):
             listener_box["kwargs"] = kwargs
 
         def __enter__(self):
-            listener_box["listener"].stop()
             return self
+
+        def read(self, frames):
+            listener_box["frames"] = frames
+            listener_box["listener"].stop()
+            return b"\\x00" * (frames * 2), True
 
         def __exit__(self, exc_type, exc, traceback):
             return False
@@ -85,10 +92,12 @@ def test_listener_opens_selected_microphone_device(tmp_path, monkeypatch):
     from hellsaiz_pc_ai.speech.vosk import VoskTranscriber
 
     VoskTranscriber.clear_model_cache()
+    statuses = []
     listener = WakeWordListener(
         model_dir,
         ["Хелл"],
         lambda _: None,
+        on_status=statuses.append,
         device="USB Mic · WASAPI",
     )
     listener_box["listener"] = listener
@@ -96,6 +105,10 @@ def test_listener_opens_selected_microphone_device(tmp_path, monkeypatch):
     try:
         listener.listen()
         assert listener_box["kwargs"]["device"] == 7
+        assert listener_box["kwargs"]["blocksize"] == 4000
+        assert "callback" not in listener_box["kwargs"]
+        assert listener_box["frames"] == 4000
+        assert any("переполнился" in status for status in statuses)
         assert len(VoskTranscriber._model_cache) == 1
     finally:
         VoskTranscriber.clear_model_cache()
