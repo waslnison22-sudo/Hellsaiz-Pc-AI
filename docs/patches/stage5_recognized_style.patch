@@ -1,0 +1,16 @@
+# Патч этапа 5: приглушить строку «Распознано:» в чате (визуальный мусор).
+# Применяется после stage1..stage4 конвейером apply_pending_patches.py.
+--- a/src/hellsaiz_pc_ai/app/desktop.py
++++ b/src/hellsaiz_pc_ai/app/desktop.py
+@@ -3604,7 +3604,10 @@
+ 
+         def show_result(recognized: str, answer: str) -> None:
+             if voice_input:
+-                transcript.append(f"<p><b>Распознано:</b> {escape(recognized)}</p>")
++                transcript.append(
++                    "<p style='color:#8a93a1; font-size:11px;'>"
++                    f"<b>Распознано:</b> {escape(recognized)}</p>"
++                )
+             safe_answer = escape(answer).replace("\n", "<br>")
+             transcript.append(f"<p><b>Hellsaiz:</b> {safe_answer}</p>")
+ 
