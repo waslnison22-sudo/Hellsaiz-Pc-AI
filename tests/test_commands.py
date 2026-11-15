@@ -43,6 +43,21 @@ def make_router(allowed_apps=None, app_aliases=None, wake_aliases=None, allowed_
         RiskLevel.SAFE, lambda args: ToolResult(True, f"media {args['key']}"),
     ))
     registry.register(ToolSpec(
+        "start_vpn", "start vpn",
+        {"type": "object", "properties": {}, "additionalProperties": False},
+        RiskLevel.SAFE, lambda _: ToolResult(True, "vpn started"),
+    ))
+    registry.register(ToolSpec(
+        "stop_vpn", "stop vpn",
+        {"type": "object", "properties": {}, "additionalProperties": False},
+        RiskLevel.CONFIRM, lambda _: ToolResult(True, "vpn stopped"),
+    ))
+    registry.register(ToolSpec(
+        "vpn_status", "vpn status",
+        {"type": "object", "properties": {}, "additionalProperties": False},
+        RiskLevel.SAFE, lambda _: ToolResult(True, "vpn status ok"),
+    ))
+    registry.register(ToolSpec(
         "adjust_volume", "adjust volume",
         {"type": "object", "properties": {"delta": {"type": "integer"}}, "required": ["delta"]},
         RiskLevel.CONFIRM, lambda args: ToolResult(True, f"adjusted {args['delta']}"),
@@ -215,6 +230,14 @@ def test_relative_volume_uses_adjust_volume():
     assert router.route("убавь громкость на 5", approve) in ack_variants("adjusted -5")
     step_router = make_router(volume_step=25)
     assert step_router.route("громче", approve) in ack_variants("adjusted 25")
+
+
+def test_vpn_commands_route_to_vpn_tools():
+    router = make_router()
+    assert router.route("включи впн", approve) in ack_variants("vpn started")
+    assert router.route("подключи vpn", deny) in ack_variants("vpn started")
+    assert router.route("выключи впн", deny) in ack_variants("vpn stopped")
+    assert router.route("проверь впн", approve) in ack_variants("vpn status ok")
 
 
 def test_close_process_runs_immediately_but_keeps_allowlist():
