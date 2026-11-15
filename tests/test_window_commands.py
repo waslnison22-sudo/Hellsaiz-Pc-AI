@@ -2,6 +2,7 @@ from hellsaiz_pc_ai.core.commands import CommandRouter
 from hellsaiz_pc_ai.core.models import RiskLevel, ToolResult
 from hellsaiz_pc_ai.core.registry import ToolRegistry, ToolSpec
 
+
 def make_router():
     registry = ToolRegistry()
     called = []
@@ -79,6 +80,7 @@ def make_router():
     router = CommandRouter(registry, {}, {}, {})
     return router, called
 
+
 def test_active_window_phrases_map_to_registered_tools():
     router, called = make_router()
     expected = {
@@ -94,6 +96,7 @@ def test_active_window_phrases_map_to_registered_tools():
 
     assert [name for name, _ in called] == list(expected.values())
 
+
 def test_window_inventory_and_focus_phrases_extract_target():
     router, called = make_router()
 
@@ -107,11 +110,13 @@ def test_window_inventory_and_focus_phrases_extract_target():
         ("focus_window", {"target": "браузер google chrome"}),
     ]
 
+
 def test_unknown_window_command_is_not_guessed():
     router, called = make_router()
 
     assert router.route("сверни все окна и выключи компьютер") is None
     assert called == []
+
 
 def test_ui_automation_phrases_route_to_scoped_tools():
     router, called = make_router()
@@ -129,6 +134,7 @@ def test_ui_automation_phrases_route_to_scoped_tools():
         ),
     ]
 
+
 def test_keyboard_shortcut_voice_command_uses_scoped_safe_schema():
     router, called = make_router()
 
@@ -139,6 +145,7 @@ def test_keyboard_shortcut_voice_command_uses_scoped_safe_schema():
         ("send_keyboard_shortcut", {"shortcut": "CTRL+L", "window_title": "Браузер"}),
         ("send_keyboard_shortcut", {"shortcut": "F5", "window_title": "Проводник"}),
     ]
+
 
 def test_unlisted_keyboard_shortcut_is_rejected_by_schema():
     router, called = make_router()
