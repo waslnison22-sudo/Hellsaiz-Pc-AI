@@ -6,6 +6,7 @@ import unicodedata
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote_plus
 
 from hellsaiz_pc_ai.core.models import ToolResult
 from hellsaiz_pc_ai.core.intent_engine import build_default_intent_engine
@@ -112,6 +113,7 @@ HELP_TEXT = (
     "• «прочитай буфер обмена», «скопируй текст»\n"
     "• «напомни через 5 минут…», «напомни в 22:00 …», «мои напоминания»\n"
     "• «сколько будет 12 умножить на 3», «15 процентов от 200»\n"
+    "• «включи музыку дождь», «включи песню Егор Крид» — Яндекс Музыка\n"
     "• «открой сайт example.com»\n"
     "• «найди в интернете…», «поищи информацию о…»\n"
     "• «погода в Москве», «курс доллара к рублю»\n"
@@ -145,6 +147,15 @@ FAILURES = (
     "Не получилось.",
     "Не вышло.",
 )
+
+# Манера подтверждений зависит от выбранного голоса/профиля ассистента.
+# Новые персоны добавляются сюда же; неизвестная персона получает нейтральный пул.
+PERSONA_ACKS: dict[str, tuple[str, ...]] = {
+    "джарвис": ("Принято.", "Выполняю.", "Сделано, сэр.", "Есть.", "Готово, сэр."),
+    "хеллсайз": ("Готово.", "Сделано.", "Готово!", "Выполнено.", "Хорошо, сделано."),
+}
+# Город по умолчанию для погоды, пока пользователь не задаёт его в настройках.
+DEFAULT_CITY = "Ставрополь"
 
 
 class CommandRouter:
@@ -212,8 +223,10 @@ class CommandRouter:
         allowed_processes: dict[str, str] | None = None,
         app_aliases: dict[str, tuple[str, ...]] | None = None,
         wake_aliases: tuple[str, ...] | list[str] | None = None,
+        persona: str | None = None,
     ) -> None:
         self.registry = registry
+        self.persona = (persona or "хеллсайз").casefold().strip()
         self.allowed_apps = {name.casefold(): command for name, command in allowed_apps.items()}
         aliases = wake_aliases or ("Хеллсайз", "Хелсайз", "Хелл", "Hellsaiz", "Hell", "Хелп", "Help")
         self.wake_aliases = tuple(
@@ -283,9 +296,9 @@ class CommandRouter:
                 )
             if intent.name == "weather":
                 city = re.sub(r"\s+(?:сейчас|сегодня)$", "", intent.slots.get("city", "")).strip()
-                if not city:
-                    return "Для какого города узнать погоду?"
-                return self._execute("get_weather", {"city": city}, confirm)
+                return self._execute(
+                    "get_weather", {"city": city or DEFAULT_CITY}, confirm
+                )
             if intent.name == "exchange_rate":
                 currency_names = {
                     "доллар": "USD", "доллара": "USD", "доллары": "USD", "долларов": "USD",
@@ -302,6 +315,14 @@ class CommandRouter:
                     {"base": base, "quote_currency": quote_currency},
                     confirm,
                 )
+
+        if re.fullmatch(
+            r"(?:я\s+)?(?:сейчас\s+)?(?:собираюсь|иду|пойду|выхожу|хочу)\s+(?:сейчас\s+)?"
+            r"(?:на\s+|в\s+)?(?:погулять|гулять|прогуляться)",
+            command,
+        ):
+            # Собирается на улицу — сначала погода, город по умолчанию.
+            return self._execute("get_weather", {"city": DEFAULT_CITY}, confirm)
 
         if command in {"помощь", "команды", "список команд", "что умеешь", "help", "/help"}:
             return HELP_TEXT
@@ -641,6 +662,21 @@ class CommandRouter:
                     return self._execute("open_url", {"url": target[7:].strip()}, confirm)
                 if target in {"youtube", "ютуб"}:
                     return self._execute("open_url", {"url": "https://www.youtube.com"}, confirm)
+                music_match = re.fullmatch(
+                    r"(?:музыку|музыка|песню|песенку|трек|композицию|сингл)\s+(.+)",
+                    target,
+                )
+                if music_match:
+                    query = quote_plus(music_match.group(1).strip())
+                    return self._execute(
+                        "open_url",
+                        {"url": f"https://music.yandex.ru/search?text={query}"},
+                        confirm,
+                    )
+                if target in {"музыка", "музыку", "яндекс музыка", "яндекс музыку"}:
+                    return self._execute(
+                        "open_url", {"url": "https://music.yandex.ru"}, confirm
+                    )
                 normalized_target = self._normalize_phrase(target)
                 alias = self.app_alias_lookup.get(
                     normalized_target,
@@ -657,5 +693,5 @@ class CommandRouter:
         self, name: str, arguments: dict[str, Any], confirm: ConfirmCallback | None
     ) -> str:
         result: ToolResult = self.registry.execute(name, arguments, confirm)
-        prefixes = ACKNOWLEDGMENTS if result.ok else FAILURES
-        return f"{random.choice(prefixes)} " + result.output
+        ack_pool = PERSONA_ACKS.get(self.persona, ACKNOWLEDGMENTS) if result.ok else FAILURES
+        return f"{random.choice(ack_pool)} " + result.output
