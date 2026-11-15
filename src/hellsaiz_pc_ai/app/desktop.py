@@ -289,6 +289,24 @@ def main() -> int:
         from hellsaiz_pc_ai.app.workflow_studio import WorkflowStudioPage
         from hellsaiz_pc_ai.telegram.config import TelegramSettings, load_settings as load_telegram_settings, save_settings as save_telegram_settings
         from hellsaiz_pc_ai.telegram.worker import TelegramBotWorker
+        from hellsaiz_pc_ai.app.ui_workers import (
+            HotkeyBridge,
+            HotkeyDispatcher,
+            NetworkProbeWorker,
+            OcrModelsWorker,
+            ProviderHealthWorker,
+            SapiVoiceListWorker,
+            StartupTaskWorker,
+            SystemHealthBridge,
+            SystemHealthWorker,
+            TelegramStatusBridge,
+            UpdateWorker,
+            VoskModelDownloadWorker,
+            VoiceDownloadWorker,
+            VoiceTestWorker,
+            WakeListenerDispatcher,
+            WakeListenerWorker,
+        )
     except ImportError:
         print("PySide6 is missing. Run: pip install -e .")
         return 2
@@ -396,96 +414,9 @@ def main() -> int:
     wallpaper_movie = None
     wallpaper_layer = None
 
-    class HotkeyBridge(QObject):
-        activated = Signal(str, str)
-
-    class HotkeyDispatcher(QObject):
-        def __init__(self, callback: Any) -> None:
-            super().__init__()
-            self.callback = callback
-
-        @Slot(str, str)
-        def dispatch(self, workflow_id: str, combo: str) -> None:
-            self.callback(workflow_id, combo)
-
-    class VoskModelDownloadWorker(QThread):
-        completed = Signal(str)
-        failed = Signal(str)
-
-        def __init__(self, destination_dir: Path) -> None:
-            super().__init__()
-            self.destination_dir = destination_dir
-
-        def run(self) -> None:
-            try:
-                from hellsaiz_pc_ai.speech.model_library import install_vosk_small_ru
-
-                model_path = install_vosk_small_ru(self.destination_dir)
-                self.completed.emit(str(model_path))
-            except Exception as exc:
-                self.failed.emit(str(exc))
 
     vosk_model_download_workers: list[VoskModelDownloadWorker] = []
 
-    class WakeListenerWorker(QThread):
-        command = Signal(str)
-        status = Signal(str)
-        failed = Signal(str)
-
-        def __init__(
-            self,
-            model_dir: Path,
-            aliases: tuple[str, ...],
-            device: str | None = None,
-        ) -> None:
-            super().__init__()
-            self.model_dir = model_dir
-            self.aliases = aliases
-            self.device = device
-            self.listener = None
-
-        def run(self) -> None:
-            try:
-                from hellsaiz_pc_ai.speech.wake_listener import WakeWordListener
-
-                self.listener = WakeWordListener(
-                    self.model_dir,
-                    self.aliases,
-                    on_command=self.command.emit,
-                    on_status=self.status.emit,
-                    device=self.device,
-                )
-                self.listener.listen()
-            except Exception as exc:
-                self.failed.emit(str(exc))
-
-        def stop_listener(self) -> None:
-            if self.listener is not None:
-                self.listener.stop()
-
-    class WakeListenerDispatcher(QObject):
-        def __init__(
-            self,
-            on_command: Any,
-            on_status: Any,
-            on_failed: Any,
-        ) -> None:
-            super().__init__()
-            self.on_command = on_command
-            self.on_status = on_status
-            self.on_failed = on_failed
-
-        @Slot(str)
-        def dispatch_command(self, prompt: str) -> None:
-            self.on_command(prompt)
-
-        @Slot(str)
-        def dispatch_status(self, message: str) -> None:
-            self.on_status(message)
-
-        @Slot(str)
-        def dispatch_failed(self, message: str) -> None:
-            self.on_failed(message)
 
     wake_listener_state: dict[str, Any] = {"worker": None, "dispatcher": None}
 
@@ -911,20 +842,6 @@ def main() -> int:
     provider_changed()
 
     provider_health_workers: list[QThread] = []
-
-    class ProviderHealthWorker(QThread):
-        completed = Signal(object)
-        failed = Signal(str)
-
-        def __init__(self, provider: Any) -> None:
-            super().__init__()
-            self.provider = provider
-
-        def run(self) -> None:
-            try:
-                self.completed.emit(self.provider.health_check())
-            except Exception as exc:
-                self.failed.emit(str(exc))
 
     def apply_discovered_model(index: int) -> None:
         value = model_candidates_combo.itemData(index)
@@ -1522,76 +1439,6 @@ def main() -> int:
 
     voice_download_workers: list[QThread] = []
 
-    class VoiceDownloadWorker(QThread):
-        completed = Signal(object)
-        failed = Signal(str)
-
-        def __init__(self, voice_id: str) -> None:
-            super().__init__()
-            self.voice_id = voice_id
-
-        def run(self) -> None:
-            try:
-                result = download_voice(self.voice_id, voice_library_dir)
-                self.completed.emit(result)
-            except (VoiceLibraryError, OSError, ValueError) as exc:
-                self.failed.emit(str(exc))
-            except Exception as exc:
-                logging.exception("Piper voice download failed")
-                self.failed.emit(f"Ошибка загрузки голоса: {exc}")
-
-    class VoiceTestWorker(QThread):
-        completed = Signal(str)
-        failed = Signal(str)
-
-        def __init__(
-            self,
-            engine: str,
-            voice_name: str,
-            model_path: Path | None,
-            rate: int,
-            volume: float,
-        ) -> None:
-            super().__init__()
-            self.engine = engine
-            self.voice_name = voice_name
-            self.model_path = model_path
-            self.rate = rate
-            self.volume = volume
-
-        def run(self) -> None:
-            try:
-                sample = "Привет. Я Хеллсайз. Проверка голосового движка завершена."
-                if self.engine == "piper":
-                    if self.model_path is None:
-                        raise FileNotFoundError("Не выбрана локальная модель Piper.")
-                    PiperSynthesizer(self.model_path).speak(sample)
-                elif self.engine == "sapi5":
-                    from hellsaiz_pc_ai.speech.sapi5 import Sapi5Synthesizer
-
-                    Sapi5Synthesizer(
-                        self.voice_name, self.rate, self.volume
-                    ).speak(sample)
-                else:
-                    raise ValueError(f"Неизвестный голосовой движок: {self.engine}")
-                self.completed.emit(f"Проверка {self.engine} завершена.")
-            except Exception as exc:
-                self.failed.emit(str(exc))
-
-    class SapiVoiceListWorker(QThread):
-        completed = Signal(object)
-        failed = Signal(str)
-
-        def run(self) -> None:
-            try:
-                from hellsaiz_pc_ai.speech.sapi5 import Sapi5Synthesizer
-
-                voices = Sapi5Synthesizer(
-                    "", active_tts["rate"], active_tts["volume"]
-                ).list_voices()
-                self.completed.emit(voices)
-            except Exception as exc:
-                self.failed.emit(str(exc))
 
     def refresh_voice_library() -> None:
         installed_voices_list.clear()
@@ -1625,7 +1472,7 @@ def main() -> int:
             return
         download_voice_button.setEnabled(False)
         voices_status.setText(f"Загружаю {voice_id}: модель, конфигурацию и MODEL_CARD…")
-        worker = VoiceDownloadWorker(voice_id)
+        worker = VoiceDownloadWorker(voice_id, voice_library_dir)
         voice_download_workers.append(worker)
 
         def downloaded(voice: Any) -> None:
@@ -1685,7 +1532,7 @@ def main() -> int:
             return
         refresh_system_voices_button.setEnabled(False)
         voices_status.setText("Получаю список установленных голосов Windows SAPI5…")
-        worker = SapiVoiceListWorker()
+        worker = SapiVoiceListWorker(active_tts["rate"], active_tts["volume"])
         _BACKGROUND_VOICE_WORKERS["sapi_inventory"].append(worker)
 
         def loaded(voices: Any) -> None:
@@ -1935,51 +1782,6 @@ def main() -> int:
     settings_layout.addWidget(speech_health_status)
     system_health_workers: list[QThread] = []
 
-    class SystemHealthWorker(QThread):
-        completed = Signal(object)
-        failed = Signal(str)
-
-        def __init__(self, stt_profile, microphone_device, wake_enabled, voice_id, tts_engine):
-            super().__init__()
-            self.stt_profile = dict(stt_profile)
-            self.microphone_device = microphone_device
-            self.wake_enabled = wake_enabled
-            self.voice_id = voice_id
-            self.tts_engine = tts_engine
-
-        def run(self) -> None:
-            try:
-                from hellsaiz_pc_ai.app.health import collect_speech_health, collect_storage_health
-                voice_models = list_installed_voices(settings.workflows_path.parent / "voices")
-                selected_model = next(
-                    (voice for voice in voice_models if voice.voice_id == self.voice_id), None
-                )
-                checks = collect_speech_health(
-                    stt_primary=self.stt_profile["primary"],
-                    stt_fallback=self.stt_profile["fallback"],
-                    vosk_model_path=Path(self.stt_profile["vosk_model_path"]),
-                    whisper_executable=(
-                        Path(self.stt_profile["whisper_cpp_executable"])
-                        if self.stt_profile["whisper_cpp_executable"] else None
-                    ),
-                    whisper_model=(
-                        Path(self.stt_profile["whisper_cpp_model"])
-                        if self.stt_profile["whisper_cpp_model"] else None
-                    ),
-                    tts_engine=self.tts_engine,
-                    piper_model_path=selected_model.model_path if selected_model else None,
-                    microphone_device=self.microphone_device,
-                    wake_enabled=self.wake_enabled,
-                )
-                checks.extend(collect_storage_health(
-                    database_path=settings.database_path,
-                    workflows_path=settings.workflows_path,
-                ))
-                self.completed.emit(checks)
-            except Exception as exc:
-                logging.exception("System diagnostics failed")
-                self.failed.emit(f"{type(exc).__name__}: {exc}")
-
     def refresh_microphone_devices() -> None:
         saved_name = active_microphone["name"]
         microphone_combo.clear()
@@ -2144,6 +1946,9 @@ def main() -> int:
             always_listen_check.isChecked(),
             str(profile_data.get("piper_voice_id") or ""),
             str(profile_data.get("tts_engine") or "sapi5"),
+            voices_dir=settings.workflows_path.parent / "voices",
+            database_path=settings.database_path,
+            workflows_path=settings.workflows_path,
         )
         system_health_workers.append(worker)
         worker.completed.connect(system_health_bridge.completed)
@@ -2151,24 +1956,14 @@ def main() -> int:
         worker.finished.connect(system_health_bridge.finished)
         worker.start()
 
-    class SystemHealthBridge(QObject):
-        @Slot(object)
-        def completed(self, checks: list[Any]) -> None:
-            show_system_health(checks)
-
-        @Slot(str)
-        def failed(self, message: str) -> None:
-            health_summary_status.setText("ДИАГНОСТИКА НЕ ЗАВЕРШЕНА")
-            speech_health_status.setText(f"Не удалось выполнить диагностику: {message}")
-
-        @Slot()
-        def finished(self) -> None:
-            speech_health_button.setEnabled(True)
-            for worker in tuple(system_health_workers):
-                if not worker.isRunning():
-                    system_health_workers.remove(worker)
-
-    system_health_bridge = SystemHealthBridge(window)
+    system_health_bridge = SystemHealthBridge(
+        summary_status=health_summary_status,
+        detail_status=speech_health_status,
+        health_button=speech_health_button,
+        workers_list=system_health_workers,
+        on_completed=show_system_health,
+        parent=window,
+    )
 
     speech_health_button.clicked.connect(refresh_system_health)
     refresh_system_health()
@@ -2284,28 +2079,6 @@ def main() -> int:
     ocr_model_workers: list[QThread] = []
     ocr_model_state = {"ready": False}
 
-    class OcrModelsWorker(QThread):
-        progress = Signal(str, str)
-        completed = Signal(object)
-        failed = Signal(str)
-
-        def __init__(self, *, download: bool) -> None:
-            super().__init__()
-            self.download = download
-
-        def run(self) -> None:
-            try:
-                if self.download:
-                    status = download_russian_ocr_models(
-                        ocr_models_root,
-                        progress=self.progress.emit,
-                    )
-                else:
-                    status = check_russian_ocr_models(ocr_models_root)
-                self.completed.emit(status)
-            except Exception as exc:
-                self.failed.emit(f"{type(exc).__name__}: {exc}")
-
     ocr_title = QLabel("ЛОКАЛЬНОЕ РАСПОЗНАВАНИЕ ЭКРАНА")
     ocr_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
     settings_layout.addWidget(ocr_title)
@@ -2390,7 +2163,7 @@ def main() -> int:
             "Загружаю и проверяю русские OCR-модели…"
             if download else "Проверяю SHA-256 русских OCR-моделей…"
         )
-        worker = OcrModelsWorker(download=download)
+        worker = OcrModelsWorker(download=download, models_root=ocr_models_root)
         ocr_model_workers.append(worker)
 
         def on_completed(status: Any) -> None:
@@ -2646,26 +2419,6 @@ def main() -> int:
 
     network_workers: list[QThread] = []
 
-    class NetworkProbeWorker(QThread):
-        completed = Signal(object)
-        failed = Signal(str)
-
-        def __init__(self, config: dict[str, Any]) -> None:
-            super().__init__()
-            self.config = dict(config)
-
-        def run(self) -> None:
-            try:
-                result = v2raytun.build_network_status(
-                    self.config["executable_path"],
-                    self.config["proxy_url"],
-                    self.config["health_url"],
-                    require_proxy=self.config["require_proxy_for_telegram"],
-                )
-                self.completed.emit(result)
-            except Exception as exc:
-                self.failed.emit(f"{type(exc).__name__}: {exc}")
-
     def check_v2raytun_health() -> None:
         if not persist_network_settings():
             return
@@ -2761,9 +2514,6 @@ def main() -> int:
     telegram_status.setWordWrap(True)
     telegram_status.setStyleSheet("color:#929aa6;")
     settings_layout.addWidget(telegram_status)
-
-    class TelegramStatusBridge(QObject):
-        status = Signal(str)
 
     telegram_status_bridge = TelegramStatusBridge()
     telegram_status_bridge.status.connect(telegram_status.setText)
@@ -2951,33 +2701,6 @@ def main() -> int:
 
     startup_workers: list[QThread] = []
 
-    class StartupTaskWorker(QThread):
-        completed = Signal(bool, str)
-
-        def __init__(self, enabled: bool, target: Path) -> None:
-            super().__init__()
-            self.enabled = enabled
-            self.target = target
-
-        def run(self) -> None:
-            try:
-                if self.enabled:
-                    startup_task.register_startup_task(self.target)
-                else:
-                    startup_task.unregister_startup_task()
-                registered = startup_task.is_registered()
-                if registered != self.enabled:
-                    raise startup_task.StartupTaskError(
-                        "Планировщик не подтвердил запрошенное состояние автозапуска."
-                    )
-                self.completed.emit(
-                    registered,
-                    "Автозапуск включён при входе в Windows."
-                    if registered else "Автозапуск отключён."
-                )
-            except startup_task.StartupTaskError as exc:
-                self.completed.emit(not self.enabled, str(exc))
-
     def change_startup_task(enabled: bool) -> None:
         if launcher_path is None:
             startup_check.blockSignals(True)
@@ -3072,38 +2795,6 @@ def main() -> int:
     latest_release_url = ""
     latest_update_info: UpdateInfo | None = None
 
-    class UpdateWorker(QThread):
-        checked = Signal(object)
-        downloaded = Signal(object)
-        failed = Signal(str)
-
-        def __init__(self, download: bool = False) -> None:
-            super().__init__()
-            self.download = download
-
-        def run(self) -> None:
-            try:
-                key_path = settings.workflows_path.parent / "update_key.dpapi"
-                access_key = load_secret(key_path)
-                if not access_key.strip():
-                    raise UpdateCheckError(
-                        "Не сохранён GitHub Token. Создай Fine-grained token для "
-                        "waslnison22-sudo/Hellsaiz-Pc-AI с правом Contents: Read "
-                        "и сохрани его в этом разделе."
-                    )
-                result = check_latest_release(current_app_version, access_key)
-                self.checked.emit(result)
-                if self.download and result.update_available:
-                    if install_root is None:
-                        raise UpdateCheckError("Установочная папка не определена.")
-                    prepared = download_update(result, access_key, install_root)
-                    self.downloaded.emit(prepared)
-            except (UpdateCheckError, SecureStoreError, OSError) as exc:
-                self.failed.emit(str(exc))
-            except Exception as exc:
-                logging.exception("Update operation failed")
-                self.failed.emit(f"Ошибка обновления: {exc}")
-
     def persist_update_preferences() -> None:
         update_preferences["auto_check"] = auto_update_check.isChecked()
         try:
@@ -3143,7 +2834,11 @@ def main() -> int:
         check_update_button.setEnabled(False)
         install_update_button.setEnabled(False)
         update_status.setText("Проверяю канал обновлений…")
-        worker = UpdateWorker()
+        worker = UpdateWorker(
+            settings.workflows_path.parent,
+            current_app_version,
+            install_root,
+        )
         update_workers.append(worker)
 
         def on_checked(info: Any) -> None:
@@ -3196,7 +2891,12 @@ def main() -> int:
         if any(worker.isRunning() for worker in update_workers):
             return
         update_status.setText("Скачиваю и проверяю файлы обновления…")
-        worker = UpdateWorker(download=True)
+        worker = UpdateWorker(
+            settings.workflows_path.parent,
+            current_app_version,
+            install_root,
+            download=True,
+        )
         update_workers.append(worker)
 
         def on_downloaded(prepared: PreparedUpdate) -> None:
