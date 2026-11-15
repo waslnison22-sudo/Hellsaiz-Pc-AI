@@ -9,7 +9,7 @@
 --- a/src/hellsaiz_pc_ai/core/intent_engine.py
 +++ b/src/hellsaiz_pc_ai/core/intent_engine.py
 @@ -36,1 +36,2 @@
--        normalized = " ".join(normalized.split()).strip(" \\t\\r\\n.,!?;:…")
+-        normalized = " ".join(normalized.split()).strip(" \\\\t\\\\r\\\\n.,!?;:…")
 +        normalized = " ".join(normalized.split())
 +        normalized = re.sub(r"^[\s.,!?;:…]+|[\s.,!?;:…]+$", "", normalized)
 @@ -72,1 +73,1 @@
