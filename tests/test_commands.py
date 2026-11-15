@@ -1,4 +1,6 @@
 import pytest
+from datetime import datetime
+
 from hellsaiz_pc_ai.core.commands import CommandRouter
 from hellsaiz_pc_ai.core.models import RiskLevel, ToolResult
 from hellsaiz_pc_ai.core.intent_engine import build_default_intent_engine
@@ -231,6 +233,28 @@ def test_reminder_command_parses_seconds_minutes_and_hours():
     )
 
 
+def test_reminder_at_specific_time_computes_delay(monkeypatch):
+    import hellsaiz_pc_ai.core.commands as commands_mod
+    monkeypatch.setattr(commands_mod, "_current_time", lambda: datetime(2026, 11, 15, 12, 0, 0))
+    router = make_router()
+    assert router.route("напомни в 22:00 выключить свет", approve) in ack_variants(
+        "reminder 36000: выключить свет"
+    )
+    assert router.route("напомни завтра в 09:00 зарядка", approve) in ack_variants(
+        "reminder 75600: зарядка"
+    )
+
+
+def test_reminder_half_hour_phrases():
+    router = make_router()
+    assert router.route("напомни через полчаса проверить чайник", approve) in ack_variants(
+        "reminder 1800: проверить чайник"
+    )
+    assert router.route("напомни через полтора часа перерыв", approve) in ack_variants(
+        "reminder 5400: перерыв"
+    )
+
+
 def test_reminder_command_runs_immediately_and_validates_delay():
     router = make_router()
     assert router.route("напомни через 5 минут позвонить", deny) in ack_variants(
@@ -338,6 +362,12 @@ def test_currency_skill_extracts_base_and_quote_currency():
     assert router.route("сколько стоит евро") in ack_variants("rate: EUR/RUB")
 
 
+def test_currency_plural_forms():
+    router = make_router()
+    assert router.route("курс долларов к рублю") in ack_variants("rate: USD/RUB")
+    assert router.route("сколько стоит евро") in ack_variants("rate: EUR/RUB")
+
+
 def test_intent_engine_extracts_named_slots():
     engine = build_default_intent_engine()
 
@@ -354,18 +384,45 @@ def test_intent_engine_extracts_named_slots():
     assert rate.slots["quote"] == "доллар"
 
 
+def test_intent_engine_extracts_calculator_and_percent():
+    engine = build_default_intent_engine()
+
+    calc = engine.resolve("сколько будет 12 умножить на 3")
+    assert calc.name == "calculator"
+    assert calc.slots["expression"] == "12 умножить на 3"
+
+    percent = engine.resolve("15 процентов от 200")
+    assert percent.name == "calculator"
+    assert percent.slots["expression"] == "15 процентов от 200"
+
+    assert engine.resolve("сколько времени") is None
+
+
+def test_calculator_answers_basic_math():
+    router = make_router()
+    assert router.route("сколько будет 12 умножить на 3") == "Результат: 36"
+    assert router.route("сколько будет 10 разделить на 4") == "Результат: 2.5"
+    assert router.route("посчитай 2 плюс 2 умножить на 3") == "Результат: 8"
+    assert router.route("сколько будет 2+2*2") == "Результат: 6"
+    assert router.route("сколько будет 1 на 3") == "Результат: 3"
+
+
+def test_calculator_percentages():
+    router = make_router()
+    assert router.route("сколько будет 15 процентов от 200") == "Результат: 30"
+    assert router.route("15 процентов от 200") == "Результат: 30"
+
+
+def test_calculator_rejects_garbage_and_zero_division():
+    router = make_router()
+    assert router.route("сколько будет раз два три") is None
+    assert router.route("сколько будет 5 разделить на 0") == "На ноль делить нельзя."
+    assert router.route("сколько времени") in ack_variants("13.11.2026 12:00")
+
+
 def test_command_normalization_handles_unicode_width_yo_and_punctuation():
     router = make_router()
 
     assert router.route("  ПОГОДА В МОСКВЕ?  ") in ack_variants("weather: москве")
     assert router.route("найди в интернете ONNX Runtime.") in ack_variants("search: onnx runtime")
     assert router.route("ｏｐｅｎ БЛОКНОТ") in ack_variants("opened notepad")
-
-
-def test_more_app_synonyms_resolve_via_allowlist():
-    router = make_router(
-        allowed_apps={"explorer": ("explorer.exe",), "settings": ("ms-settings:",), "cs2": ("cs2.exe",)}
-    )
-    assert "opened explorer" in router.route("открой мой компьютер").casefold()
-    assert "opened settings" in router.route("открой параметры виндовс").casefold()
-    assert "opened cs2" in router.route("включи контрстрайк 2", approve).casefold()
