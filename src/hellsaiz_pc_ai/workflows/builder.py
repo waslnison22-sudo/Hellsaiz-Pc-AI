@@ -2,11 +2,9 @@ from __future__ import annotations
 
 from hellsaiz_pc_ai.workflows.graph import WorkflowGraph
 
-
 def terminal_nodes(graph: WorkflowGraph) -> list[str]:
     sources = {edge.source for edge in graph.edges}
     return [node.id for node in graph.nodes if node.id not in sources and not node.kind.startswith("trigger.")]
-
 
 def _append_node(
     graph: WorkflowGraph,
@@ -27,7 +25,6 @@ def _append_node(
     data["edges"].extend(new_edges)
     return WorkflowGraph.from_dict(data)
 
-
 def append_tool_action(
     graph: WorkflowGraph,
     source_id: str,
@@ -46,7 +43,6 @@ def append_tool_action(
         [{"from": source_id, "to": node_id}],
     )
 
-
 def append_wait_action(
     graph: WorkflowGraph, source_id: str, node_id: str, seconds: float
 ) -> WorkflowGraph:
@@ -55,7 +51,6 @@ def append_wait_action(
         [{"id": node_id, "type": "action.wait", "config": {"seconds": seconds}}],
         [{"from": source_id, "to": node_id}],
     )
-
 
 def append_hour_condition(
     graph: WorkflowGraph, source_id: str, condition_id: str, operator: str, hour: int
@@ -74,8 +69,6 @@ def append_hour_condition(
             {"from": condition_id, "to": false_id, "when": "false"},
         ],
     )
-
-
 
 def append_repeat_action(
     graph: WorkflowGraph,
@@ -102,8 +95,6 @@ def append_repeat_action(
         }],
         [{"from": source_id, "to": node_id}],
     )
-
-
 
 def append_weekday_condition(
     graph: WorkflowGraph, source_id: str, condition_id: str, weekday: int
