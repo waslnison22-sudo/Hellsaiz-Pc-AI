@@ -124,42 +124,26 @@ def test_invalid_trigger_and_empty_linear_scenario_are_rejected():
 
 
 def test_nested_condition_cannot_be_silently_edited_as_simple_blocks():
-    graph = build_workflow_graph(
-        name="Первое условие",
-        trigger_kind="text",
-        trigger_config={"phrase": "проверка"},
-        condition={"kind": "hour", "operator": "gte", "value": 22},
-        true_actions=[{"kind": "wait", "seconds": 1}],
-        false_actions=[{"kind": "wait", "seconds": 2}],
-    )
-    data = graph.to_dict()
-    data["nodes"].append({
-        "id": "nested",
-        "type": "condition.weekday",
-        "config": {"value": 1},
-    })
-    # Make this graph valid but intentionally more complex than the guided editor.
-    data["nodes"].append({
-        "id": "nested_true",
-        "type": "action.wait",
-        "config": {"seconds": 0},
-    })
-    data["nodes"].append({
-        "id": "nested_false",
-        "type": "action.wait",
-        "config": {"seconds": 0},
-    })
-    data["edges"] = [
-        edge for edge in data["edges"]
-        if edge["from"] != "condition" or edge.get("when") != "true"
-    ]
-    data["edges"].extend([
-        {"from": "condition", "to": "nested", "when": "true"},
-        {"from": "nested", "to": "nested_true", "when": "true"},
-        {"from": "nested", "to": "nested_false", "when": "false"},
-    ])
     from hellsaiz_pc_ai.workflows.graph import WorkflowGraph
 
-    advanced = WorkflowGraph.from_dict(data)
-    with pytest.raises(ValueError, match="сложный блок|Вложенные условия"):
-        workflow_to_draft(advanced)
+    graph = WorkflowGraph.from_dict({
+        "name": "Вложенное условие",
+        "nodes": [
+            {"id": "start", "type": "trigger.text", "config": {"phrase": "проверка"}},
+            {"id": "hour", "type": "condition.hour", "config": {"operator": "gte", "value": 22}},
+            {"id": "weekday", "type": "condition.weekday", "config": {"value": 1}},
+            {"id": "night", "type": "action.wait", "config": {"seconds": 1}},
+            {"id": "late", "type": "action.wait", "config": {"seconds": 2}},
+            {"id": "day", "type": "action.wait", "config": {"seconds": 3}},
+        ],
+        "edges": [
+            {"from": "start", "to": "hour"},
+            {"from": "hour", "to": "weekday", "when": "true"},
+            {"from": "hour", "to": "day", "when": "false"},
+            {"from": "weekday", "to": "night", "when": "true"},
+            {"from": "weekday", "to": "late", "when": "false"},
+        ],
+    })
+
+    with pytest.raises(ValueError, match="сложный блок"):
+        workflow_to_draft(graph)
