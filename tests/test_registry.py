@@ -143,3 +143,24 @@ def test_oversized_tool_collections_are_rejected():
     assert not result.ok
     assert "collection size" in result.output
 
+
+def test_validate_arguments_does_not_invoke_tool_handler():
+    called = False
+
+    def handler(_args):
+        nonlocal called
+        called = True
+        return ToolResult(True, "done")
+
+    registry = ToolRegistry()
+    registry.register(ToolSpec(
+        "perform_action", "test",
+        {"type": "object", "properties": {}, "additionalProperties": False},
+        RiskLevel.SAFE, handler,
+    ))
+
+    validation = registry.validate_arguments("perform_action", {})
+
+    assert validation.ok
+    assert called is False
+

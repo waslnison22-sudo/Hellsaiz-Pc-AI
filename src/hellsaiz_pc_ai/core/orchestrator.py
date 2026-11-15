@@ -133,8 +133,16 @@ class AssistantOrchestrator:
                     f"{MAX_TOOL_CALLS_PER_REPLY} вызовов инструментов."
                 )
 
-            # Validate the complete batch before running any side effect, so a
-            # malformed later call cannot leave a partially executed batch.
+            # Preflight every tool name and argument schema before running any
+            # handler, so an invalid later call cannot leave a partial batch.
+            for _call_id, name, arguments in calls:
+                validation = self.registry.validate_arguments(name, arguments)
+                if not validation.ok:
+                    return (
+                        f"Действия не выполнены: вызов инструмента «{name}» отклонён: "
+                        f"{validation.output}. Ни одно действие из пакета не запускалось."
+                    )
+
             for call_id, name, arguments in calls:
                 result = self.registry.execute(name, arguments, confirm)
                 messages.append(result.as_openai_message(call_id))

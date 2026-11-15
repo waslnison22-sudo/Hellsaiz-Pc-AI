@@ -142,9 +142,8 @@ class ToolRegistry:
                 for index, item in enumerate(value):
                     cls._validate_value(item, item_schema, f"{path}[{index}]", depth + 1)
 
-    def execute(
-        self, name: str, arguments: dict[str, Any], confirm: ConfirmCallback | None = None
-    ) -> ToolResult:
+    def validate_arguments(self, name: str, arguments: Any) -> ToolResult:
+        """Validate a tool call without invoking its handler or causing side effects."""
         spec = self._tools.get(name)
         if spec is None:
             return ToolResult(False, f"Инструмент '{name}' не зарегистрирован.")
@@ -154,6 +153,15 @@ class ToolRegistry:
             self._validate_value(arguments, spec.parameters, "arguments")
         except ValueError as exc:
             return ToolResult(False, f"Аргументы отклонены: {exc}")
+        return ToolResult(True, "Аргументы допустимы.")
+
+    def execute(
+        self, name: str, arguments: dict[str, Any], confirm: ConfirmCallback | None = None
+    ) -> ToolResult:
+        validation = self.validate_arguments(name, arguments)
+        if not validation.ok:
+            return validation
+        spec = self._tools[name]
         # RiskLevel remains descriptive metadata. The personal assistant runs
         # explicitly requested, allowlisted tools immediately without a modal
         # confirmation; argument schemas and tool-level allowlists still apply.

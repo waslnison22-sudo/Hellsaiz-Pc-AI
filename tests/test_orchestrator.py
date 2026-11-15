@@ -140,3 +140,37 @@ def test_orchestrator_rejects_oversized_argument_json_before_execution():
     assert "превышают допустимый размер" in result
     assert calls == []
 
+
+def test_orchestrator_preflights_all_tool_schemas_before_any_handler():
+    calls = []
+    registry = ToolRegistry()
+    registry.register(ToolSpec(
+        "perform", "test",
+        {
+            "type": "object",
+            "properties": {"value": {"type": "integer", "minimum": 0}},
+            "required": ["value"],
+            "additionalProperties": False,
+        },
+        RiskLevel.SAFE,
+        lambda args: (calls.append(args["value"]) or ToolResult(True, "ok")),
+    ))
+    batch = [
+        {
+            "id": "valid_first",
+            "type": "function",
+            "function": {"name": "perform", "arguments": '{"value": 1}'},
+        },
+        {
+            "id": "invalid_second",
+            "type": "function",
+            "function": {"name": "perform", "arguments": '{"unexpected": 2}'},
+        },
+    ]
+    assistant = AssistantOrchestrator(OneBatchProvider(batch), registry, "system")
+
+    result = assistant.reply("выполни пакет")
+
+    assert "Ни одно действие из пакета не запускалось" in result
+    assert calls == []
+
