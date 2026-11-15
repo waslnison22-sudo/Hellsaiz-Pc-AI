@@ -3,7 +3,7 @@
 This roadmap separates source changes from verified release acceptance. A feature is not complete for release merely because its module or UI exists.
 
 ## P0 — stability
-Implemented: deterministic local command router, single-instance lock, SQLite history, reminders, workflow library/scheduler, app/process allowlists, clipboard/system tools and background-worker cleanup; bounded tool argument size/depth, finite-number validation and bounded/strictly parsed AI tool-call batches before handlers.
+Implemented: deterministic local command router, single-instance lock, SQLite history, reminders, workflow library/scheduler, app/process allowlists, clipboard/system tools and background-worker cleanup; bounded tool argument size/depth, finite-number validation, side-effect-free registry preflight and bounded/strictly parsed AI tool-call batches before handlers.
 Still required: real Windows CI on Python 3.11/3.12 and live tests of reminders, clipboard, workflows, shutdown, microphone and TTS; runtime verification of orchestrator limits with configured providers.
 
 ## P1 — platform foundations
@@ -14,7 +14,7 @@ Implemented: Russian deterministic intent/slot routes, wake aliases, app aliases
 Still required: broaden phrase coverage, noisy-ASR tests for every intent and a fuller editable entity catalog.
 
 ## P3 — optional AI and voice engines
-Implemented: LM Studio, Ollama and llama.cpp OpenAI-compatible profiles; native GigaChat OAuth/function-call adapter; model discovery and provider health.
+Implemented: LM Studio, Ollama and llama.cpp OpenAI-compatible profiles; native GigaChat OAuth/function-call adapter; model discovery and provider health; AI tool-call batches capped at 8 calls per response and 16 per user reply, with strict JSON and schema preflight.
 Still required: live tests against configured engines and a real GigaChat account; verify primary/fallback behavior and no replay after uncertain tool timeouts.
 
 ## P4 — Windows control plane

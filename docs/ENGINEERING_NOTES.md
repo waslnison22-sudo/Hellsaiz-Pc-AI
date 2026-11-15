@@ -46,7 +46,8 @@ References:
 - Require unique, non-empty call IDs and a non-empty function name.
 - Limit serialized argument JSON size before parsing.
 - Reject malformed JSON, duplicate object keys, non-standard numeric constants, oversized values and non-object arguments before side effects.
-- The ToolRegistry applies a second schema/type/depth/collection validation gate before invoking each registered handler.
+- The ToolRegistry exposes a side-effect-free `validate_arguments()` preflight, applying schema/type/depth/collection checks before the orchestrator runs any handler in the batch.
+- The executor still revalidates each call immediately before its handler; runtime errors inside an external side effect cannot be made transactionally reversible, so the system must report them accurately rather than claim rollback.
 
 **Rationale**
 
