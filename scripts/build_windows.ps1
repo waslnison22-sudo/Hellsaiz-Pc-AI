@@ -6,6 +6,9 @@ param(
 $ErrorActionPreference = "Stop"
 Set-Location (Join-Path $PSScriptRoot "..")
 
+python scripts/apply_pending_patches.py
+if ($LASTEXITCODE -ne 0) { throw "Pending patches failed to apply; check docs/patches/." }
+
 $Version = $Version.TrimStart("v")
 python scripts/set_version.py $Version
 if ($LASTEXITCODE -ne 0) { throw "Could not set the application version." }
