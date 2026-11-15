@@ -112,3 +112,31 @@ def test_orchestrator_limits_total_tool_calls_across_rounds():
     assert "не более 16 вызовов" in result
     assert len(calls) == 16
 
+
+def test_orchestrator_rejects_non_standard_and_ambiguous_json_before_execution():
+    malformed_arguments = (
+        '{"level": NaN}',
+        '{"level": 1, "level": 2}',
+        '[]',
+    )
+    for index, arguments in enumerate(malformed_arguments):
+        call = _tool_call(f"invalid_{index}")
+        call["function"]["arguments"] = arguments
+        assistant, calls = make_action_assistant(OneBatchProvider([call]))
+
+        result = assistant.reply("выполни действия")
+
+        assert "Действия не выполнены" in result
+        assert calls == []
+
+
+def test_orchestrator_rejects_oversized_argument_json_before_execution():
+    call = _tool_call("oversized")
+    call["function"]["arguments"] = '{"value":"' + ("x" * 100_001) + '"}'
+    assistant, calls = make_action_assistant(OneBatchProvider([call]))
+
+    result = assistant.reply("выполни действия")
+
+    assert "превышают допустимый размер" in result
+    assert calls == []
+

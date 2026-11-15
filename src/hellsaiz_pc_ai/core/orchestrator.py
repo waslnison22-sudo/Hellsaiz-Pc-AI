@@ -12,6 +12,19 @@ MAX_TOOL_CALLS_PER_REPLY = 16
 MAX_TOOL_ARGUMENT_JSON_CHARS = 100_000
 
 
+def _strict_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"JSON содержит повторяющийся ключ: {key}")
+        result[key] = value
+    return result
+
+
+def _reject_json_constant(value: str) -> None:
+    raise ValueError(f"JSON содержит недопустимое числовое значение: {value}")
+
+
 class ChatProvider(Protocol):
     def complete(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> dict[str, Any]: ...
 
@@ -63,9 +76,15 @@ class AssistantOrchestrator:
                 if len(raw_arguments) > MAX_TOOL_ARGUMENT_JSON_CHARS:
                     raise ValueError(f"аргументы вызова #{index} превышают допустимый размер")
                 try:
-                    arguments = json.loads(raw_arguments)
+                    arguments = json.loads(
+                        raw_arguments,
+                        object_pairs_hook=_strict_json_object,
+                        parse_constant=_reject_json_constant,
+                    )
                 except json.JSONDecodeError as exc:
                     raise ValueError(f"аргументы вызова #{index} не являются корректным JSON") from exc
+                except RecursionError as exc:
+                    raise ValueError(f"аргументы вызова #{index} имеют чрезмерную вложенность") from exc
             else:
                 arguments = raw_arguments
             if not isinstance(arguments, dict):
@@ -86,6 +105,8 @@ class AssistantOrchestrator:
         executed_tool_calls = 0
         for _ in range(self.max_tool_rounds + 1):
             response = self.provider.complete(messages, self.registry.openai_schemas())
+            if not isinstance(response, dict):
+                raise RuntimeError("Провайдер вернул ответ в неподдерживаемом формате")
             assistant_message = response.get("message")
             if not isinstance(assistant_message, dict):
                 raise RuntimeError("Local model returned an invalid assistant message")
