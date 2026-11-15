@@ -7,6 +7,11 @@ from hellsaiz_pc_ai.core.models import ToolResult
 from hellsaiz_pc_ai.core.registry import ConfirmCallback, ToolRegistry
 
 
+MAX_TOOL_CALLS_PER_RESPONSE = 8
+MAX_TOOL_CALLS_PER_REPLY = 16
+MAX_TOOL_ARGUMENT_JSON_CHARS = 100_000
+
+
 class ChatProvider(Protocol):
     def complete(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> dict[str, Any]: ...
 
@@ -21,6 +26,53 @@ class AssistantOrchestrator:
         self.max_tool_rounds = max(1, min(max_tool_rounds, 8))
         self.history: list[dict[str, Any]] = []
 
+    @staticmethod
+    def _parse_tool_calls(raw_calls: Any) -> list[tuple[str, str, dict[str, Any]]]:
+        if not isinstance(raw_calls, list):
+            raise ValueError("список вызовов инструментов имеет неверный формат")
+        if len(raw_calls) > MAX_TOOL_CALLS_PER_RESPONSE:
+            raise ValueError(
+                f"за один ответ разрешено не более {MAX_TOOL_CALLS_PER_RESPONSE} действий"
+            )
+
+        parsed: list[tuple[str, str, dict[str, Any]]] = []
+        seen_ids: set[str] = set()
+        for index, raw_call in enumerate(raw_calls, start=1):
+            if not isinstance(raw_call, dict):
+                raise ValueError(f"вызов инструмента #{index} не является объектом")
+            call_id = raw_call.get("id")
+            if (
+                not isinstance(call_id, str)
+                or not call_id.strip()
+                or len(call_id) > 128
+            ):
+                raise ValueError(f"вызов инструмента #{index} содержит некорректный id")
+            if call_id in seen_ids:
+                raise ValueError("модель вернула повторяющийся id вызова инструмента")
+            seen_ids.add(call_id)
+
+            function = raw_call.get("function")
+            if not isinstance(function, dict):
+                raise ValueError(f"вызов инструмента #{index} не содержит function")
+            name = function.get("name")
+            if not isinstance(name, str) or not name.strip():
+                raise ValueError(f"вызов инструмента #{index} не содержит имя функции")
+
+            raw_arguments = function.get("arguments", "{}")
+            if isinstance(raw_arguments, str):
+                if len(raw_arguments) > MAX_TOOL_ARGUMENT_JSON_CHARS:
+                    raise ValueError(f"аргументы вызова #{index} превышают допустимый размер")
+                try:
+                    arguments = json.loads(raw_arguments)
+                except json.JSONDecodeError as exc:
+                    raise ValueError(f"аргументы вызова #{index} не являются корректным JSON") from exc
+            else:
+                arguments = raw_arguments
+            if not isinstance(arguments, dict):
+                raise ValueError(f"аргументы вызова #{index} должны быть JSON-объектом")
+            parsed.append((call_id, name, arguments))
+        return parsed
+
     def reply(self, user_text: str, confirm: ConfirmCallback | None = None) -> str:
         user_text = user_text.strip()
         if not user_text:
@@ -31,14 +83,17 @@ class AssistantOrchestrator:
             {"role": "user", "content": user_text},
         ]
 
+        executed_tool_calls = 0
         for _ in range(self.max_tool_rounds + 1):
             response = self.provider.complete(messages, self.registry.openai_schemas())
             assistant_message = response.get("message")
             if not isinstance(assistant_message, dict):
                 raise RuntimeError("Local model returned an invalid assistant message")
             messages.append(assistant_message)
-            calls = assistant_message.get("tool_calls") or []
-            if not calls:
+            raw_calls = assistant_message.get("tool_calls", [])
+            if raw_calls is None:
+                raw_calls = []
+            if raw_calls == []:
                 answer = str(assistant_message.get("content") or "Модель вернула пустой ответ.")
                 self.history.extend(
                     [{"role": "user", "content": user_text}, {"role": "assistant", "content": answer}]
@@ -46,16 +101,22 @@ class AssistantOrchestrator:
                 self.history = self.history[-40:]
                 return answer
 
-            for raw_call in calls:
-                call_id = str(raw_call.get("id", "invalid_call")) if isinstance(raw_call, dict) else "invalid_call"
-                try:
-                    function = raw_call["function"]
-                    name = function["name"]
-                    raw_arguments = function.get("arguments", "{}")
-                    arguments = json.loads(raw_arguments) if isinstance(raw_arguments, str) else raw_arguments
-                    result = self.registry.execute(str(name), arguments, confirm)
-                except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
-                    result = ToolResult(False, f"Некорректный вызов инструмента: {exc}")
+            try:
+                calls = self._parse_tool_calls(raw_calls)
+            except ValueError as exc:
+                return f"Действия не выполнены: {exc}. Повтори запрос более точно."
+
+            if executed_tool_calls + len(calls) > MAX_TOOL_CALLS_PER_REPLY:
+                return (
+                    f"Действия не выполнены: за один запрос разрешено не более "
+                    f"{MAX_TOOL_CALLS_PER_REPLY} вызовов инструментов."
+                )
+
+            # Validate the complete batch before running any side effect, so a
+            # malformed later call cannot leave a partially executed batch.
+            for call_id, name, arguments in calls:
+                result = self.registry.execute(name, arguments, confirm)
                 messages.append(result.as_openai_message(call_id))
+            executed_tool_calls += len(calls)
 
         return "Остановил цепочку инструментов: достигнут лимит последовательных вызовов."
