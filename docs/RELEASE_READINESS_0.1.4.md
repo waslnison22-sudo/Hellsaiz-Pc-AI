@@ -37,14 +37,13 @@ The first 0.1.4 build is a local-first Windows desktop assistant, not a finished
 
 The CI workflow was retried after separating Ruff into an advisory report. The retry still failed before any job step started.
 
-- Workflow run: 43683154714
-- Commit tested: 7e0969ff251485c19dbf03d0c8a0d6d80556b909
-- Retry attempt: 2
-- All four matrix jobs had runner_id: 0, an empty runner_name, and steps: [].
+- Latest workflow run: 43691082400 (#434), commit `b6a1db88ff4f208f79500da7606494a7ee69c9e2`.
+- The earlier retry (run 43683649179, #433) also failed before any job step started.
+- In run #434 all four matrix jobs had runner_id: 0, an empty runner_name, and steps: [].
 - The Windows package job was skipped because its test dependency job did not pass.
 - No diagnostic artifacts were produced because no runner executed the workflow.
 
-This is a runner allocation/environment failure, not evidence that the source tests passed or failed. Check repository Actions enablement and the account's Actions minutes/billing limits, then rerun the workflow. Do not weaken runtime tests to hide a runner allocation failure.
+This is a runner allocation/billing failure, not evidence that the source tests passed or failed. GitHub displayed the notice that recent account payments had not cleared or the spending limit must be increased. Resolve the repository/account Actions billing restriction, then rerun the workflow. Do not weaken runtime tests to hide a runner allocation failure.
 
 ### Stale v0.1.4 tag
 
@@ -67,4 +66,4 @@ The user-facing 0.1.4 update is ready only after the real Windows release workfl
 - HellsaizPC_AI-windows-x64-portable.zip
 - HellsaizPC_AI_Setup.exe
 
-Until then, remain on the installed 0.1.3 build.
+Until then, remain on the installed 0.1.3 build. A source-mode fallback is available from `INSTALL.bat` / `RUN.bat` in the `dev/bootstrap` ZIP, but it is not the signed portable release and does not provide the in-app updater.
