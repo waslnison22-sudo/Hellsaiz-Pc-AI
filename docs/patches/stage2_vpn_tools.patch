@@ -8,11 +8,7 @@
 -from hellsaiz_pc_ai.core.models import ToolResult
 --- a/src/hellsaiz_pc_ai/core/intent_engine.py
 +++ b/src/hellsaiz_pc_ai/core/intent_engine.py
-@@ -36,1 +36,2 @@
--        normalized = " ".join(normalized.split()).strip(" \\\\t\\\\r\\\\n.,!?;:…")
-+        normalized = " ".join(normalized.split())
-+        normalized = re.sub(r"^[\s.,!?;:…]+|[\s.,!?;:…]+$", "", normalized)
-@@ -72,1 +73,1 @@
+@@ -72,1 +72,1 @@
 -        r"(?:найди(?:\s+в\s+(?:интернете|сети))?|поищи(?:\s+в\s+(?:интернете|сети))?|загугли|поиск)\s+(?P<query>.+)",
 +        r"(?:найди(?!\s+(?:файл|папку|элемент)\s+.+\s+в\s+папке)(?:\s+в\s+(?:интернете|сети))?|поищи(?:\s+в\s+(?:интернете|сети))?|загугли|поиск)\s+(?P<query>.+)",
 --- a/src/hellsaiz_pc_ai/core/commands.py
