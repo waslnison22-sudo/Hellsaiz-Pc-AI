@@ -938,6 +938,7 @@ class WorkflowStudioPage(QWidget):
         self._dirty = True
         self.save_button.setEnabled(True)
         self.status_label.setText("Есть несохранённые изменения. Нажми «Сохранить».")
+        self._update_preview()
 
     def _clear_layout(self, layout: QVBoxLayout) -> None:
         while layout.count():
@@ -1335,6 +1336,13 @@ class WorkflowStudioPage(QWidget):
         try:
             graph = self._build_current_graph()
             workflow_id = self._workflow_id or f"scenario-{uuid.uuid4().hex[:8]}"
+            # Keep saved node positions only when editing the same scenario;
+            # never carry the previous scenario's layout into a new one.
+            positions = (
+                self.workflow_library.load_layout(workflow_id)
+                if self._workflow_id == workflow_id else {}
+            )
+            self.graph_view.set_graph(graph, positions)
             self.workflow_library.save(workflow_id, graph)
             self.workflow_library.save_layout(workflow_id, self.graph_view.export_layout())
         except (OSError, ValueError, TypeError, KeyError) as exc:
