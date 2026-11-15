@@ -1,0 +1,78 @@
+# Патч этапа 6: чистка линтер-мусора, найденного CI на теге v0.1.5.
+--- a/src/hellsaiz_pc_ai/app/desktop.py
++++ b/src/hellsaiz_pc_ai/app/desktop.py
+@@ -28,12 +28,6 @@
+ from hellsaiz_pc_ai.install_layout import installed_app_root, installed_version
+ from hellsaiz_pc_ai import startup_task
+ from hellsaiz_pc_ai.network import v2raytun
+-from hellsaiz_pc_ai.telegram import (
+-    TelegramBotWorker,
+-    TelegramSettings,
+-    load_settings as load_telegram_settings,
+-    save_settings as save_telegram_settings,
+-)
+ from hellsaiz_pc_ai.version import APP_VERSION
+ from hellsaiz_pc_ai.core.orchestrator import AssistantOrchestrator
+ from hellsaiz_pc_ai.core.registry import ToolRegistry
+--- a/src/hellsaiz_pc_ai/network/v2raytun.py
++++ b/src/hellsaiz_pc_ai/network/v2raytun.py
+@@ -91,7 +91,7 @@
+     try:
+         import psutil
+     except ImportError:
+-        raise NetworkDependencyError("Для проверки процессов нужен пакет psutil.")
++        raise NetworkDependencyError("Для проверки процессов нужен пакет psutil.") from None
+     for process in psutil.process_iter(["name"]):
+         try:
+             name = str(process.info.get("name") or "").casefold()
+--- a/tests/test_telegram_worker.py
++++ b/tests/test_telegram_worker.py
+@@ -1,6 +1,7 @@
+ from __future__ import annotations
+ 
+ import pytest
++from pathlib import Path
+ 
+ from hellsaiz_pc_ai.core.models import RiskLevel, ToolResult
+ from hellsaiz_pc_ai.core.registry import ToolRegistry, ToolSpec
+--- a/src/hellsaiz_pc_ai/core/commands.py
++++ b/src/hellsaiz_pc_ai/core/commands.py
+@@ -82,7 +82,7 @@
+         current = values[0]
+         pending: list[float] = []
+         pending_ops: list[str] = []
+-        for op, value in zip(operators, values[1:]):
++        for op, value in zip(operators, values[1:], strict=False):
+             if op in {"*", "/"}:
+                 current = apply(current, op, value)
+             else:
+@@ -91,7 +91,7 @@
+                 current = value
+         pending.append(current)
+         total = pending[0]
+-        for op, value in zip(pending_ops, pending[1:]):
++        for op, value in zip(pending_ops, pending[1:], strict=False):
+             total = apply(total, op, value)
+         result = total
+     except ZeroDivisionError:
+--- a/src/hellsaiz_pc_ai/core/intent_engine.py
++++ b/src/hellsaiz_pc_ai/core/intent_engine.py
+@@ -33,7 +33,8 @@
+ 
+     def resolve(self, utterance: str) -> IntentMatch | None:
+         normalized = unicodedata.normalize("NFKC", utterance).casefold().replace("ё", "е")
+-        normalized = " ".join(normalized.split()).strip(" \\t\\r\\n.,!?;:…")
++        normalized = " ".join(normalized.split())
++        normalized = re.sub(r"^[\s.,!?;:…]+|[\s.,!?;:…]+$", "", normalized)
+         for item in self._patterns:
+             match = item.pattern.fullmatch(normalized)
+             if match is None:
+--- a/src/hellsaiz_pc_ai/core/orchestrator.py
++++ b/src/hellsaiz_pc_ai/core/orchestrator.py
+@@ -3,7 +3,6 @@
+ import json
+ from typing import Any, Protocol
+ 
+-from hellsaiz_pc_ai.core.models import ToolResult
+ from hellsaiz_pc_ai.core.registry import ConfirmCallback, ToolRegistry
+ 
