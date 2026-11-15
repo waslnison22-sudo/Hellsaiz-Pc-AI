@@ -100,15 +100,10 @@ def test_orchestrator_limits_total_tool_calls_across_rounds():
         def complete(self, messages, tools):
             self.round += 1
             if self.round <= 2:
-                return {
-                    "message": {
-                        "role": "assistant",
-                        "tool_calls": [
-                            _tool_call(f"call_{self.round}_{index}") for index in range(8)
-                        ],
-                    }
-                }
-            return {"message": {"role": "assistant", "content": "Готово"}}
+                batch = [_tool_call(f"call_{self.round}_{index}") for index in range(8)]
+            else:
+                batch = [_tool_call("call_after_limit")]
+            return {"message": {"role": "assistant", "tool_calls": batch}}
 
     assistant, calls = make_action_assistant(TwoBatchProvider())
 
