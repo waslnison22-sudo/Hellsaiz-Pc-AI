@@ -200,6 +200,83 @@ QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
 QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
     background: transparent;
 }
+QFrame#workflowCard, QGroupBox#workflowCard {
+    background: rgba(19, 24, 32, 220);
+    border: 1px solid rgba(211, 225, 244, 42);
+    border-radius: 15px;
+}
+QFrame#workflowActionCard {
+    background: rgba(25, 31, 40, 225);
+    border: 1px solid rgba(205, 219, 238, 54);
+    border-radius: 13px;
+}
+QLabel#sectionEyebrow {
+    color: #9ca9ba;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.3px;
+}
+QLabel#workflowHint {
+    color: #98a4b3;
+    font-size: 11px;
+}
+QScrollArea {
+    background: transparent;
+    border: 0;
+}
+QTimeEdit, QSpinBox, QDoubleSpinBox {
+    background: rgba(15, 20, 28, 224);
+    color: #edf2f8;
+    border: 1px solid rgba(204, 219, 239, 48);
+    border-radius: 10px;
+    min-height: 24px;
+    padding: 7px 9px;
+}
+QTimeEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {
+    border: 1px solid rgba(225, 237, 252, 150);
+}
+QSlider::groove:horizontal {
+    background: rgba(170, 185, 205, 65);
+    height: 5px;
+    border-radius: 2px;
+}
+QSlider::sub-page:horizontal {
+    background: rgba(230, 237, 247, 190);
+    border-radius: 2px;
+}
+QSlider::handle:horizontal {
+    background: #f1f4f8;
+    border: 1px solid #ffffff;
+    width: 14px;
+    height: 14px;
+    margin: -5px 0;
+    border-radius: 7px;
+}
+QToolButton {
+    background: rgba(31, 38, 49, 220);
+    color: #dfe6ef;
+    border: 1px solid rgba(204, 219, 239, 42);
+    border-radius: 8px;
+    padding: 5px 8px;
+}
+QToolButton:hover {
+    background: rgba(75, 88, 106, 220);
+    border-color: rgba(233, 241, 251, 110);
+}
+QPushButton#dangerButton {
+    background: rgba(39, 42, 48, 215);
+    color: #e1e4e9;
+    border-color: rgba(185, 193, 204, 48);
+}
+QPushButton#dangerButton:hover {
+    background: rgba(72, 76, 84, 225);
+    border-color: rgba(220, 227, 238, 110);
+}
+QPushButton#secondaryButton {
+    background: rgba(19, 24, 32, 190);
+    color: #dce4ee;
+    border-color: rgba(202, 216, 236, 44);
+}
 QToolTip {
     background: #161c26;
     color: #f0f4fa;

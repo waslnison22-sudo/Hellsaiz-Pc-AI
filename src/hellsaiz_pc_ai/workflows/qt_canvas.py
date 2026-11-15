@@ -19,8 +19,8 @@ from hellsaiz_pc_ai.workflows.graph import GraphEdge, GraphNode, WorkflowGraph
 
 class WorkflowNodeItem(QGraphicsObject):
     moved = Signal(str, float, float)
-    WIDTH = 224.0
-    HEIGHT = 86.0
+    WIDTH = 250.0
+    HEIGHT = 92.0
 
     def __init__(self, node: GraphNode, x: float, y: float) -> None:
         super().__init__()
@@ -39,20 +39,71 @@ class WorkflowNodeItem(QGraphicsObject):
     def _summary(self) -> str:
         cfg = self.node.config
         if self.node.kind == "trigger.text":
-            return str(cfg.get("phrase", ""))
+            phrases = cfg.get("phrases", [cfg.get("phrase", "")])
+            return " · ".join(str(item) for item in phrases[:2])
         if self.node.kind == "trigger.hotkey":
-            return str(cfg.get("hotkey", ""))
+            return f"Сочетание: {cfg.get('hotkey', '')}"
+        if self.node.kind == "trigger.schedule":
+            days = cfg.get("days", [])
+            day_text = "каждый день" if len(days) == 7 else f"дней: {len(days)}"
+            return f"{cfg.get('time', '')} · {day_text}"
+        if self.node.kind == "trigger.startup":
+            return "При запуске приложения"
         if self.node.kind == "condition.hour":
-            return f"hour {cfg.get('operator')} {cfg.get('value')}"
+            operators = {"gte": "≥", "gt": ">", "eq": "=", "lte": "≤", "lt": "<"}
+            return f"Сейчас {operators.get(cfg.get('operator'), '=')} {cfg.get('value')}:00"
         if self.node.kind == "condition.weekday":
-            return f"ISO weekday = {cfg.get('value')}"
+            days = {
+                1: "понедельник", 2: "вторник", 3: "среда",
+                4: "четверг", 5: "пятница", 6: "суббота", 7: "воскресенье",
+            }
+            return f"Сегодня {days.get(cfg.get('value'), 'указанный день')}"
         if self.node.kind == "action.tool":
-            return str(cfg.get("name", ""))
+            arguments = cfg.get("arguments", {})
+            name = cfg.get("name")
+            if name == "set_volume":
+                return f"Громкость {arguments.get('percent', 0)}%"
+            if name == "open_app":
+                return f"Открыть {str(arguments.get('app', '')).replace('_', ' ')}"
+            if name == "open_url":
+                return f"Открыть сайт: {arguments.get('url', '')}"
+            if name == "lock_pc":
+                return "Заблокировать компьютер"
+            if name == "close_process":
+                return f"Закрыть {arguments.get('process', 'приложение')}"
+            labels = {
+                "get_local_time": "Показать текущее время",
+                "get_system_info": "Сведения о компьютере",
+                "read_clipboard": "Прочитать буфер обмена",
+                "write_clipboard": "Скопировать текст",
+            }
+            return labels.get(str(name), "Выполнить действие")
         if self.node.kind == "action.repeat":
-            return f"{cfg.get('name', '')} × {cfg.get('count', 1)}"
+            return f"Повторить действие · {cfg.get('count', 1)} раз"
         if self.node.kind == "action.wait":
-            return f"wait {cfg.get('seconds')} sec"
-        return ""
+            return f"Подождать {cfg.get('seconds', 0):g} сек."
+        return "Блок сценария"
+
+    def _title(self) -> str:
+        if self.node.kind.startswith("trigger."):
+            return "НАЧАЛО"
+        if self.node.kind.startswith("condition."):
+            return "УСЛОВИЕ"
+        return "ДЕЙСТВИЕ"
+
+    def _kind_label(self) -> str:
+        labels = {
+            "trigger.text": "Запуск по фразе",
+            "trigger.hotkey": "Запуск по клавишам",
+            "trigger.schedule": "Запуск по расписанию",
+            "trigger.startup": "При запуске приложения",
+            "condition.hour": "Проверка времени",
+            "condition.weekday": "Проверка дня недели",
+            "action.tool": "Системное действие",
+            "action.repeat": "Повтор действия",
+            "action.wait": "Пауза",
+        }
+        return labels.get(self.node.kind, "Блок")
 
     def paint(self, painter: QPainter, option: Any, widget: Any = None) -> None:
         del option, widget
@@ -74,23 +125,23 @@ class WorkflowNodeItem(QGraphicsObject):
         painter.setPen(QColor("#f3f4f6"))
         painter.setFont(QFont("Segoe UI", 10, QFont.Weight.DemiBold))
         painter.drawText(
-            QRectF(14, 10, self.WIDTH - 28, 24),
+            QRectF(14, 10, self.WIDTH - 28, 22),
             Qt.AlignmentFlag.AlignLeft,
-            self.node.id,
+            self._title(),
         )
         painter.setPen(QColor("#b7bec8"))
         painter.setFont(QFont("Segoe UI", 8, QFont.Weight.Medium))
         painter.drawText(
-            QRectF(14, 37, self.WIDTH - 28, 18),
+            QRectF(14, 35, self.WIDTH - 28, 19),
             Qt.AlignmentFlag.AlignLeft,
-            self.node.kind.upper(),
+            self._kind_label(),
         )
         painter.setPen(QColor("#8f98a5"))
         painter.setFont(QFont("Segoe UI", 8))
         painter.drawText(
-            QRectF(14, 59, self.WIDTH - 28, 18),
+            QRectF(14, 59, self.WIDTH - 28, 22),
             Qt.AlignmentFlag.AlignLeft,
-            self._summary()[:38],
+            self._summary()[:42],
         )
         painter.setPen(QPen(QColor("#bbc1ca"), 1.0))
         painter.setBrush(QColor("#0c0e12"))
