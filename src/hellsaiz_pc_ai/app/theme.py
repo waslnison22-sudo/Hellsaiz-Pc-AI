@@ -288,5 +288,101 @@ QToolTip {
 
 
 def build_dark_stylesheet() -> str:
-    """Return the shared monochrome theme with visible keyboard focus states."""
+    """Return the shared monochrome theme with visible keyboard focus states.
+QFrame#studioPanel {
+    background: rgba(14, 19, 27, 222);
+    border: 1px solid rgba(211, 225, 244, 48);
+    border-radius: 16px;
+}
+QGroupBox#scenarioCard, QGroupBox#scenarioBranchCard {
+    background: rgba(20, 26, 35, 218);
+    border: 1px solid rgba(211, 225, 244, 48);
+    border-radius: 14px;
+    margin-top: 12px;
+    padding: 12px 10px 10px 10px;
+    font-weight: 650;
+    color: #edf2f8;
+}
+QGroupBox#scenarioCard::title, QGroupBox#scenarioBranchCard::title {
+    subcontrol-origin: margin;
+    left: 14px;
+    padding: 0 6px;
+    color: #dce4ee;
+}
+QGroupBox#scenarioBranchCard {
+    background: rgba(16, 21, 29, 220);
+}
+QFrame#scenarioActionCard {
+    background: rgba(26, 32, 42, 224);
+    border: 1px solid rgba(205, 219, 238, 54);
+    border-radius: 12px;
+}
+QLabel#pageTitle {
+    color: #f2f5f9;
+    font-size: 20px;
+    font-weight: 700;
+}
+QLabel#sectionTitle {
+    color: #f0f4f9;
+    font-size: 15px;
+    font-weight: 700;
+}
+QLabel#cardTitle {
+    color: #eff3f8;
+    font-size: 13px;
+    font-weight: 650;
+}
+QLabel#secondaryText, QLabel#scenarioStatus, QLabel#sectionEyebrow {
+    color: #9da9b8;
+}
+QLabel#warningText {
+    background: rgba(45, 48, 55, 170);
+    color: #e3e7ed;
+    border: 1px solid rgba(200, 210, 224, 52);
+    border-radius: 10px;
+    padding: 9px 11px;
+}
+QTabWidget::pane {
+    background: rgba(10, 14, 20, 170);
+    border: 1px solid rgba(210, 224, 243, 36);
+    border-radius: 12px;
+    top: -1px;
+}
+QTabBar::tab {
+    background: rgba(20, 26, 35, 190);
+    color: #aeb8c6;
+    border: 1px solid rgba(210, 224, 243, 38);
+    border-bottom: 0;
+    padding: 8px 13px;
+    margin-right: 4px;
+    border-top-left-radius: 9px;
+    border-top-right-radius: 9px;
+}
+QTabBar::tab:selected {
+    background: rgba(54, 63, 76, 220);
+    color: #f2f5f9;
+    border-color: rgba(222, 233, 248, 95);
+}
+QTabBar::tab:focus {
+    border: 1px solid #f4f7fb;
+}
+QPushButton#toolbarButton {
+    background: rgba(27, 34, 44, 218);
+    padding: 7px 10px;
+    border-radius: 9px;
+    font-size: 11px;
+}
+QPushButton#dangerButton {
+    background: rgba(39, 42, 48, 215);
+    color: #e1e4e9;
+    border-color: rgba(185, 193, 204, 48);
+}
+QPushButton#dangerButton:hover {
+    background: rgba(72, 76, 84, 225);
+    border-color: rgba(220, 227, 238, 110);
+}
+QCheckBox#animationToggle {
+    color: #bfc9d6;
+}
+"""
     return DARK_STYLESHEET

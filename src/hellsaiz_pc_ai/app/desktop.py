@@ -285,7 +285,8 @@ def main() -> int:
             QVBoxLayout,
             QWidget,
         )
-        from hellsaiz_pc_ai.workflows.qt_canvas import WorkflowCanvas
+        from hellsaiz_pc_ai.app.hud import AnimatedPageStack
+        from hellsaiz_pc_ai.app.workflow_studio import WorkflowStudioPage
         from hellsaiz_pc_ai.telegram.config import TelegramSettings, load_settings as load_telegram_settings, save_settings as save_telegram_settings
         from hellsaiz_pc_ai.telegram.worker import TelegramBotWorker
     except ImportError:
@@ -1219,474 +1220,17 @@ def main() -> int:
     refresh_reminder_list()
     tabs.addTab(reminder_page, "Напоминания")
 
-    # Scenario workspace: validated JSON graph + a live monochrome node-map preview.
-    scenario_page = QWidget()
-    scenario_layout = QVBoxLayout(scenario_page)
-    scenario_title = QLabel("СЦЕНАРИИ / ВИЗУАЛЬНАЯ КАРТА")
-    scenario_title.setStyleSheet("font-size:18px; font-weight:650; color:#f1f2f4;")
-    scenario_layout.addWidget(scenario_title)
-    scenario_hint = QLabel(
-        "Перетаскивай узлы мышью, сохраняй их расположение и настраивай связи через JSON. "
-        "Ctrl+Alt+H — пример запуска. Произвольный код не поддерживается."
+    # Guided scenario studio: everyday users never edit graph JSON or node IDs.
+    scenario_page = WorkflowStudioPage(
+        workflow_library,
+        registry,
+        allowed_apps=allowed_apps,
+        allowed_processes=settings.allowed_processes,
     )
-    scenario_hint.setStyleSheet("color:#aab0ba;")
-    scenario_layout.addWidget(scenario_hint)
-
-    scenario_workspace = QHBoxLayout()
-    scenario_list = QListWidget()
-    scenario_list.setMinimumWidth(190)
-    scenario_workspace.addWidget(scenario_list, 1)
-
-    scenario_splitter = QSplitter(Qt.Orientation.Horizontal)
-    graph_view = WorkflowCanvas()
-    graph_view.setMinimumWidth(360)
-    scenario_splitter.addWidget(graph_view)
-    graph_editor = QPlainTextEdit()
-    graph_editor.setPlaceholderText("JSON-граф сценария…")
-    graph_editor.setFont(QFont("Consolas", 10))
-    scenario_splitter.addWidget(graph_editor)
-    scenario_splitter.setStretchFactor(0, 1)
-    scenario_splitter.setStretchFactor(1, 1)
-    scenario_workspace.addWidget(scenario_splitter, 5)
-    scenario_layout.addLayout(scenario_workspace, 1)
-
-    builder_title = QLabel("КОНСТРУКТОР УЗЛОВ")
-    builder_title.setStyleSheet("color:#c5cad2; font-size:11px; letter-spacing:1.5px;")
-    scenario_layout.addWidget(builder_title)
-    builder_row = QHBoxLayout()
-    builder_source = QComboBox()
-    builder_source.setMinimumWidth(120)
-    builder_id = QLineEdit("new-action")
-    builder_id.setPlaceholderText("id нового узла")
-    builder_tool = QComboBox()
-    registered_tool_names = []
-    for tool_schema in registry.openai_schemas():
-        function = tool_schema["function"]
-        registered_tool_names.append(function["name"])
-        builder_tool.addItem(function["name"], function["name"])
-    builder_arguments = QLineEdit("{}")
-    builder_arguments.setPlaceholderText('Аргументы JSON, например {"app":"notepad"}')
-    add_tool_button = QPushButton("Добавить действие")
-    builder_row.addWidget(builder_source)
-    builder_row.addWidget(builder_id)
-    builder_row.addWidget(builder_tool)
-    builder_row.addWidget(builder_arguments, 2)
-    builder_row.addWidget(add_tool_button)
-    scenario_layout.addLayout(builder_row)
-
-    condition_row = QHBoxLayout()
-    wait_id = QLineEdit("wait-next")
-    wait_id.setPlaceholderText("id ожидания")
-    wait_seconds = QLineEdit("2")
-    wait_seconds.setMaximumWidth(60)
-    add_wait_button = QPushButton("Добавить ожидание")
-    condition_id = QLineEdit("hour-check")
-    condition_id.setPlaceholderText("id условия")
-    condition_operator = QComboBox()
-    for label, operator in [("час ≥", "gte"), ("час =", "eq"), ("час <", "lt"), ("час ≤", "lte"), ("час >", "gt")]:
-        condition_operator.addItem(label, operator)
-    condition_hour = QLineEdit("22")
-    condition_hour.setMaximumWidth(45)
-    add_condition_button = QPushButton("Добавить условие")
-    condition_row.addWidget(wait_id)
-    condition_row.addWidget(wait_seconds)
-    condition_row.addWidget(add_wait_button)
-    condition_row.addSpacing(8)
-    condition_row.addWidget(condition_id)
-    condition_row.addWidget(condition_operator)
-    condition_row.addWidget(condition_hour)
-    condition_row.addWidget(add_condition_button)
-    scenario_layout.addLayout(condition_row)
-
-    repeat_row = QHBoxLayout()
-    repeat_id = QLineEdit("repeat-action")
-    repeat_id.setPlaceholderText("id повтора")
-    repeat_count = QLineEdit("3")
-    repeat_count.setMaximumWidth(60)
-    add_repeat_button = QPushButton("Повторить выбранное действие")
-    repeat_hint = QLabel("Используется инструмент и JSON-аргументы из верхней строки.")
-    repeat_hint.setStyleSheet("color:#9098a4; font-size:11px;")
-    repeat_row.addWidget(repeat_id)
-    repeat_row.addWidget(repeat_count)
-    repeat_row.addWidget(add_repeat_button)
-    repeat_row.addWidget(repeat_hint, 1)
-    scenario_layout.addLayout(repeat_row)
-
-    weekday_row = QHBoxLayout()
-    weekday_id = QLineEdit("weekday-check")
-    weekday_id.setPlaceholderText("id дня недели")
-    weekday_value = QComboBox()
-    for day_name, day_number in [
-        ("Понедельник", 1), ("Вторник", 2), ("Среда", 3), ("Четверг", 4),
-        ("Пятница", 5), ("Суббота", 6), ("Воскресенье", 7),
-    ]:
-        weekday_value.addItem(day_name, day_number)
-    add_weekday_button = QPushButton("Добавить условие дня")
-    weekday_row.addWidget(weekday_id)
-    weekday_row.addWidget(weekday_value)
-    weekday_row.addWidget(add_weekday_button)
-    weekday_row.addStretch(1)
-    scenario_layout.addLayout(weekday_row)
-
-    scenario_id = QLineEdit()
-    scenario_id.setPlaceholderText("id-сценария, например night-mode")
-    scenario_layout.addWidget(scenario_id)
-    scenario_buttons = QHBoxLayout()
-    new_scenario_button = QPushButton("Новый")
-    new_hotkey_scenario_button = QPushButton("Пример hotkey")
-    new_schedule_scenario_button = QPushButton("Пример расписания")
-    new_startup_scenario_button = QPushButton("Пример автозапуска")
-    validate_scenario_button = QPushButton("Проверить граф")
-    save_scenario_button = QPushButton("Сохранить")
-    delete_scenario_button = QPushButton("Удалить")
-    run_scenario_button = QPushButton("Запустить сейчас")
-    fit_graph_button = QPushButton("По размеру")
-    reset_layout_button = QPushButton("Сбросить расположение")
-    scenario_buttons.addWidget(fit_graph_button)
-    scenario_buttons.addWidget(reset_layout_button)
-    scenario_buttons.addWidget(new_scenario_button)
-    scenario_buttons.addWidget(new_hotkey_scenario_button)
-    scenario_buttons.addWidget(new_schedule_scenario_button)
-    scenario_buttons.addWidget(new_startup_scenario_button)
-    scenario_buttons.addWidget(validate_scenario_button)
-    scenario_buttons.addWidget(save_scenario_button)
-    scenario_buttons.addWidget(run_scenario_button)
-    scenario_buttons.addWidget(delete_scenario_button)
-    scenario_layout.addLayout(scenario_buttons)
-    scenario_status = QLabel("Сценарии хранятся локально в JSON.")
-    scenario_status.setStyleSheet("color:#aab0ba;")
-    scenario_layout.addWidget(scenario_status)
-
-    def render_graph(
-        graph: WorkflowGraph, workflow_id: str | None = None, preserve: bool = False
-    ) -> None:
-        positions = workflow_library.load_layout(workflow_id) if workflow_id else {}
-        if preserve:
-            positions.update(graph_view.export_layout())
-        graph_view.set_graph(graph, positions)
-
-    def refresh_scenario_list() -> None:
-        scenario_list.clear()
-        try:
-            entries = workflow_library.list()
-        except (OSError, ValueError, json.JSONDecodeError) as exc:
-            scenario_status.setText(f"Ошибка чтения библиотеки: {exc}")
-            return
-        for workflow_id, graph in entries:
-            item = f"{graph.name}  ·  {workflow_id}"
-            scenario_list.addItem(item)
-            scenario_list.item(scenario_list.count() - 1).setData(
-                Qt.ItemDataRole.UserRole, workflow_id
-            )
-        scenario_status.setText(f"Локальных сценариев: {len(entries)}")
-
-    def load_selected_scenario() -> None:
-        item = scenario_list.currentItem()
-        if item is None:
-            return
-        workflow_id = item.data(Qt.ItemDataRole.UserRole)
-        try:
-            graph = workflow_library.load(workflow_id)
-            scenario_id.setText(workflow_id)
-            graph_editor.setPlainText(json.dumps(graph.to_dict(), ensure_ascii=False, indent=2))
-            render_graph(graph, workflow_id)
-            refresh_builder_sources(graph)
-            scenario_status.setText(f"Загружен сценарий: {graph.name}")
-        except (OSError, ValueError, json.JSONDecodeError) as exc:
-            scenario_status.setText(f"Не удалось загрузить сценарий: {exc}")
-
-    def create_scenario() -> None:
-        example = {
-            "name": "Ночной режим",
-            "nodes": [
-                {"id": "start", "type": "trigger.text", "config": {"phrase": "ночной режим"}},
-                {"id": "hour", "type": "condition.hour", "config": {"operator": "gte", "value": 22}},
-                {"id": "night", "type": "action.tool", "config": {"name": "set_volume", "arguments": {"percent": 30}}},
-                {"id": "day", "type": "action.tool", "config": {"name": "set_volume", "arguments": {"percent": 60}}},
-            ],
-            "edges": [
-                {"from": "start", "to": "hour"},
-                {"from": "hour", "to": "night", "when": "true"},
-                {"from": "hour", "to": "day", "when": "false"},
-            ],
-        }
-        scenario_id.setText("night-mode")
-        graph_editor.setPlainText(json.dumps(example, ensure_ascii=False, indent=2))
-        try:
-            example_graph = WorkflowGraph.from_dict(example)
-            render_graph(example_graph)
-            refresh_builder_sources(example_graph)
-            scenario_status.setText("Пример создан. Проверь и сохрани его.")
-        except ValueError as exc:
-            scenario_status.setText(str(exc))
-
-    def create_schedule_scenario() -> None:
-        example = {
-            "name": "Ежедневная проверка времени",
-            "nodes": [
-                {
-                    "id": "start",
-                    "type": "trigger.schedule",
-                    "config": {"time": "09:00", "days": [1, 2, 3, 4, 5, 6, 7]},
-                },
-                {
-                    "id": "time",
-                    "type": "action.tool",
-                    "config": {"name": "get_local_time", "arguments": {}},
-                },
-            ],
-            "edges": [{"from": "start", "to": "time"}],
-        }
-        scenario_id.setText("daily-time-check")
-        graph_editor.setPlainText(json.dumps(example, ensure_ascii=False, indent=2))
-        try:
-            example_graph = WorkflowGraph.from_dict(example)
-            render_graph(example_graph)
-            refresh_builder_sources(example_graph)
-            scenario_status.setText(
-                "Пример расписания создан. Измени время и дни в JSON, затем сохрани."
-            )
-        except ValueError as exc:
-            scenario_status.setText(str(exc))
-
-    def create_startup_scenario() -> None:
-        example = {
-            "name": "Проверка при запуске",
-            "nodes": [
-                {"id": "start", "type": "trigger.startup", "config": {}},
-                {
-                    "id": "time",
-                    "type": "action.tool",
-                    "config": {"name": "get_local_time", "arguments": {}},
-                },
-            ],
-            "edges": [{"from": "start", "to": "time"}],
-        }
-        scenario_id.setText("startup-check")
-        graph_editor.setPlainText(json.dumps(example, ensure_ascii=False, indent=2))
-        try:
-            example_graph = WorkflowGraph.from_dict(example)
-            render_graph(example_graph)
-            refresh_builder_sources(example_graph)
-            scenario_status.setText(
-                "Пример автозапуска создан. Сохрани его; запуск произойдёт при старте приложения."
-            )
-        except ValueError as exc:
-            scenario_status.setText(str(exc))
-
-    def create_hotkey_scenario() -> None:
-        example = {
-            "name": "Горячая клавиша — громкость",
-            "nodes": [
-                {"id": "start", "type": "trigger.hotkey", "config": {"hotkey": "Ctrl+Alt+H"}},
-                {
-                    "id": "volume",
-                    "type": "action.tool",
-                    "config": {"name": "set_volume", "arguments": {"percent": 35}},
-                },
-            ],
-            "edges": [{"from": "start", "to": "volume"}],
-        }
-        scenario_id.setText("hotkey-volume")
-        graph_editor.setPlainText(json.dumps(example, ensure_ascii=False, indent=2))
-        try:
-            example_graph = WorkflowGraph.from_dict(example)
-            render_graph(example_graph)
-            refresh_builder_sources(example_graph)
-            scenario_status.setText(
-                "Пример создан. Сохрани его; Ctrl+Alt+H будет запускать действие автоматически."
-            )
-        except ValueError as exc:
-            scenario_status.setText(str(exc))
-
-    def refresh_builder_sources(graph: WorkflowGraph | None = None) -> None:
-        try:
-            current = graph or WorkflowGraph.from_dict(json.loads(graph_editor.toPlainText()))
-            selected = builder_source.currentData()
-            builder_source.clear()
-            for node_id in terminal_nodes(current):
-                builder_source.addItem(node_id, node_id)
-            if selected is not None:
-                index = builder_source.findData(selected)
-                if index >= 0:
-                    builder_source.setCurrentIndex(index)
-        except (ValueError, json.JSONDecodeError):
-            builder_source.clear()
-
-    def apply_builder_graph(updated: WorkflowGraph) -> None:
-        graph_editor.setPlainText(json.dumps(updated.to_dict(), ensure_ascii=False, indent=2))
-        render_graph(updated, scenario_id.text().strip() or None, preserve=True)
-        refresh_builder_sources(updated)
-        scenario_status.setText(
-            f"Добавлен узел. В графе {len(updated.nodes)} узлов и {len(updated.edges)} связей."
-        )
-
-    def add_tool_node() -> None:
-        try:
-            graph = WorkflowGraph.from_dict(json.loads(graph_editor.toPlainText()))
-            source_id = builder_source.currentData()
-            if not source_id:
-                raise ValueError("Выбери конечный узел ветви.")
-            arguments = json.loads(builder_arguments.text() or "{}")
-            updated = append_tool_action(
-                graph, str(source_id), builder_id.text().strip(),
-                str(builder_tool.currentData() or ""), arguments, set(registered_tool_names)
-            )
-            apply_builder_graph(updated)
-            builder_id.setText("new-action")
-        except (ValueError, json.JSONDecodeError) as exc:
-            scenario_status.setText(f"Не удалось добавить действие: {exc}")
-
-    def add_wait_node() -> None:
-        try:
-            graph = WorkflowGraph.from_dict(json.loads(graph_editor.toPlainText()))
-            source_id = builder_source.currentData()
-            if not source_id:
-                raise ValueError("Выбери конечный узел ветви.")
-            seconds = float(wait_seconds.text().replace(",", "."))
-            updated = append_wait_action(graph, str(source_id), wait_id.text().strip(), seconds)
-            apply_builder_graph(updated)
-            wait_id.setText("wait-next")
-        except (ValueError, json.JSONDecodeError) as exc:
-            scenario_status.setText(f"Не удалось добавить ожидание: {exc}")
-
-    def add_weekday_condition_node() -> None:
-        try:
-            graph = WorkflowGraph.from_dict(json.loads(graph_editor.toPlainText()))
-            source_id = builder_source.currentData()
-            if not source_id:
-                raise ValueError("Выбери конечный узел ветви.")
-            updated = append_weekday_condition(
-                graph,
-                str(source_id),
-                weekday_id.text().strip(),
-                int(weekday_value.currentData()),
-            )
-            apply_builder_graph(updated)
-            weekday_id.setText("weekday-check")
-        except (ValueError, json.JSONDecodeError) as exc:
-            scenario_status.setText(f"Не удалось добавить условие дня недели: {exc}")
-
-    def add_repeat_node() -> None:
-        try:
-            graph = WorkflowGraph.from_dict(json.loads(graph_editor.toPlainText()))
-            source_id = builder_source.currentData()
-            if not source_id:
-                raise ValueError("Выбери конечный узел ветви.")
-            arguments = json.loads(builder_arguments.text() or "{}")
-            count = int(repeat_count.text())
-            updated = append_repeat_action(
-                graph,
-                str(source_id),
-                repeat_id.text().strip(),
-                str(builder_tool.currentData() or ""),
-                arguments,
-                count,
-                set(registered_tool_names),
-            )
-            apply_builder_graph(updated)
-            repeat_id.setText("repeat-action")
-        except (ValueError, json.JSONDecodeError) as exc:
-            scenario_status.setText(f"Не удалось добавить повтор: {exc}")
-
-    def add_condition_node() -> None:
-        try:
-            graph = WorkflowGraph.from_dict(json.loads(graph_editor.toPlainText()))
-            source_id = builder_source.currentData()
-            if not source_id:
-                raise ValueError("Выбери конечный узел ветви.")
-            updated = append_hour_condition(
-                graph, str(source_id), condition_id.text().strip(),
-                str(condition_operator.currentData()), int(condition_hour.text())
-            )
-            apply_builder_graph(updated)
-            condition_id.setText("hour-check")
-        except (ValueError, json.JSONDecodeError) as exc:
-            scenario_status.setText(f"Не удалось добавить условие: {exc}")
-
-    add_tool_button.clicked.connect(add_tool_node)
-    add_wait_button.clicked.connect(add_wait_node)
-    add_condition_button.clicked.connect(add_condition_node)
-    add_repeat_button.clicked.connect(add_repeat_node)
-    add_weekday_button.clicked.connect(add_weekday_condition_node)
-    refresh_builder_sources()
-
-    def validate_scenario() -> WorkflowGraph | None:
-        try:
-            graph = WorkflowGraph.from_dict(json.loads(graph_editor.toPlainText()))
-            render_graph(graph, scenario_id.text().strip() or None, preserve=True)
-            refresh_builder_sources(graph)
-            scenario_status.setText(
-                f"Граф корректен: {len(graph.nodes)} узлов, {len(graph.edges)} связей."
-            )
-            return graph
-        except (ValueError, json.JSONDecodeError) as exc:
-            scenario_status.setText(f"Граф не прошёл проверку: {exc}")
-            return None
-
-    def save_scenario() -> None:
-        graph = validate_scenario()
-        workflow_id = scenario_id.text().strip()
-        if graph is None:
-            return
-        if not workflow_id:
-            scenario_status.setText("Укажи id сценария.")
-            return
-        try:
-            workflow_library.save(workflow_id, graph)
-            workflow_library.save_layout(workflow_id, graph_view.export_layout())
-            refresh_scenario_list()
-            refresh_hotkey_service()
-            scenario_status.setText(f"Сценарий «{graph.name}» сохранён локально.")
-        except (OSError, ValueError) as exc:
-            scenario_status.setText(f"Не удалось сохранить: {exc}")
-
-    def delete_scenario() -> None:
-        item = scenario_list.currentItem()
-        if item is None:
-            return
-        workflow_id = item.data(Qt.ItemDataRole.UserRole)
-        workflow_library.delete(workflow_id)
-        refresh_scenario_list()
-        refresh_hotkey_service()
-        scenario_status.setText(f"Сценарий {workflow_id} удалён.")
-
-    def run_selected_scenario() -> None:
-        workflow_id = scenario_id.text().strip()
-        if not workflow_id:
-            scenario_status.setText("Сначала выбери или сохрани сценарий.")
-            return
-        try:
-            graph = workflow_library.load(workflow_id)
-            root = next(node for node in graph.nodes if node.kind.startswith("trigger."))
-            trigger_kind = root.kind.removeprefix("trigger.")
-            trigger_value = {
-                "text": root.config.get("phrase", ""),
-                "hotkey": root.config.get("hotkey", ""),
-                "schedule": root.config.get("time", ""),
-                "startup": "",
-            }[trigger_kind]
-        except (OSError, ValueError, KeyError, StopIteration, json.JSONDecodeError) as exc:
-            scenario_status.setText(f"Не удалось подготовить сценарий: {exc}")
-            return
-
-        start_worker(
-            workflow_trigger=WorkflowTrigger(trigger_kind, trigger_value, workflow_id)
-        )
-
-    new_scenario_button.clicked.connect(create_scenario)
-    new_hotkey_scenario_button.clicked.connect(create_hotkey_scenario)
-    new_schedule_scenario_button.clicked.connect(create_schedule_scenario)
-    new_startup_scenario_button.clicked.connect(create_startup_scenario)
-    validate_scenario_button.clicked.connect(validate_scenario)
-    save_scenario_button.clicked.connect(save_scenario)
-    delete_scenario_button.clicked.connect(delete_scenario)
-    run_scenario_button.clicked.connect(run_selected_scenario)
-    fit_graph_button.clicked.connect(graph_view.fit_graph)
-    reset_layout_button.clicked.connect(graph_view.reset_layout)
-    scenario_list.itemSelectionChanged.connect(load_selected_scenario)
-    refresh_scenario_list()
+    scenario_status = scenario_page.status_label
     tabs.addTab(scenario_page, "Сценарии")
+
+
 
     apps_page = QWidget()
     apps_layout = QVBoxLayout(apps_page)
@@ -3698,7 +3242,8 @@ def main() -> int:
     )
 
     # Convert the working pages into a persistent left navigation.
-    page_stack = QStackedWidget()
+    page_stack = AnimatedPageStack(duration_ms=160)
+    page_stack.set_animations_enabled(bool(profile_data.get("animations_enabled", True)))
     navigation = QListWidget()
     navigation.setObjectName("mainNavigation")
     navigation.setAccessibleName("Основная навигация")
@@ -3759,6 +3304,34 @@ def main() -> int:
     sidebar_divider.setFrameShape(QFrame.Shape.HLine)
     sidebar_divider.setObjectName("softDivider")
     sidebar_layout.addWidget(sidebar_divider)
+    animation_toggle = QCheckBox("Плавные переходы")
+    animation_toggle.setAccessibleName("Плавные переходы между разделами")
+    animation_toggle.setAccessibleDescription(
+        "Включает или выключает короткое плавное появление страниц. "
+        "Отключи, если предпочитаешь интерфейс без движения."
+    )
+    animation_toggle.setToolTip(
+        "Короткое появление страницы при переключении. Можно отключить в любой момент."
+    )
+    animation_toggle.setChecked(bool(profile_data.get("animations_enabled", True)))
+
+    def save_animation_preference(enabled: bool) -> None:
+        profile_data["animations_enabled"] = bool(enabled)
+        preference_path = settings.workflows_path.parent / "ai_profile.json"
+        temporary = preference_path.with_suffix(".json.tmp")
+        try:
+            preference_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary.write_text(
+                json.dumps(profile_data, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            temporary.replace(preference_path)
+        except OSError:
+            logging.exception("Could not persist the page animation preference")
+
+    animation_toggle.toggled.connect(page_stack.set_animations_enabled)
+    animation_toggle.toggled.connect(save_animation_preference)
+    sidebar_layout.addWidget(animation_toggle)
     sidebar_footer = QLabel(f"Локальный режим\nВерсия {current_app_version}")
     sidebar_footer.setStyleSheet("font-size:11px; color:#9ba5b2;")
     sidebar_layout.addWidget(sidebar_footer)
@@ -3864,6 +3437,18 @@ def main() -> int:
         worker.finished.connect(lambda: QTimer.singleShot(0, dispatch_pending_automations))
         worker.finished.connect(lambda: QTimer.singleShot(350, resume_wake_listener))
         worker.start()
+
+    def run_scenario_from_studio(workflow_id: str, trigger_kind: str, trigger_value: str) -> None:
+        if workers:
+            scenario_status.setText(
+                "Сейчас выполняется другая задача. Дождись её завершения и повтори запуск."
+            )
+            return
+        start_worker(
+            workflow_trigger=WorkflowTrigger(trigger_kind, trigger_value, workflow_id)
+        )
+
+    scenario_page.run_requested.connect(run_scenario_from_studio)
 
     def send() -> None:
         prompt = input_box.text().strip()
