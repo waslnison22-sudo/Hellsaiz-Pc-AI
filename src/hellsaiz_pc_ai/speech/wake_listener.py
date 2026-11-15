@@ -96,6 +96,7 @@ class WakeWordListener:
             recognizer = KaldiRecognizer(model, sample_rate)
             awaiting_command = False
             command_deadline = 0.0
+            overflow_active = False
             self.on_status("Ожидаю обращение «Хеллсайз»…")
             read_frames = 4000
             with sd.RawInputStream(
@@ -109,11 +110,15 @@ class WakeWordListener:
                     block, overflowed = stream.read(read_frames)
                     if self._stop.is_set():
                         break
-                    if overflowed:
+                    if overflowed and not overflow_active:
+                        overflow_active = True
                         self.on_status(
                             "Микрофон: входной аудиобуфер переполнился; часть сигнала могла потеряться. "
                             "Уменьши нагрузку на компьютер или проверь устройство."
                         )
+                    elif not overflowed and overflow_active:
+                        overflow_active = False
+                        self.on_status("Микрофон: входной аудиобуфер восстановился.")
                     if awaiting_command and time.monotonic() >= command_deadline:
                         awaiting_command = False
                         command_deadline = 0.0

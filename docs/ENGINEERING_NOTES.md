@@ -84,7 +84,7 @@ The tool-call limit is separate from the model round limit. A provider response 
 
 - Speech checks remain non-invasive: they inspect available devices and engine/model paths without opening the microphone or playing audio.
 - SQLite history is opened with a read-only URI, query_only is enabled, quick_check(1) is run, and required messages/reminders tables are checked.
-- Workflow JSON files are parsed and validated as WorkflowGraph objects without rewriting or repairing user files; files larger than 1 MB are skipped with a warning to bound memory use.
+- Workflow JSON files are parsed and validated as WorkflowGraph objects without rewriting or repairing user files; files larger than 1 MB are skipped, and excessively nested JSON is reported as invalid rather than aborting the whole diagnostics run.
 - The user's data directory write access and free disk space are reported; low disk space produces a warning rather than modifying files.
 - The diagnostic worker snapshots UI settings on the main thread, performs filesystem/SQLite/device checks in QThread, then delivers results through QObject slots on the GUI thread.
 - The summary shows the worst state plus counts for OK, warnings and errors.
@@ -115,7 +115,7 @@ These investigations must be followed by unit tests and Windows integration chec
 - Wake-word capture uses blocking RawInputStream.read() inside the dedicated listener worker instead of a PortAudio callback plus a Python queue.
 - Vosk recognition, status notifications and wake/command state transitions all run outside the real-time audio callback path.
 - The read loop checks the stop event and command-wait timeout between fixed 4000-frame reads; at the supported 8–48 kHz sample-rate range this bounds stop/timeout responsiveness to at most about half a second, excluding device/driver stalls.
-- PortAudio input overflow is now reported to the user instead of silently replacing old queued blocks.
+- PortAudio input overflow is now reported to the user instead of silently replacing old queued blocks; consecutive overflow blocks produce one warning, followed by one recovery status when clean input resumes.
 - Audio remains in memory and is not persisted.
 
 **External guidance**

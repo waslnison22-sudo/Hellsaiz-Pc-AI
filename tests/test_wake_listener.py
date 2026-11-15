@@ -194,3 +194,79 @@ def test_listener_expires_wait_for_command_between_blocking_reads(tmp_path, monk
     finally:
         VoskTranscriber.clear_model_cache()
 
+
+def test_listener_rate_limits_repeated_overflow_status(tmp_path, monkeypatch):
+    import sys
+    from types import SimpleNamespace
+
+    model_dir = tmp_path / "vosk"
+    model_dir.mkdir()
+    listener_box = {"reads": 0}
+
+    class FakeModel:
+        def __init__(self, path):
+            self.path = path
+
+    class FakeRecognizer:
+        def __init__(self, model, sample_rate):
+            self.model = model
+            self.sample_rate = sample_rate
+
+        def AcceptWaveform(self, _block):
+            return False
+
+    class FakeStream:
+        def __init__(self, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def read(self, frames):
+            listener_box["reads"] += 1
+            count = listener_box["reads"]
+            if count >= 4:
+                listener_box["listener"].stop()
+            # Three continuous overflow reports followed by one healthy block.
+            return bytes(frames * 2), count <= 3
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+    fake_sounddevice = SimpleNamespace(
+        RawInputStream=FakeStream,
+        query_devices=lambda device=None, kind=None: {"default_samplerate": 16000},
+        check_input_settings=lambda **kwargs: None,
+    )
+    fake_vosk = SimpleNamespace(Model=FakeModel, KaldiRecognizer=FakeRecognizer)
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sounddevice)
+    monkeypatch.setitem(sys.modules, "vosk", fake_vosk)
+    monkeypatch.setattr(
+        "hellsaiz_pc_ai.speech.capture.resolve_input_device",
+        lambda _name: 7,
+    )
+    from hellsaiz_pc_ai.speech.vosk import VoskTranscriber
+
+    VoskTranscriber.clear_model_cache()
+    statuses = []
+    listener = WakeWordListener(
+        model_dir,
+        ["Хелл"],
+        lambda _: None,
+        on_status=statuses.append,
+    )
+    listener_box["listener"] = listener
+
+    try:
+        listener.listen()
+        overflow_messages = [
+            item for item in statuses if "аудиобуфер переполнился" in item
+        ]
+        recovery_messages = [
+            item for item in statuses if "аудиобуфер восстановился" in item
+        ]
+        assert len(overflow_messages) == 1
+        assert len(recovery_messages) == 1
+    finally:
+        VoskTranscriber.clear_model_cache()
+

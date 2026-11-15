@@ -180,3 +180,26 @@ def test_storage_health_skips_oversized_workflow_json(tmp_path: Path):
     assert by_component["Библиотека сценариев"].level == "warning"
     assert "oversized.json" in by_component["Библиотека сценариев"].message
 
+
+def test_storage_health_handles_excessively_nested_workflow_json(tmp_path: Path):
+    database = tmp_path / "history.sqlite3"
+    ChatStore(database)
+    ReminderStore(database)
+    workflow_dir = tmp_path / "workflows"
+    workflow_dir.mkdir()
+    (workflow_dir / "deep.json").write_text(
+        "[" * 1500 + "0" + "]" * 1500,
+        encoding="utf-8",
+    )
+
+    checks = collect_storage_health(
+        database_path=database,
+        workflows_path=workflow_dir,
+        low_disk_warning_bytes=0,
+    )
+    by_component = {item.component: item for item in checks}
+
+    assert by_component["История SQLite"].level == "ok"
+    assert by_component["Библиотека сценариев"].level == "warning"
+    assert "deep.json" in by_component["Библиотека сценариев"].message
+

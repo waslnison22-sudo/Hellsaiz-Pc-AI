@@ -225,7 +225,7 @@ def collect_storage_health(
                     graph_data = json.loads(path.read_text(encoding="utf-8"))
                     WorkflowGraph.from_dict(graph_data)
                     valid_count += 1
-                except (OSError, TypeError, ValueError, json.JSONDecodeError):
+                except (OSError, TypeError, ValueError, json.JSONDecodeError, RecursionError):
                     invalid_names.append(path.name)
         except OSError as exc:
             checks.append(HealthItem(
