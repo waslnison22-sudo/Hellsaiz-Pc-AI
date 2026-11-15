@@ -84,7 +84,7 @@ The tool-call limit is separate from the model round limit. A provider response 
 
 - Speech checks remain non-invasive: they inspect available devices and engine/model paths without opening the microphone or playing audio.
 - SQLite history is opened with a read-only URI, query_only is enabled, quick_check(1) is run, and required messages/reminders tables are checked.
-- Workflow JSON files are parsed and validated as WorkflowGraph objects without rewriting or repairing user files.
+- Workflow JSON files are parsed and validated as WorkflowGraph objects without rewriting or repairing user files; files larger than 1 MB are skipped with a warning to bound memory use.
 - The user's data directory write access and free disk space are reported; low disk space produces a warning rather than modifying files.
 - The diagnostic worker snapshots UI settings on the main thread, performs filesystem/SQLite/device checks in QThread, then delivers results through QObject slots on the GUI thread.
 - The summary shows the worst state plus counts for OK, warnings and errors.

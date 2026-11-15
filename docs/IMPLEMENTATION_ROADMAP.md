@@ -3,7 +3,7 @@
 This roadmap separates source changes from verified release acceptance. A feature is not complete for release merely because its module or UI exists.
 
 ## P0 — stability
-Implemented: deterministic local command router, single-instance lock, SQLite history, reminders, workflow library/scheduler, app/process allowlists, clipboard/system tools and background-worker cleanup; bounded tool argument size/depth, finite-number validation, side-effect-free registry preflight, strict AI tool-call batches, and read-only system diagnostics for SQLite, workflow graphs, user-data access and disk space.
+Implemented: deterministic local command router, single-instance lock, SQLite history, reminders, workflow library/scheduler, app/process allowlists, clipboard/system tools and background-worker cleanup; bounded tool argument size/depth, finite-number validation, side-effect-free registry preflight, strict AI tool-call batches, and read-only system diagnostics for SQLite, workflow graphs, user-data access and disk space, with a 1 MB per-workflow diagnostic read cap.
 Still required: real Windows CI on Python 3.11/3.12 and live tests of reminders, clipboard, workflows, shutdown, microphone and TTS; verify the diagnostics worker and GUI signal delivery on Windows.
 
 ## P1 — platform foundations

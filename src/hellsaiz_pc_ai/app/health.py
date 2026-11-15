@@ -11,6 +11,7 @@ from typing import Literal
 
 
 HealthLevel = Literal["ok", "warning", "error"]
+MAX_WORKFLOW_DIAGNOSTIC_BYTES = 1_000_000
 
 
 @dataclass(frozen=True)
@@ -217,6 +218,10 @@ def collect_storage_health(
         try:
             for path in sorted(workflows_path.glob("*.json")):
                 try:
+                    if path.stat().st_size > MAX_WORKFLOW_DIAGNOSTIC_BYTES:
+                        raise ValueError(
+                            f"workflow file exceeds {MAX_WORKFLOW_DIAGNOSTIC_BYTES} bytes"
+                        )
                     graph_data = json.loads(path.read_text(encoding="utf-8"))
                     WorkflowGraph.from_dict(graph_data)
                     valid_count += 1

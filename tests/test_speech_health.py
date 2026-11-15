@@ -1,4 +1,5 @@
 from pathlib import Path
+import sqlite3
 
 from hellsaiz_pc_ai.app.health import (
     HealthItem,
@@ -91,6 +92,7 @@ def test_storage_health_checks_sqlite_and_workflows_read_only(tmp_path: Path):
     assert by_component["История SQLite"].level == "ok"
     assert by_component["Библиотека сценариев"].level == "ok"
     assert by_component["Пользовательское хранилище"].level == "ok"
+    assert ChatStore(database).recent_messages() == []
     ChatStore(database).add_message("user", "после диагностики")
     assert ChatStore(database).recent_messages()[-1]["content"] == "после диагностики"
 
@@ -139,3 +141,42 @@ def test_empty_health_summary_is_warning():
 
     assert level == "warning"
     assert "не вернула результатов" in summary.casefold()
+
+
+def test_storage_health_reports_missing_required_sqlite_table(tmp_path: Path):
+    database = tmp_path / "partial.sqlite3"
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "CREATE TABLE messages (id INTEGER PRIMARY KEY, created_at TEXT, role TEXT, content TEXT)"
+        )
+    workflow_dir = tmp_path / "workflows"
+    workflow_dir.mkdir()
+
+    checks = collect_storage_health(database_path=database, workflows_path=workflow_dir)
+    by_component = {item.component: item for item in checks}
+
+    assert by_component["История SQLite"].level == "error"
+    assert "reminders" in by_component["История SQLite"].message
+
+
+def test_storage_health_skips_oversized_workflow_json(tmp_path: Path):
+    database = tmp_path / "history.sqlite3"
+    ChatStore(database)
+    ReminderStore(database)
+    workflow_dir = tmp_path / "workflows"
+    workflow_dir.mkdir()
+    (workflow_dir / "oversized.json").write_text(
+        " " * 1_000_001,
+        encoding="utf-8",
+    )
+
+    checks = collect_storage_health(
+        database_path=database,
+        workflows_path=workflow_dir,
+        low_disk_warning_bytes=0,
+    )
+    by_component = {item.component: item for item in checks}
+
+    assert by_component["Библиотека сценариев"].level == "warning"
+    assert "oversized.json" in by_component["Библиотека сценариев"].message
+

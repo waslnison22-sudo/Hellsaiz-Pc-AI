@@ -2369,14 +2369,24 @@ def main() -> int:
     wake_listener_status.setStyleSheet("color:#929aa6;")
     settings_layout.addWidget(wake_listener_status)
     speech_health_button = QPushButton("Проверить состояние приложения")
+    speech_health_button.setAccessibleDescription(
+        "Запускает фоновую проверку голоса, локальной истории, сценариев и пользовательского хранилища."
+    )
     settings_layout.addWidget(speech_health_button)
     health_summary_status = QLabel("Диагностика ещё не запускалась.")
+    health_summary_status.setAccessibleName("Итог диагностики")
     health_summary_status.setStyleSheet("font-weight:650; color:#d7e0eb;")
     settings_layout.addWidget(health_summary_status)
     speech_health_status = QLabel(
         "Проверяются голосовые компоненты, SQLite, сценарии и пользовательское хранилище."
     )
     speech_health_status.setWordWrap(True)
+    speech_health_status.setAccessibleName("Подробности диагностики")
+    speech_health_status.setAccessibleDescription(
+        "Проверки состояния голоса, базы данных, сценариев и доступности диска. Текст можно выделить и скопировать."
+    )
+    speech_health_status.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+    speech_health_status.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
     speech_health_status.setStyleSheet("color:#929aa6;")
     settings_layout.addWidget(speech_health_status)
     system_health_workers: list[QThread] = []
