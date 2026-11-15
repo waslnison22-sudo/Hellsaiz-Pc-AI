@@ -1,7 +1,7 @@
 # Патч этапа 2 (объединённый): VPN+typing инструменты, профиль/настройки (persona, шаг громкости,
 # follow-up), серая строка «Распознано», lint-чистка и синхронизация тестов с фактическим кодом.
 # Формат: zero-context hunks (n=0) — устойчив к потере пустых контекстных строк при вставке.
-# Заменяет прежние stage2/stage3/stage6/stage7. Порядок конвейера: stage1, stage1b, этот патч, stage5.
+# Заменяет прежние stage2/stage3/stage6/stage7. Порядок конвейера: stage1, stage1b, этот патч.
 --- a/src/hellsaiz_pc_ai/core/orchestrator.py
 +++ b/src/hellsaiz_pc_ai/core/orchestrator.py
 @@ -6,1 +5,0 @@
@@ -9,7 +9,7 @@
 --- a/src/hellsaiz_pc_ai/core/intent_engine.py
 +++ b/src/hellsaiz_pc_ai/core/intent_engine.py
 @@ -36,1 +36,2 @@
--        normalized = " ".join(normalized.split()).strip(" \t\r\n.,!?;:…")
+-        normalized = " ".join(normalized.split()).strip(" \\t\\r\\n.,!?;:…")
 +        normalized = " ".join(normalized.split())
 +        normalized = re.sub(r"^[\s.,!?;:…]+|[\s.,!?;:…]+$", "", normalized)
 @@ -72,1 +73,1 @@
