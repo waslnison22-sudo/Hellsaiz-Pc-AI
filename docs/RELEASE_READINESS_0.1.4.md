@@ -54,7 +54,7 @@ Do not recreate the GitHub Release from that stale tag. After the source passes 
 
 ### Signing secret
 
-The release workflow expects the repository Actions secret HELLSAIZ_UPDATE_SIGNING_KEY. The source code cannot read GitHub secrets, so its presence and correctness must be confirmed by the release workflow itself. The workflow checks that the supplied private key matches the public key embedded in the updater.
+The release workflow expects the repository Actions secret `HELLSAIZ_UPDATE_SIGNING_KEY`. The GitHub connector available for this session cannot read Actions secrets. Its presence and correctness therefore remain unverified; the Windows release workflow must confirm that the supplied private key matches the public key embedded in the updater before publication. Never paste the private signing key into chat, source code, a commit, or a workflow log. If the secret is absent or mismatched, the build must stop without publishing the release.
 
 ## User data and update policy
 
