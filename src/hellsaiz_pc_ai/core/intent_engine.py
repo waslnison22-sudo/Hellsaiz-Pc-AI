@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
 
 
@@ -31,7 +32,8 @@ class IntentEngine:
         self._patterns.extend(compiled)
 
     def resolve(self, utterance: str) -> IntentMatch | None:
-        normalized = " ".join(utterance.casefold().split()).strip()
+        normalized = unicodedata.normalize("NFKC", utterance).casefold().replace("ё", "е")
+        normalized = " ".join(normalized.split()).strip(" \\t\\r\\n.,!?;:…")
         for item in self._patterns:
             match = item.pattern.fullmatch(normalized)
             if match is None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -113,7 +114,8 @@ class CommandRouter:
 
     @staticmethod
     def _normalize_phrase(text: str) -> str:
-        return re.sub(r"\s+", " ", text.casefold()).strip()
+        normalized = unicodedata.normalize("NFKC", text).casefold().replace("ё", "е")
+        return re.sub(r"\s+", " ", normalized).strip()
 
     def strip_wake_name(self, text: str) -> str:
         value = text.strip()
@@ -129,7 +131,8 @@ class CommandRouter:
 
     def normalize(self, text: str) -> str:
         value = self.strip_wake_name(text)
-        return re.sub(r"[\s.,!?;:]+", " ", value.casefold()).strip()
+        value = unicodedata.normalize("NFKC", value).casefold().replace("ё", "е")
+        return re.sub(r"[\s.,!?;:]+", " ", value).strip()
 
     def route(self, text: str, confirm: ConfirmCallback | None = None) -> str | None:
         command = self.normalize(text)

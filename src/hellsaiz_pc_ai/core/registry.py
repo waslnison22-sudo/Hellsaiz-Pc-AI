@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -8,6 +9,10 @@ from typing import Any
 from hellsaiz_pc_ai.core.models import RiskLevel, ToolResult
 
 ConfirmCallback = Callable[["ToolSpec", dict[str, Any]], bool]
+
+MAX_ARGUMENT_DEPTH = 16
+MAX_COLLECTION_ITEMS = 1024
+MAX_ARGUMENT_STRING_LENGTH = 100_000
 
 
 @dataclass(frozen=True)
@@ -52,7 +57,24 @@ class ToolRegistry:
         return [spec.as_openai_tool() for spec in self._tools.values()]
 
     @classmethod
-    def _validate_value(cls, value: Any, schema: dict[str, Any], path: str) -> None:
+    def _validate_value(
+        cls,
+        value: Any,
+        schema: dict[str, Any],
+        path: str,
+        depth: int = 0,
+    ) -> None:
+        if depth > MAX_ARGUMENT_DEPTH:
+            raise ValueError(f"{path} exceeds the maximum nesting depth ({MAX_ARGUMENT_DEPTH}).")
+        if isinstance(value, str) and len(value) > MAX_ARGUMENT_STRING_LENGTH:
+            raise ValueError(
+                f"{path} exceeds the maximum string length ({MAX_ARGUMENT_STRING_LENGTH})."
+            )
+        if isinstance(value, (dict, list)) and len(value) > MAX_COLLECTION_ITEMS:
+            raise ValueError(
+                f"{path} exceeds the maximum collection size ({MAX_COLLECTION_ITEMS})."
+            )
+
         expected = schema.get("type")
         type_checks = {
             "object": lambda item: isinstance(item, dict),
@@ -83,6 +105,8 @@ class ToolRegistry:
                 raise ValueError(f"{path} does not match the required pattern.")
 
         if isinstance(value, (int, float)) and not isinstance(value, bool):
+            if isinstance(value, float) and not math.isfinite(value):
+                raise ValueError(f"{path} must be a finite number.")
             if value < schema.get("minimum", float("-inf")):
                 raise ValueError(f"{path} is below the minimum.")
             if value > schema.get("maximum", float("inf")):
@@ -106,7 +130,7 @@ class ToolRegistry:
                     continue
                 if not isinstance(child_schema, dict):
                     raise ValueError(f"{path}.{key} has an invalid schema.")
-                cls._validate_value(item, child_schema, f"{path}.{key}")
+                cls._validate_value(item, child_schema, f"{path}.{key}", depth + 1)
 
         if isinstance(value, list):
             if len(value) < schema.get("minItems", 0):
@@ -116,7 +140,7 @@ class ToolRegistry:
             item_schema = schema.get("items")
             if item_schema is not None:
                 for index, item in enumerate(value):
-                    cls._validate_value(item, item_schema, f"{path}[{index}]")
+                    cls._validate_value(item, item_schema, f"{path}[{index}]", depth + 1)
 
     def execute(
         self, name: str, arguments: dict[str, Any], confirm: ConfirmCallback | None = None

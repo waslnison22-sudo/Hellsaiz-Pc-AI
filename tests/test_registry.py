@@ -73,3 +73,73 @@ def test_string_length_and_enum_are_validated():
     ))
     assert not registry.execute("open", {"app": ""}).ok
     assert not registry.execute("open", {"app": "powershell"}).ok
+
+
+def test_non_finite_numbers_are_rejected_before_tool_execution():
+    registry = ToolRegistry()
+    registry.register(ToolSpec(
+        "set_level", "set level",
+        {
+            "type": "object",
+            "properties": {"level": {"type": "number", "minimum": 0, "maximum": 1}},
+            "required": ["level"],
+            "additionalProperties": False,
+        },
+        RiskLevel.SAFE,
+        lambda args: ToolResult(True, str(args["level"])),
+    ))
+
+    assert not registry.execute("set_level", {"level": float("nan")}).ok
+    assert not registry.execute("set_level", {"level": float("inf")}).ok
+    assert registry.execute("set_level", {"level": 0.5}).ok
+
+
+def test_excessively_nested_tool_arguments_are_rejected():
+    registry = ToolRegistry()
+    schema = {"type": "string"}
+    value = "payload"
+    for _ in range(20):
+        schema = {
+            "type": "object",
+            "properties": {"nested": schema},
+            "required": ["nested"],
+            "additionalProperties": False,
+        }
+        value = {"nested": value}
+    registry.register(ToolSpec(
+        "inspect_payload", "inspect",
+        {
+            "type": "object",
+            "properties": {"payload": schema},
+            "required": ["payload"],
+            "additionalProperties": False,
+        },
+        RiskLevel.SAFE,
+        lambda _args: ToolResult(True, "unexpected"),
+    ))
+
+    result = registry.execute("inspect_payload", {"payload": value})
+
+    assert not result.ok
+    assert "nesting depth" in result.output
+
+
+def test_oversized_tool_collections_are_rejected():
+    registry = ToolRegistry()
+    registry.register(ToolSpec(
+        "inspect_items", "inspect",
+        {
+            "type": "object",
+            "properties": {"items": {"type": "array", "items": {"type": "integer"}}},
+            "required": ["items"],
+            "additionalProperties": False,
+        },
+        RiskLevel.SAFE,
+        lambda _args: ToolResult(True, "unexpected"),
+    ))
+
+    result = registry.execute("inspect_items", {"items": list(range(1025))})
+
+    assert not result.ok
+    assert "collection size" in result.output
+

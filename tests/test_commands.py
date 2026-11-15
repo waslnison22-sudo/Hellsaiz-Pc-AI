@@ -329,3 +329,12 @@ def test_intent_engine_extracts_named_slots():
     assert rate.name == "exchange_rate"
     assert rate.slots["base"] == "евро"
     assert rate.slots["quote"] == "доллар"
+
+
+def test_command_normalization_handles_unicode_width_yo_and_punctuation():
+    router = make_router()
+
+    assert router.route("  ПОГОДА В МОСКВЕ?  ") == "Готово. weather: москве"
+    assert router.route("найди в интернете ONNX Runtime.") == "Готово. search: onnx runtime"
+    assert router.route("ｏｔｋｒｏｙ БЛОКНОТ") == "Готово. opened notepad"
+
