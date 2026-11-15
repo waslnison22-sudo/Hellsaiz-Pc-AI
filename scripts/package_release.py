@@ -205,6 +205,19 @@ def main() -> int:
         else:
             print(f"No binary files changed since {previous_version}; no delta archive was created.")
 
+    required_assets = (
+        "HellsaizPC_AI-update-manifest.json",
+        "HellsaizPC_AI-update-manifest.sig",
+        UPDATE_PACKAGE_NAME,
+        PORTABLE_PACKAGE_NAME,
+    )
+    missing_assets = [
+        name for name in required_assets
+        if not (release_assets / name).is_file() or (release_assets / name).stat().st_size <= 0
+    ]
+    if missing_assets:
+        raise SystemExit(f"Required release assets are missing or empty: {missing_assets}")
+
     total = sum(record["size"] for record in files.values())
     print(f"Release manifest signed for {version}; {len(files)} files, {total} bytes.")
     print(f"Portable package validated: {portable_path}")

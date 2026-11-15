@@ -37,17 +37,18 @@ The first 0.1.4 build is a local-first Windows desktop assistant, not a finished
 
 The CI workflow was retried after separating Ruff into an advisory report. The retry still failed before any job step started.
 
-- Latest workflow run: 43691082400 (#434), commit `b6a1db88ff4f208f79500da7606494a7ee69c9e2`.
-- The earlier retry (run 43683649179, #433) also failed before any job step started.
-- In run #434 all four matrix jobs had runner_id: 0, an empty runner_name, and steps: [].
+- Workflow run: 43683154714
+- Commit tested: 7e0969ff251485c19dbf03d0c8a0d6d80556b909
+- Retry attempt: 2
+- All four matrix jobs had runner_id: 0, an empty runner_name, and steps: [].
 - The Windows package job was skipped because its test dependency job did not pass.
 - No diagnostic artifacts were produced because no runner executed the workflow.
 
-This is a runner allocation/billing failure, not evidence that the source tests passed or failed. GitHub displayed the notice that recent account payments had not cleared or the spending limit must be increased. Resolve the repository/account Actions billing restriction, then rerun the workflow. Do not weaken runtime tests to hide a runner allocation failure.
+This is a runner allocation/environment failure, not evidence that the source tests passed or failed. Check repository Actions enablement and the account's Actions minutes/billing limits, then rerun the workflow. Do not weaken runtime tests to hide a runner allocation failure.
 
-### Published empty v0.1.4 release and stale tag
+### Stale v0.1.4 tag
 
-The GitHub Release at `v0.1.4` is currently public but contains zero assets. The legacy `v0.1.4` tag still points to commit `6d0baa2f8104b290fe7f4103433e33c504d1dadd`, an older OCR metadata-only commit, not the release candidate branch head. This empty stable release is why 0.1.3 reports `Релиз не содержит подписанный update-манифест`.
+The deleted GitHub Release is not the same as deleting its Git tag. At the last check, refs/tags/v0.1.4 still pointed to commit 6d0baa2f8104b290fe7f4103433e33c504d1dadd, an older OCR metadata-only commit, not the release candidate branch head.
 
 Do not recreate the GitHub Release from that stale tag. After the source passes the release checks, move or recreate the v0.1.4 tag at the exact tested commit, then let .github/workflows/release-windows.yml build and publish the signed assets. The workflow explicitly requires the previous stable release to be v0.1.3 for the first 0.1.4 update acceptance test.
 
@@ -66,4 +67,4 @@ The user-facing 0.1.4 update is ready only after the real Windows release workfl
 - HellsaizPC_AI-windows-x64-portable.zip
 - HellsaizPC_AI_Setup.exe
 
-Until then, remain on the installed 0.1.3 build. A source-mode fallback is available from `INSTALL.bat` / `RUN.bat` in the `dev/bootstrap` ZIP, but it is not the signed portable release and does not provide the in-app updater.
+Until then, remain on the installed 0.1.3 build.
