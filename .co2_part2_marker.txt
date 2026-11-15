@@ -1,1 +1,0 @@
-См. новые пункты в commands.py и intent_engine.py этого коммита.
