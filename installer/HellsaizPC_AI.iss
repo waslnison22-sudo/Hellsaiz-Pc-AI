@@ -7,10 +7,10 @@ AppId={{B70D1E04-91A6-4B1B-A46A-39C6F1B4A190}
 AppName=Hellsaiz PC AI
 AppVersion={#AppVersion}
 AppPublisher=Hellsaiz
-DefaultDirName={autopf}\Hellsaiz PC AI
+DefaultDirName={autopf}\\Hellsaiz PC AI
 DefaultGroupName=Hellsaiz PC AI
-UninstallDisplayIcon={app}\HellsaizLauncher.exe
-OutputDir=..\dist
+UninstallDisplayIcon={app}\\HellsaizLauncher.exe
+OutputDir=..\\dist
 OutputBaseFilename=HellsaizPC_AI_Setup
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -30,14 +30,14 @@ VersionInfoCompany=Hellsaiz
 Name: "desktopicon"; Description: "Создать ярлык на рабочем столе"; GroupDescription: "Дополнительные ярлыки:"
 
 [Files]
-Source: "..\dist\install\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\\dist\\install\\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\Hellsaiz PC AI"; Filename: "{app}\HellsaizLauncher.exe"; WorkingDir: "{app}"
-Name: "{autodesktop}\Hellsaiz PC AI"; Filename: "{app}\HellsaizLauncher.exe"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autoprograms}\\Hellsaiz PC AI"; Filename: "{app}\\HellsaizLauncher.exe"; WorkingDir: "{app}"
+Name: "{autodesktop}\\Hellsaiz PC AI"; Filename: "{app}\\HellsaizLauncher.exe"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [UninstallRun]
-Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""Hellsaiz PC AI"" /F"; Flags: runhidden waituntilterminated ignoreerrors; RunOnceId: "RemoveHellsaizStartupTask"; StatusMsg: "Удаление задачи автозапуска..."
+Filename: "{sys}\\schtasks.exe"; Parameters: "/Delete /TN ""Hellsaiz PC AI"" /F"; Flags: runhidden waituntilterminated; RunOnceId: "RemoveHellsaizStartupTask"; StatusMsg: "Удаление задачи автозапуска..."
 
 [Run]
-Filename: "{app}\HellsaizLauncher.exe"; Description: "Запустить Hellsaiz PC AI"; Flags: postinstall nowait skipifsilent
+Filename: "{app}\\HellsaizLauncher.exe"; Description: "Запустить Hellsaiz PC AI"; Flags: postinstall nowait skipifsilent
