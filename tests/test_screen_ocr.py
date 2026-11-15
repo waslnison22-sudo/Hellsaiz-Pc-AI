@@ -8,12 +8,10 @@ from hellsaiz_pc_ai.tools.screen_ocr import (
     register_screen_ocr_tools,
 )
 
-
 class FakeResult:
     def __init__(self, texts, scores=None):
         self.txts = texts
         self.scores = scores
-
 
 def test_ocr_extracts_text_and_filters_low_confidence():
     result = _extract_text(FakeResult(
@@ -22,11 +20,9 @@ def test_ocr_extracts_text_and_filters_low_confidence():
     ))
     assert result == ["Hellsaiz PC AI", "Version 0.1.4"]
 
-
 def test_ocr_limits_output_length():
     result = _extract_text(FakeResult(["x" * (MAX_TEXT_CHARS + 100)], [0.99]))
     assert len(result[0]) == MAX_TEXT_CHARS
-
 
 def test_screen_capture_result_is_local_and_not_written():
     calls = []
@@ -48,7 +44,6 @@ def test_screen_capture_result_is_local_and_not_written():
     }
     assert calls == ["frame"]
 
-
 def test_screen_ocr_reports_optional_dependency_failure():
     output = read_primary_screen_text(
         capture=lambda: "frame",
@@ -56,7 +51,6 @@ def test_screen_ocr_reports_optional_dependency_failure():
     )
     assert not output.ok
     assert "ImportError" in output.output
-
 
 def test_ocr_tool_is_disabled_until_user_opt_in():
     registry = ToolRegistry()
@@ -70,8 +64,6 @@ def test_ocr_tool_is_disabled_until_user_opt_in():
     state["enabled"] = True
     # Once enabled, a mocked screen capture is tested by read_primary_screen_text.
     assert registry.get_spec("read_screen_text") is not None
-
-
 
 def test_enabled_ocr_tool_uses_local_reader(monkeypatch):
     from hellsaiz_pc_ai.core.models import ToolResult
@@ -90,7 +82,6 @@ def test_enabled_ocr_tool_uses_local_reader(monkeypatch):
     assert result.ok
     assert result.output == "Visible text"
     assert result.data["sent_to_network"] is False
-
 
 def test_enabled_ocr_tool_passes_user_model_directory_to_reader(monkeypatch, tmp_path):
     from hellsaiz_pc_ai.core.models import ToolResult
