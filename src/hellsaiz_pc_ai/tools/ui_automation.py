@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from typing import Any
 
 from hellsaiz_pc_ai.core.models import RiskLevel, ToolResult
@@ -67,40 +68,63 @@ def _select_window(desktop: Any, title_query: str) -> tuple[Any | None, str | No
     return matches[0], None
 
 
-def _control_name(control: Any) -> str:
+@dataclass(frozen=True)
+class _ControlSnapshot:
+    control: Any
+    name: str
+    control_type: str
+    automation_id: str
+
+
+def _snapshot_controls(window: Any, *, require_interactive: bool = False) -> list[_ControlSnapshot]:
+    """Read each control's identifying properties once for this UIA operation."""
+    snapshots: list[_ControlSnapshot] = []
+    for control in window.descendants():
+        try:
+            name = str(control.window_text() or "").strip()
+            info = control.element_info
+            if not name:
+                name = str(info.name or "").strip()
+            if not name:
+                continue
+            if require_interactive and (
+                not control.is_visible() or not control.is_enabled()
+            ):
+                continue
+            snapshots.append(_ControlSnapshot(
+                control=control,
+                name=name,
+                control_type=str(info.control_type or "Unknown"),
+                automation_id=str(info.automation_id or "")[:80],
+            ))
+        except Exception:
+            # UIA providers can disappear while the tree is being enumerated.
+            continue
+    return snapshots
+
+
+def _is_actionable(snapshot: _ControlSnapshot) -> bool:
+    """Recheck transient state immediately before invoking a UIA side effect."""
     try:
-        title = str(control.window_text() or "").strip()
+        return bool(snapshot.control.is_visible() and snapshot.control.is_enabled())
     except Exception:
-        title = ""
-    if title:
-        return title
-    try:
-        return str(control.element_info.name or "").strip()
-    except Exception:
-        return ""
+        return False
 
 
-def _control_type(control: Any) -> str:
-    try:
-        return str(control.element_info.control_type or "Unknown")
-    except Exception:
-        return "Unknown"
-
-
-def _control_matches(window: Any, name_query: str) -> list[Any]:
+def _control_matches(window: Any, name_query: str) -> list[_ControlSnapshot]:
     query = " ".join(name_query.casefold().split())
     if not query:
         return []
-    matches = []
-    for control in window.descendants():
-        try:
-            name = " ".join(_control_name(control).casefold().split())
-            if name and (name == query or query in name):
-                if control.is_visible() and control.is_enabled():
-                    matches.append(control)
-        except Exception:
-            continue
-    exact = [item for item in matches if " ".join(_control_name(item).casefold().split()) == query]
+    snapshots = _snapshot_controls(window, require_interactive=True)
+    matches = [
+        item for item in snapshots
+        if query == " ".join(item.name.casefold().split())
+        or query in " ".join(item.name.casefold().split())
+    ]
+    exact = [
+        item for item in matches
+        if " ".join(item.name.casefold().split()) == query
+    ]
     return exact or matches
 
 
@@ -110,21 +134,15 @@ def _inspect_window(title_query: str) -> ToolResult:
         window, error = _select_window(desktop, title_query)
         if error:
             return ToolResult(False, error)
-        controls = []
-        for control in window.descendants():
-            try:
-                name = _control_name(control)
-                if not name:
-                    continue
-                controls.append({
-                    "name": name[:160],
-                    "type": _control_type(control),
-                    "automation_id": str(control.element_info.automation_id or "")[:80],
-                })
-                if len(controls) >= MAX_CONTROLS:
-                    break
-            except Exception:
-                continue
+        snapshots = _snapshot_controls(window)
+        controls = [
+            {
+                "name": item.name[:160],
+                "type": item.control_type,
+                "automation_id": item.automation_id,
+            }
+            for item in snapshots[:MAX_CONTROLS]
+        ]
         if not controls:
             return ToolResult(
                 False,
@@ -161,11 +179,16 @@ def _click_control(title_query: str, name_query: str) -> ToolResult:
                 f"Элемент «{name_query}» неоднозначен: найдено {len(matches)} совпадений. "
                 "Уточни название из списка элементов.",
             )
-        control = matches[0]
-        control.click_input()
+        snapshot = matches[0]
+        if not _is_actionable(snapshot):
+            return ToolResult(
+                False,
+                f"Элемент «{snapshot.name}» изменился или стал недоступен. Повтори поиск элементов окна.",
+            )
+        snapshot.control.click_input()
         return ToolResult(
             True,
-            f"Нажат элемент «{_control_name(control)}» в окне «{window.window_text()}».",
+            f"Нажат элемент «{snapshot.name}» в окне «{window.window_text()}».",
         )
     except OSError as exc:
         return ToolResult(False, str(exc))
@@ -214,12 +237,18 @@ def _type_into_control(title_query: str, name_query: str, text: str) -> ToolResu
                 False,
                 f"Поле «{name_query}» неоднозначно: найдено {len(matches)} совпадений.",
             )
-        control = matches[0]
-        if _control_type(control) not in {"Edit", "ComboBox", "Document"}:
+        snapshot = matches[0]
+        if snapshot.control_type not in {"Edit", "ComboBox", "Document"}:
             return ToolResult(
                 False,
-                f"Элемент «{_control_name(control)}» не является поддерживаемым полем ввода.",
+                f"Элемент «{snapshot.name}» не является поддерживаемым полем ввода.",
             )
+        if not _is_actionable(snapshot):
+            return ToolResult(
+                False,
+                f"Поле «{snapshot.name}» изменилось или стало недоступно. Повтори поиск элементов окна.",
+            )
+        control = snapshot.control
         control.set_focus()
         setter = getattr(control, "set_edit_text", None)
         if not callable(setter):
@@ -227,7 +256,7 @@ def _type_into_control(title_query: str, name_query: str, text: str) -> ToolResu
         setter(text)
         return ToolResult(
             True,
-            f"Текст введён в поле «{_control_name(control)}» окна «{window.window_text()}».",
+            f"Текст введён в поле «{snapshot.name}» окна «{window.window_text()}».,
         )
     except OSError as exc:
         return ToolResult(False, str(exc))

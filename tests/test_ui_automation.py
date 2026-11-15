@@ -15,15 +15,19 @@ class FakeControl:
         self.clicked = 0
         self.focused = 0
         self.text = None
+        self.name_reads = 0
+        self.visibility_results = []
+        self.enabled_results = []
 
     def window_text(self):
+        self.name_reads += 1
         return self.name
 
     def is_visible(self):
-        return True
+        return self.visibility_results.pop(0) if self.visibility_results else True
 
     def is_enabled(self):
-        return True
+        return self.enabled_results.pop(0) if self.enabled_results else True
 
     def click_input(self):
         self.clicked += 1
@@ -174,3 +178,27 @@ def test_keyboard_shortcut_refuses_shell_and_arbitrary_key_combinations(monkeypa
 
     assert not result.ok
     assert "не разрешено" in result.output.casefold()
+
+
+def test_control_selection_reuses_one_property_snapshot():
+    control = FakeControl("Save")
+    window = FakeWindow("Settings", [control])
+    result = ui_automation._click_control("Settings", "Save")
+
+    assert result.ok
+    assert control.name_reads == 1
+    assert control.clicked == 1
+
+
+def test_click_rechecks_visibility_before_using_a_stale_control(monkeypatch):
+    control = FakeControl("Save")
+    control.visibility_results = [True, False]
+    window = FakeWindow("Settings", [control])
+    monkeypatch.setattr(ui_automation, "_desktop", lambda: FakeDesktop([window]))
+
+    result = ui_automation._click_control("Settings", "Save")
+
+    assert not result.ok
+    assert "недоступен" in result.output.casefold()
+    assert control.clicked == 0
+
