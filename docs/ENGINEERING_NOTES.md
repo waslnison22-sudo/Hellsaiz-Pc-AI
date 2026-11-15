@@ -114,7 +114,7 @@ These investigations must be followed by unit tests and Windows integration chec
 
 - Wake-word capture uses blocking RawInputStream.read() inside the dedicated listener worker instead of a PortAudio callback plus a Python queue.
 - Vosk recognition, status notifications and wake/command state transitions all run outside the real-time audio callback path.
-- The read loop checks the stop event between fixed 4000-frame reads; at the supported 8–48 kHz sample-rate range this bounds stop responsiveness to at most about half a second, excluding device/driver stalls.
+- The read loop checks the stop event and command-wait timeout between fixed 4000-frame reads; at the supported 8–48 kHz sample-rate range this bounds stop/timeout responsiveness to at most about half a second, excluding device/driver stalls.
 - PortAudio input overflow is now reported to the user instead of silently replacing old queued blocks.
 - Audio remains in memory and is not persisted.
 

@@ -114,6 +114,11 @@ class WakeWordListener:
                             "Микрофон: входной аудиобуфер переполнился; часть сигнала могла потеряться. "
                             "Уменьши нагрузку на компьютер или проверь устройство."
                         )
+                    if awaiting_command and time.monotonic() >= command_deadline:
+                        awaiting_command = False
+                        command_deadline = 0.0
+                        recognizer = KaldiRecognizer(model, sample_rate)
+                        self.on_status("Ожидаю обращение…")
                     if not recognizer.AcceptWaveform(block):
                         continue
                     result = json.loads(recognizer.Result())

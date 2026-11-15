@@ -71,8 +71,12 @@ def test_listener_opens_selected_microphone_device(tmp_path, monkeypatch):
 
         def read(self, frames):
             listener_box["frames"] = frames
+            reads = listener_box.get("reads", 0)
+            listener_box["reads"] = reads + 1
+            if reads == 0:
+                return bytes(frames * 2), True
             listener_box["listener"].stop()
-            return b"\\x00" * (frames * 2), True
+            return bytes(frames * 2), False
 
         def __exit__(self, exc_type, exc, traceback):
             return False
@@ -112,3 +116,81 @@ def test_listener_opens_selected_microphone_device(tmp_path, monkeypatch):
         assert len(VoskTranscriber._model_cache) == 1
     finally:
         VoskTranscriber.clear_model_cache()
+
+
+def test_listener_expires_wait_for_command_between_blocking_reads(tmp_path, monkeypatch):
+    import sys
+    from types import SimpleNamespace
+
+    model_dir = tmp_path / "vosk"
+    model_dir.mkdir()
+    listener_box = {"reads": 0, "recognitions": 0}
+
+    class FakeModel:
+        def __init__(self, path):
+            self.path = path
+
+    class FakeRecognizer:
+        def __init__(self, model, sample_rate):
+            self.model = model
+            self.sample_rate = sample_rate
+
+        def AcceptWaveform(self, _block):
+            listener_box["recognitions"] += 1
+            return listener_box["recognitions"] == 1
+
+        def Result(self):
+            return '{"text":"хелл"}'
+
+    class FakeStream:
+        def __init__(self, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def read(self, frames):
+            listener_box["reads"] += 1
+            if listener_box["reads"] >= 3:
+                listener_box["listener"].stop()
+            return bytes(frames * 2), False
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+    fake_sounddevice = SimpleNamespace(
+        RawInputStream=FakeStream,
+        query_devices=lambda device=None, kind=None: {"default_samplerate": 16000},
+        check_input_settings=lambda **kwargs: None,
+    )
+    fake_vosk = SimpleNamespace(Model=FakeModel, KaldiRecognizer=FakeRecognizer)
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sounddevice)
+    monkeypatch.setitem(sys.modules, "vosk", fake_vosk)
+    monkeypatch.setattr(
+        "hellsaiz_pc_ai.speech.capture.resolve_input_device",
+        lambda _name: 7,
+    )
+    from hellsaiz_pc_ai.speech.vosk import VoskTranscriber
+    from hellsaiz_pc_ai.speech import wake_listener as wake_module
+
+    clock_values = iter([10.0, 12.0])
+    monkeypatch.setattr(wake_module.time, "monotonic", lambda: next(clock_values))
+    VoskTranscriber.clear_model_cache()
+    statuses = []
+    listener = WakeWordListener(
+        model_dir,
+        ["Хелл"],
+        lambda _: None,
+        on_status=statuses.append,
+        command_timeout_seconds=1.0,
+    )
+    listener_box["listener"] = listener
+
+    try:
+        listener.listen()
+        assert listener_box["reads"] == 3
+        assert statuses.count("Слушаю команду…") == 1
+        assert statuses.count("Ожидаю обращение…") == 1
+    finally:
+        VoskTranscriber.clear_model_cache()
+
