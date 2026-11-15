@@ -58,6 +58,11 @@ def make_router(allowed_apps=None, app_aliases=None, wake_aliases=None, allowed_
         RiskLevel.SAFE, lambda _: ToolResult(True, "vpn status ok"),
     ))
     registry.register(ToolSpec(
+        "type_text_global", "type global",
+        {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]},
+        RiskLevel.CONFIRM, lambda args: ToolResult(True, f"typed {args['text']}"),
+    ))
+    registry.register(ToolSpec(
         "adjust_volume", "adjust volume",
         {"type": "object", "properties": {"delta": {"type": "integer"}}, "required": ["delta"]},
         RiskLevel.CONFIRM, lambda args: ToolResult(True, f"adjusted {args['delta']}"),
@@ -238,6 +243,14 @@ def test_vpn_commands_route_to_vpn_tools():
     assert router.route("подключи vpn", deny) in ack_variants("vpn started")
     assert router.route("выключи впн", deny) in ack_variants("vpn stopped")
     assert router.route("проверь впн", approve) in ack_variants("vpn status ok")
+
+
+def test_type_text_global_routes_explicit_command():
+    router = make_router()
+    assert router.route("напечатай: Привет мир", deny) in ack_variants("typed Привет мир")
+    assert router.route("Хеллсайз, напечатай текст Заметка про CI", deny) in ack_variants(
+        "typed Заметка про CI"
+    )
 
 
 def test_close_process_runs_immediately_but_keeps_allowlist():
