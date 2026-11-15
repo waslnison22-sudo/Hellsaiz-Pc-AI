@@ -203,3 +203,30 @@ def test_click_rechecks_visibility_before_using_a_stale_control(monkeypatch):
     assert "недоступен" in result.output.casefold()
     assert control.clicked == 0
 
+
+def test_snapshot_falls_back_to_element_name_when_window_text_is_unavailable(monkeypatch):
+    class UnnamedControl(FakeControl):
+        def window_text(self):
+            self.name_reads += 1
+            raise OSError("provider does not expose WindowText")
+
+    control = UnnamedControl("Save")
+    window = FakeWindow("Settings", [control])
+    monkeypatch.setattr(ui_automation, "_desktop", lambda: FakeDesktop([window]))
+
+    result = ui_automation._inspect_window("Settings")
+
+    assert result.ok
+    assert "Save" in result.output
+
+
+def test_control_matching_normalizes_compatibility_unicode_and_whitespace(monkeypatch):
+    control = FakeControl("Save   As")
+    window = FakeWindow("Editor", [control])
+    monkeypatch.setattr(ui_automation, "_desktop", lambda: FakeDesktop([window]))
+
+    result = ui_automation._click_control("Editor", "Save\u00a0As")
+
+    assert result.ok
+    assert control.clicked == 1
+

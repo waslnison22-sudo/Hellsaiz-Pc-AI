@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import unicodedata
 from dataclasses import dataclass
 from typing import Any
 
@@ -72,8 +73,14 @@ def _select_window(desktop: Any, title_query: str) -> tuple[Any | None, str | No
 class _ControlSnapshot:
     control: Any
     name: str
+    normalized_name: str
     control_type: str
     automation_id: str
+
+
+def _normalize_control_name(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", value).casefold()
+    return " ".join(normalized.split())
 
 
 def _snapshot_controls(window: Any, *, require_interactive: bool = False) -> list[_ControlSnapshot]:
@@ -81,21 +88,44 @@ def _snapshot_controls(window: Any, *, require_interactive: bool = False) -> lis
     snapshots: list[_ControlSnapshot] = []
     for control in window.descendants():
         try:
-            name = str(control.window_text() or "").strip()
-            info = control.element_info
-            if not name:
-                name = str(info.name or "").strip()
+            try:
+                name = str(control.window_text() or "").strip()
+            except Exception:
+                name = ""
+            try:
+                info = control.element_info
+            except Exception:
+                info = None
+            if not name and info is not None:
+                try:
+                    name = str(info.name or "").strip()
+                except Exception:
+                    name = ""
             if not name:
                 continue
-            if require_interactive and (
-                not control.is_visible() or not control.is_enabled()
-            ):
-                continue
+            if require_interactive:
+                try:
+                    if not control.is_visible() or not control.is_enabled():
+                        continue
+                except Exception:
+                    continue
+            control_type = "Unknown"
+            automation_id = ""
+            if info is not None:
+                try:
+                    control_type = str(info.control_type or "Unknown")
+                except Exception:
+                    pass
+                try:
+                    automation_id = str(info.automation_id or "")[:80]
+                except Exception:
+                    pass
             snapshots.append(_ControlSnapshot(
                 control=control,
                 name=name,
-                control_type=str(info.control_type or "Unknown"),
-                automation_id=str(info.automation_id or "")[:80],
+                normalized_name=_normalize_control_name(name),
+                control_type=control_type,
+                automation_id=automation_id,
             ))
         except Exception:
             # UIA providers can disappear while the tree is being enumerated.
@@ -112,19 +142,15 @@ def _is_actionable(snapshot: _ControlSnapshot) -> bool:
 
 
 def _control_matches(window: Any, name_query: str) -> list[_ControlSnapshot]:
-    query = " ".join(name_query.casefold().split())
+    query = _normalize_control_name(name_query)
     if not query:
         return []
     snapshots = _snapshot_controls(window, require_interactive=True)
     matches = [
         item for item in snapshots
-        if query == " ".join(item.name.casefold().split())
-        or query in " ".join(item.name.casefold().split())
+        if item.normalized_name == query or query in item.normalized_name
     ]
-    exact = [
-        item for item in matches
-        if " ".join(item.name.casefold().split()) == query
-    ]
+    exact = [item for item in matches if item.normalized_name == query]
     return exact or matches
 
 
