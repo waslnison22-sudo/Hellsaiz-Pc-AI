@@ -1,16 +1,12 @@
 # Патч этапа 2 (объединённый): VPN+typing инструменты, профиль/настройки (persona, шаг громкости,
 # follow-up), серая строка «Распознано», lint-чистка и синхронизация тестов с фактическим кодом.
 # Формат: zero-context hunks (n=0) — устойчив к потере пустых контекстных строк при вставке.
-# Заменяет прежние stage2/stage3/stage6/stage7. Порядок конвейера: stage1, stage1b, этот патч.
+# Заменяет прежние stage2/stage3/stage5/stage6/stage7. Порядок конвейера: stage1, stage1b, этот патч.
+# Фикс intent_engine (B005 strip и приоритет поиска файлов) сделан прямым коммитом в ветку.
 --- a/src/hellsaiz_pc_ai/core/orchestrator.py
 +++ b/src/hellsaiz_pc_ai/core/orchestrator.py
 @@ -6,1 +5,0 @@
 -from hellsaiz_pc_ai.core.models import ToolResult
---- a/src/hellsaiz_pc_ai/core/intent_engine.py
-+++ b/src/hellsaiz_pc_ai/core/intent_engine.py
-@@ -72,1 +72,1 @@
--        r"(?:найди(?:\s+в\s+(?:интернете|сети))?|поищи(?:\s+в\s+(?:интернете|сети))?|загугли|поиск)\s+(?P<query>.+)",
-+        r"(?:найди(?!\s+(?:файл|папку|элемент)\s+.+\s+в\s+папке)(?:\s+в\s+(?:интернете|сети))?|поищи(?:\s+в\s+(?:интернете|сети))?|загугли|поиск)\s+(?P<query>.+)",
 --- a/src/hellsaiz_pc_ai/core/commands.py
 +++ b/src/hellsaiz_pc_ai/core/commands.py
 @@ -85,1 +85,1 @@
