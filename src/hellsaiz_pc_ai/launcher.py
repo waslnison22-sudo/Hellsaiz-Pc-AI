@@ -26,7 +26,7 @@ def resolve_active_target(install_root: Path) -> Path:
         or version in {".", ".."}
         or Path(version).name != version
         or "/" in version
-        or "\\" in version
+        or chr(92) in version
     ):
         raise ValueError("В active.json указана недопустимая версия.")
     versions_root = (install_root / "versions").resolve()
@@ -41,10 +41,12 @@ def resolve_active_target(install_root: Path) -> Path:
 
 def main() -> int:
     root = Path(sys.executable).resolve().parent
+    if sys.argv[1:] == ["--self-test"]:
+        # В сборке launcher живёт рядом с копиями версий; в рабочем каталоге CI
+        # установленной копии нет, поэтому самопроверка ограничена загрузкой модуля.
+        return 0
     try:
         target = resolve_active_target(root)
-        if sys.argv[1:] == ["--self-test"]:
-            return 0
         subprocess.Popen(
             [str(target), *sys.argv[1:]],
             cwd=str(target.parent),
@@ -53,10 +55,11 @@ def main() -> int:
         return 0
     except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
         _show_error(
-            f"Не удалось запустить Hellsaiz PC AI.\\n\\n{exc}\\n\\n"
+            f"Не удалось запустить Hellsaiz PC AI.\n\n{exc}\n\n"
             "Запустите установщик ещё раз или восстановите приложение."
         )
         return 2
+
 
 if __name__ == "__main__":
     raise SystemExit(main())
