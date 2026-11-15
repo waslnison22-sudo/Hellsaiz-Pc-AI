@@ -1,5 +1,6 @@
 import pytest
 from datetime import datetime
+from urllib.parse import quote_plus
 
 from hellsaiz_pc_ai.core.commands import CommandRouter
 from hellsaiz_pc_ai.core.models import RiskLevel, ToolResult
@@ -14,7 +15,7 @@ def ack_variants(suffix: str) -> set[str]:
     return {f"{ack} {suffix}" for ack in ACKNOWLEDGMENTS}
 
 
-def make_router(allowed_apps=None, app_aliases=None, wake_aliases=None, allowed_processes=None):
+def make_router(allowed_apps=None, app_aliases=None, wake_aliases=None, allowed_processes=None, persona=None):
     registry = ToolRegistry()
     registry.register(ToolSpec(
         "get_local_time", "time",
@@ -30,6 +31,11 @@ def make_router(allowed_apps=None, app_aliases=None, wake_aliases=None, allowed_
         "open_app", "open",
         {"type": "object", "properties": {"app": {"type": "string"}}, "required": ["app"]},
         RiskLevel.CONFIRM, lambda args: ToolResult(True, f"opened {args['app']}"),
+    ))
+    registry.register(ToolSpec(
+        "open_url", "open url",
+        {"type": "object", "properties": {"url": {"type": "string"}}, "required": ["url"]},
+        RiskLevel.SAFE, lambda args: ToolResult(True, f"opened url {args['url']}"),
     ))
     registry.register(ToolSpec(
         "set_volume", "volume",
@@ -120,6 +126,7 @@ def make_router(allowed_apps=None, app_aliases=None, wake_aliases=None, allowed_
         allowed_processes if allowed_processes is not None else {"discord": "Discord.exe"},
         app_aliases,
         wake_aliases,
+        persona,
     )
 
 
@@ -350,10 +357,10 @@ def test_alice_style_search_phrasings_resolve_to_one_skill():
         assert router.route(phrase) in ack_variants("search: локальные нейросети")
 
 
-def test_weather_skill_extracts_city_and_asks_when_missing():
+def test_weather_skill_extracts_city_or_uses_default():
     router = make_router()
     assert router.route("какая погода в Москве") in ack_variants("weather: москве")
-    assert "для какого города" in router.route("Хелп, погода").casefold()
+    assert router.route("Хелп, погода") in ack_variants("weather: Ставрополь")
 
 
 def test_currency_skill_extracts_base_and_quote_currency():
@@ -418,6 +425,29 @@ def test_calculator_rejects_garbage_and_zero_division():
     assert router.route("сколько будет раз два три") is None
     assert router.route("сколько будет 5 разделить на 0") == "На ноль делить нельзя."
     assert router.route("сколько времени") in ack_variants("13.11.2026 12:00")
+
+
+def test_walk_phrase_reports_weather_for_default_city():
+    router = make_router()
+    assert router.route("я иду гулять", approve) in ack_variants("weather: Ставрополь")
+    assert router.route("собираюсь погулять", approve) in ack_variants("weather: Ставрополь")
+
+
+def test_music_command_opens_yandex_music_search():
+    router = make_router()
+    expected = f"opened url https://music.yandex.ru/search?text={quote_plus('егор крид')}"
+    assert router.route("включи музыку егор крид", approve) in ack_variants(expected)
+    expected_bare = "opened url https://music.yandex.ru"
+    assert router.route("включи яндекс музыку", approve) in ack_variants(expected_bare)
+
+
+def test_persona_changes_acknowledgment_style():
+    from hellsaiz_pc_ai.core.commands import PERSONA_ACKS
+    router = make_router(persona="джарвис")
+    response = router.route("который час")
+    assert response.startswith(PERSONA_ACKS["джарвис"])
+    neutral = make_router().route("который час")
+    assert neutral.startswith(ACKNOWLEDGMENTS)
 
 
 def test_command_normalization_handles_unicode_width_yo_and_punctuation():
