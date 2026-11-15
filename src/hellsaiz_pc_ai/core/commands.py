@@ -110,6 +110,8 @@ HELP_TEXT = (
     "• «закрой дискорд» (только разрешённые процессы)\n"
     "• «открой диспетчер задач», «открой настройки», «панель управления»\n"
     "• «установи громкость на 30 процентов», «громкость на максимум», «выключи звук»\n"
+    "• «громче», «тише», «громче на 20» — шаг изменения громкости\n"
+    "• «пауза», «продолжи», «следующий трек», «предыдущий трек» — медиа-клавиши\n"
     "• «прочитай буфер обмена», «скопируй текст»\n"
     "• «напомни через 5 минут…», «напомни в 22:00 …», «мои напоминания»\n"
     "• «сколько будет 12 умножить на 3», «15 процентов от 200»\n"
@@ -224,9 +226,11 @@ class CommandRouter:
         app_aliases: dict[str, tuple[str, ...]] | None = None,
         wake_aliases: tuple[str, ...] | list[str] | None = None,
         persona: str | None = None,
+        volume_step: int = 10,
     ) -> None:
         self.registry = registry
         self.persona = (persona or "хеллсайз").casefold().strip()
+        self.volume_step = max(1, min(100, int(volume_step)))
         self.allowed_apps = {name.casefold(): command for name, command in allowed_apps.items()}
         aliases = wake_aliases or ("Хеллсайз", "Хелсайз", "Хелл", "Hellsaiz", "Hell", "Хелп", "Help")
         self.wake_aliases = tuple(
@@ -641,6 +645,43 @@ class CommandRouter:
             if not 0 <= percent <= 100:
                 return "Громкость должна быть от 0 до 100 процентов."
             return self._execute("set_volume", {"percent": percent}, confirm)
+
+        if command in {
+            "пауза", "сделай паузу", "поставь на паузу",
+            "поставь музыку на паузу", "поставь трек на паузу", "поставь видео на паузу",
+        }:
+            return self._execute("send_media_key", {"key": "play_pause"}, confirm)
+
+        if command in {
+            "возобнови", "продолжи", "сними с паузы", "продолжи музыку",
+            "продолжи видео", "продолжить воспроизведение",
+        }:
+            return self._execute("send_media_key", {"key": "play_pause"}, confirm)
+
+        if command in {"следующий трек", "следующая песня", "следующий", "включи следующий трек"}:
+            return self._execute("send_media_key", {"key": "next_track"}, confirm)
+
+        if command in {"предыдущий трек", "предыдущая песня", "предыдущий", "верни предыдущий трек"}:
+            return self._execute("send_media_key", {"key": "previous_track"}, confirm)
+
+        louder_match = re.fullmatch(
+            r"(?:громче|прибавь громкость|сделай погромче|увеличь громкость|подними громкость|повысь громкость)"
+            r"(?:\s+на\s+(\d{1,3}))?",
+            command,
+        )
+        quieter_match = re.fullmatch(
+            r"(?:тише|убавь громкость|сделай потише|уменьши громкость|опусти громкость|понизь громкость)"
+            r"(?:\s+на\s+(\d{1,3}))?",
+            command,
+        )
+        if louder_match or quieter_match:
+            match = louder_match or quieter_match
+            sign = 1 if louder_match else -1
+            explicit = match.group(1)
+            step = int(explicit) if explicit else self.volume_step
+            if not 1 <= step <= 100:
+                return "Шаг громкости должен быть от 1 до 100 процентов."
+            return self._execute("adjust_volume", {"delta": sign * step}, confirm)
 
         for prefix in ("закрой ", "заверши "):
             if command.startswith(prefix):
