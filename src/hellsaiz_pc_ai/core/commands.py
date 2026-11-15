@@ -126,6 +126,7 @@ HELP_TEXT = (
     "• «прочитай текст на экране», «что написано на экране» — локальный OCR по запросу\n"
     "• «введи текст ... в поле Поиск окна Проводник»\n"
     "• «нажми сочетание Ctrl+L в окне Браузер», «нажми F5 в окне Проводник»\n"
+    "• «напечатай текст ...» — печать в активное окно (с подтверждением)\n"
     "• «покажи файлы в папке Документы», «найди файл план в папке Документы»\n"
     "• «прочитай файл ...», «открой папку ...»\n"
     "• Создание папок и новых текстовых файлов — только при включённом разрешении на запись.\n"
@@ -413,6 +414,16 @@ class CommandRouter:
             return self._execute("write_clipboard", {"text": clipboard_text}, confirm)
         if command == "скопируй":
             return "Укажи текст после команды «скопируй»."
+
+        type_global_match = re.match(
+            r"^\s*напечатай(?:\s+текст)?\s*[:,\-]?\s*(.+?)\s*$",
+            self.strip_wake_name(text),
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        if type_global_match:
+            global_text = type_global_match.group(1).strip()
+            if global_text:
+                return self._execute("type_text_global", {"text": global_text}, confirm)
 
         if command in {
             "который час", "сколько времени", "текущее время", "время", "какая дата",
