@@ -220,6 +220,12 @@ class CommandRouter:
         r"(?:F\d{1,2}|[A-Za-z]+|\d{1,2})(?:\s*[+\-]\s*(?:F\d{1,2}|[A-Za-z]+|\d{1,2}))*"
     )
 
+    # Обращения к чужим ассистентам: команда не должна исполняться молча.
+    OTHER_ASSISTANT_PREFIX = re.compile(
+        r"^(?:окей\s+гугл|okay\s+google|hey\s+siri|эй\s+сири|"
+        r"алиса|алекса|сири|сирена|кортана|гугл ассистент|гугл)\b\s*[,\-:]?\s+"
+    )
+
     def __init__(
         self,
         registry: ToolRegistry,
@@ -229,10 +235,12 @@ class CommandRouter:
         wake_aliases: tuple[str, ...] | list[str] | None = None,
         persona: str | None = None,
         volume_step: int = 10,
+        followup_enabled: bool = False,
     ) -> None:
         self.registry = registry
         self.persona = (persona or "хеллсайз").casefold().strip()
         self.volume_step = max(1, min(100, int(volume_step)))
+        self.followup_enabled = bool(followup_enabled)
         self.allowed_apps = {name.casefold(): command for name, command in allowed_apps.items()}
         aliases = wake_aliases or ("Хеллсайз", "Хелсайз", "Хелл", "Hellsaiz", "Hell", "Хелп", "Help")
         self.wake_aliases = tuple(
@@ -286,6 +294,12 @@ class CommandRouter:
         if not command:
             return "Скажите или напишите команду. Для списка возможностей введите «помощь»."
 
+        other_assistant = self.OTHER_ASSISTANT_PREFIX.match(command)
+        if other_assistant:
+            return (
+                "Похоже, вы обращаетесь к другому ассистенту. Я — Hellsaiz: "
+                "повторите команду без чужого имени, я её выполню."
+            )
 
         # Resolve the utterance to an intent and extract typed slots before execution.
         intent = self.intent_engine.resolve(command)
@@ -759,4 +773,7 @@ class CommandRouter:
     ) -> str:
         result: ToolResult = self.registry.execute(name, arguments, confirm)
         ack_pool = PERSONA_ACKS.get(self.persona, ACKNOWLEDGMENTS) if result.ok else FAILURES
-        return f"{random.choice(ack_pool)} " + result.output
+        response = f"{random.choice(ack_pool)} " + result.output
+        if result.ok and self.followup_enabled:
+            response += "\nЧто-нибудь ещё?"
+        return response
