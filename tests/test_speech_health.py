@@ -83,7 +83,9 @@ def test_storage_health_checks_sqlite_and_workflows_read_only(tmp_path: Path):
     })
     library.save("test", graph)
 
-    checks = collect_storage_health(database_path=database, workflows_path=workflow_dir)
+    checks = collect_storage_health(
+        database_path=database, workflows_path=workflow_dir, low_disk_warning_bytes=0
+)
     by_component = {item.component: item for item in checks}
 
     assert by_component["История SQLite"].level == "ok"

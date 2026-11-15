@@ -2592,19 +2592,29 @@ def main() -> int:
             str(profile_data.get("tts_engine") or "sapi5"),
         )
         system_health_workers.append(worker)
+        worker.completed.connect(system_health_bridge.completed)
+        worker.failed.connect(system_health_bridge.failed)
+        worker.finished.connect(system_health_bridge.finished)
+        worker.start()
 
-        def on_failed(message: str) -> None:
+    class SystemHealthBridge(QObject):
+        @Slot(object)
+        def completed(self, checks: list[Any]) -> None:
+            show_system_health(checks)
+
+        @Slot(str)
+        def failed(self, message: str) -> None:
             health_summary_status.setText("ДИАГНОСТИКА НЕ ЗАВЕРШЕНА")
             speech_health_status.setText(f"Не удалось выполнить диагностику: {message}")
 
-        worker.completed.connect(show_system_health)
-        worker.failed.connect(on_failed)
-        worker.finished.connect(lambda: speech_health_button.setEnabled(True))
-        worker.finished.connect(
-            lambda: system_health_workers.remove(worker)
-            if worker in system_health_workers else None
-        )
-        worker.start()
+        @Slot()
+        def finished(self) -> None:
+            speech_health_button.setEnabled(True)
+            for worker in tuple(system_health_workers):
+                if not worker.isRunning():
+                    system_health_workers.remove(worker)
+
+    system_health_bridge = SystemHealthBridge(window)
 
     speech_health_button.clicked.connect(refresh_system_health)
     refresh_system_health()
