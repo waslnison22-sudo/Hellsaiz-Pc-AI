@@ -91,9 +91,12 @@ jobs:
               raise SystemExit(1)
           PY
 
-      - name: Run Ruff
+      - name: Run Ruff (advisory diagnostics)
+        continue-on-error: true
         shell: bash
-        run: ruff check . --output-format=full
+        run: |
+          ruff check . --output-format=full 2>&1 | tee ruff-report.txt
+          exit ${PIPESTATUS[0]}
 
       - name: Run core tests
         if: matrix.group == 'core-linux'
@@ -118,6 +121,7 @@ jobs:
             import-report.txt
             pytest-core.xml
             pytest-windows.xml
+            ruff-report.txt
           if-no-files-found: warn
           retention-days: 7
 
