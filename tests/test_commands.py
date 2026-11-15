@@ -15,7 +15,7 @@ def ack_variants(suffix: str) -> set[str]:
     return {f"{ack} {suffix}" for ack in ACKNOWLEDGMENTS}
 
 
-def make_router(allowed_apps=None, app_aliases=None, wake_aliases=None, allowed_processes=None, persona=None, volume_step=10):
+def make_router(allowed_apps=None, app_aliases=None, wake_aliases=None, allowed_processes=None, persona=None, volume_step=10, followup_enabled=False):
     registry = ToolRegistry()
     registry.register(ToolSpec(
         "get_local_time", "time",
@@ -158,6 +158,7 @@ def make_router(allowed_apps=None, app_aliases=None, wake_aliases=None, allowed_
         wake_aliases,
         persona,
         volume_step,
+        followup_enabled,
     )
 
 
@@ -251,6 +252,37 @@ def test_type_text_global_routes_explicit_command():
     assert router.route("Хеллсайз, напечатай текст Заметка про CI", deny) in ack_variants(
         "typed Заметка про CI"
     )
+
+
+def test_other_assistant_address_is_not_executed():
+    router = make_router()
+    phrases = (
+        "алиса, какая погода",
+        "Алиса открой блокнот",
+        "окей гугл, погода",
+        "hey siri, который час",
+        "АЛЕКСА, громче",
+        "Хеллсайз, алиса, который час",
+    )
+    for phrase in phrases:
+        response = router.route(phrase, approve)
+        assert response and "другому ассистенту" in response.casefold(), phrase
+
+
+def test_assistant_names_inside_commands_still_execute():
+    router = make_router()
+    assert router.route("включи музыку алиса", approve) in {
+        f"{ack} opened url https://music.yandex.ru/search?text={quote_plus('алиса')}"
+        for ack in ACKNOWLEDGMENTS
+    }
+
+
+def test_followup_question_appended_when_enabled():
+    router = make_router(followup_enabled=True)
+    response = router.route("который час")
+    assert response.endswith("Что-нибудь ещё?")
+    quiet = make_router()
+    assert not quiet.route("который час").endswith("Что-нибудь ещё?")
 
 
 def test_close_process_runs_immediately_but_keeps_allowlist():
