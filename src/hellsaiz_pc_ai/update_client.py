@@ -298,7 +298,10 @@ def check_latest_release(
     manifest_asset = assets.get(MANIFEST_ASSET)
     signature_asset = assets.get(SIGNATURE_ASSET)
     if not manifest_asset or not signature_asset:
-        raise UpdateCheckError("Релиз не содержит подписанный update-манифест.")
+        raise UpdateCheckError(
+            f"GitHub Release {tag} опубликован без подписанного update-манифеста. "
+            "Этот релиз ещё не готов к установке; дождись загрузки проверенных файлов."
+        )
     manifest_bytes = _request_bytes(
         f"https://api.github.com/repos/{repository}/releases/assets/{manifest_asset['id']}",
         access_token, "application/octet-stream", timeout_seconds, MAX_MANIFEST_BYTES

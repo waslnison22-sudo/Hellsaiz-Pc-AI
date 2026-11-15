@@ -332,10 +332,42 @@ jobs:
           if (-not ($assets | Where-Object { $_ -like "*HellsaizPC_AI_Setup.exe" })) {
             throw "The Windows installer is missing from release assets."
           }
+          $requiredAssets = @(
+            "HellsaizPC_AI-update-manifest.json",
+            "HellsaizPC_AI-update-manifest.sig",
+            "HellsaizPC_AI-windows-x64-full.zip",
+            "HellsaizPC_AI-windows-x64-portable.zip",
+            "HellsaizPC_AI_Setup.exe"
+          )
+          foreach ($required in $requiredAssets) {
+            if (-not ($assets | Where-Object { [System.IO.Path]::GetFileName($_) -eq $required })) {
+              throw "Required release asset is missing: $required"
+            }
+            $item = Get-Item (Join-Path "dist/release-assets" $required)
+            if ($item.Length -le 0) { throw "Required release asset is empty: $required" }
+          }
+
+          # A new release stays as a draft until all required assets have been uploaded
+          # and GitHub confirms that the complete asset set is attached.
           gh release view $tag *> $null
           if ($LASTEXITCODE -eq 0) {
             gh release upload $tag @assets --clobber
           } else {
-            gh release create $tag @assets --title "Hellsaiz PC AI $tag" --generate-notes
+            gh release create $tag --draft --title "Hellsaiz PC AI $tag" --generate-notes
+            if ($LASTEXITCODE -ne 0) { throw "Could not create the draft GitHub release." }
+            gh release upload $tag @assets
           }
-          if ($LASTEXITCODE -ne 0) { throw "Could not publish the GitHub release." }
+          if ($LASTEXITCODE -ne 0) { throw "Could not upload the GitHub release assets." }
+
+          $releaseJson = gh release view $tag --json isDraft,assets | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw "Could not verify the uploaded GitHub release." }
+          $uploadedNames = @($releaseJson.assets | ForEach-Object { $_.name })
+          foreach ($required in $requiredAssets) {
+            if ($uploadedNames -notcontains $required) {
+              throw "GitHub release is missing the required uploaded asset: $required"
+            }
+          }
+          if ($releaseJson.isDraft) {
+            gh release edit $tag --draft=false
+            if ($LASTEXITCODE -ne 0) { throw "Could not publish the fully verified release." }
+          }
