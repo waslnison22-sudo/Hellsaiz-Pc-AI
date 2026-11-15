@@ -553,3 +553,34 @@ def test_command_normalization_handles_unicode_width_yo_and_punctuation():
     assert router.route("  ПОГОДА В МОСКВЕ?  ") in ack_variants("weather: москве")
     assert router.route("найди в интернете ONNX Runtime.") in ack_variants("search: onnx runtime")
     assert router.route("ｏｐｅｎ БЛОКНОТ") in ack_variants("opened notepad")
+
+
+def test_stt_typo_fixups_apply_to_known_words():
+    router = make_router(allowed_processes={"telegram": "Telegram.exe"})
+    assert router.route("установи гроукость на 30 процентов", approve) in ack_variants("volume 30")
+    assert router.route("закрой тэлеграм", approve) in ack_variants("closed telegram")
+    assert router.route("сколько будет 2 плюс 2") == "Результат: 4"
+
+
+def test_fuzzy_app_name_correction():
+    router = make_router()
+    assert router.route("открой блакнот", approve) in ack_variants("opened notepad")
+    assert router.route("запусти калькулятор", approve) in ack_variants("opened calculator")
+    assert router.route("открой блакнотэ", approve) in ack_variants("opened notepad")
+
+
+def test_fuzzy_process_name_correction():
+    router = make_router(allowed_processes={"telegram": "Telegram.exe"})
+    assert router.route("закрой телегром", approve) in ack_variants("closed telegram")
+
+
+def test_fuzzy_wake_name_strip():
+    router = make_router()
+    assert router.route("Хелсайзе, который час") in ack_variants("13.11.2026 12:00")
+    assert router.route("Хелсайзе который час") in ack_variants("13.11.2026 12:00")
+
+
+def test_fuzzy_does_not_guess_unknown_apps():
+    router = make_router()
+    response = router.route("открой браузер новый", approve)
+    assert "не добавлено" in response.casefold()
