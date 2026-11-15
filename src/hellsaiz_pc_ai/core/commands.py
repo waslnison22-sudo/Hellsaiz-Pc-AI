@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 import re
 import unicodedata
 from pathlib import Path
@@ -15,7 +16,7 @@ HELP_TEXT = (
     "• «открой блокнот», «запусти калькулятор», «открой проводник»\n"
     "• «закрой дискорд» (только разрешённые процессы)\n"
     "• «открой диспетчер задач», «открой настройки», «панель управления»\n"
-    "• «установи громкость на 30 процентов»\n"
+    "• «установи громкость на 30 процентов», «громкость на максимум», «выключи звук»\n"
     "• «прочитай буфер обмена», «скопируй текст»\n"
     "• «напомни через 5 минут…», «мои напоминания»\n"
     "• «открой сайт example.com»\n"
@@ -35,6 +36,21 @@ HELP_TEXT = (
     "• «помощь» или «список команд»\n\n"
     "Команды выполняются локально по заранее заданным правилам. "
     "Произвольный код и команды оболочки не запускаются."
+)
+
+
+# Вариативные ответы без ИИ: выбор случаен, но пул фиксирован и не требует модели.
+ACKNOWLEDGMENTS = (
+    "Готово.",
+    "Сделано.",
+    "Готово!",
+    "Выполнено.",
+    "Хорошо, сделано.",
+)
+FAILURES = (
+    "Не выполнено.",
+    "Не получилось.",
+    "Не вышло.",
 )
 
 
@@ -63,12 +79,24 @@ class CommandRouter:
         "windows settings": "settings",
         "панель управления": "control_panel",
         "control panel": "control_panel",
+        "мой компьютер": "explorer",
+        "этот компьютер": "explorer",
+        "проводник виндовс": "explorer",
+        "параметры виндовс": "settings",
+        "настройки виндовс": "settings",
+        "контр-страйк 2": "cs2",
+        "контрстрайк 2": "cs2",
+        "диспетчер задач windows": "task_manager",
     }
     PROCESS_SYNONYMS = {
         "дискорд": "discord",
         "discord": "discord",
         "spotify": "spotify",
         "спотифай": "spotify",
+        "телеграм": "telegram",
+        "тг": "telegram",
+        "телега": "telegram",
+        "telegram": "telegram",
     }
     OPEN_PREFIXES = (
         "открой мне ", "открыть мне ", "запусти мне ", "запустить мне ",
@@ -227,6 +255,7 @@ class CommandRouter:
         if command in {
             "который час", "сколько времени", "текущее время", "время", "какая дата",
             "какое сегодня число", "дата", "дата и время", "время и дата",
+            "сколько сейчас времени", "который сейчас час", "какое сейчас время",
         }:
             return self._execute("get_local_time", {}, confirm)
 
@@ -421,6 +450,15 @@ class CommandRouter:
         if command in {"заблокируй компьютер", "заблокировать компьютер", "заблокируй пк"}:
             return self._execute("lock_pc", {}, confirm)
 
+        volume_extremes_match = re.fullmatch(
+            r"(?:громкость|звук)\s+на\s+(максимум|полную|минимум|ноль|нуль)|"
+            r"(?:выключи|отключи)\s+звук",
+            command,
+        )
+        if volume_extremes_match:
+            loud = volume_extremes_match.group(1) in {"максимум", "полную"}
+            return self._execute("set_volume", {"percent": 100 if loud else 0}, confirm)
+
         volume_match = re.search(
             r"(?:установи|сделай|поставь)?\s*(?:системную\s+)?громкость(?:\s+на|\s+до)?\s+(\d{1,3})\s*(?:%|процентов?)?$",
             command,
@@ -467,5 +505,5 @@ class CommandRouter:
         self, name: str, arguments: dict[str, Any], confirm: ConfirmCallback | None
     ) -> str:
         result: ToolResult = self.registry.execute(name, arguments, confirm)
-        prefix = "Готово. " if result.ok else "Не выполнено. "
-        return prefix + result.output
+        prefixes = ACKNOWLEDGMENTS if result.ok else FAILURES
+        return f"{random.choice(prefixes)} " + result.output
