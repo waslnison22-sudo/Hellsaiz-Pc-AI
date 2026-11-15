@@ -3,8 +3,8 @@
 This roadmap separates source changes from verified release acceptance. A feature is not complete for release merely because its module or UI exists.
 
 ## P0 — stability
-Implemented: deterministic local command router, single-instance lock, SQLite history, reminders, workflow library/scheduler, app/process allowlists, clipboard/system tools and background-worker cleanup; bounded tool argument size/depth, finite-number validation, side-effect-free registry preflight and bounded/strictly parsed AI tool-call batches before handlers.
-Still required: real Windows CI on Python 3.11/3.12 and live tests of reminders, clipboard, workflows, shutdown, microphone and TTS; runtime verification of orchestrator limits with configured providers.
+Implemented: deterministic local command router, single-instance lock, SQLite history, reminders, workflow library/scheduler, app/process allowlists, clipboard/system tools and background-worker cleanup; bounded tool argument size/depth, finite-number validation, side-effect-free registry preflight, strict AI tool-call batches, and read-only system diagnostics for SQLite, workflow graphs, user-data access and disk space.
+Still required: real Windows CI on Python 3.11/3.12 and live tests of reminders, clipboard, workflows, shutdown, microphone and TTS; verify the diagnostics worker and GUI signal delivery on Windows.
 
 ## P1 — platform foundations
 Implemented: provider/speech/wake-name separation, DPAPI-backed secrets, Vosk/Whisper.cpp STT paths, SAPI5/Piper TTS, voice profiles and local command routing.

@@ -2572,7 +2572,7 @@ def main() -> int:
         health_summary_status.setText(f"{labels[level]} · {summary}")
         detail_labels = {"ok": "OK", "warning": "WARN", "error": "ERROR"}
         speech_health_status.setText(
-            "\\n".join(
+            "\n".join(
                 f"[{detail_labels[item.level]}] {item.component}: {item.message}"
                 for item in checks
             )
