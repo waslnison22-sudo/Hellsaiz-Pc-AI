@@ -6,7 +6,6 @@ from hellsaiz_pc_ai.core.models import RiskLevel, ToolResult
 from hellsaiz_pc_ai.core.registry import ToolRegistry, ToolSpec
 from hellsaiz_pc_ai.workflows.graph import WorkflowGraph, WorkflowGraphRunner, WorkflowTrigger
 
-
 def build_graph():
     return WorkflowGraph.from_dict({
         "name": "Night automation",
@@ -25,7 +24,6 @@ def build_graph():
         ],
     })
 
-
 def registry():
     result = ToolRegistry()
     result.register(ToolSpec(
@@ -40,10 +38,8 @@ def registry():
     ))
     return result
 
-
 def allow(*_):
     return True
-
 
 def test_graph_executes_true_time_branch():
     graph = build_graph()
@@ -52,14 +48,12 @@ def test_graph_executes_true_time_branch():
     assert result.started and result.completed
     assert [step.output for step in result.steps] == ["Closed Discord", "Volume 30"]
 
-
 def test_graph_executes_false_time_branch():
     graph = build_graph()
     runner = WorkflowGraphRunner(registry(), clock=lambda: datetime(2026, 1, 1, 14, 0))
     result = runner.run(graph, WorkflowTrigger("text", "режим ночь"), confirm=allow)
     assert result.completed
     assert result.steps[-1].output == "Volume 60"
-
 
 def test_graph_runs_allowlisted_actions_without_confirmation():
     graph = build_graph()
@@ -72,13 +66,11 @@ def test_graph_runs_allowlisted_actions_without_confirmation():
     assert result.started and result.completed
     assert [step.output for step in result.steps] == ["Closed Discord", "Volume 30"]
 
-
 def test_graph_rejects_cycle():
     data = build_graph().to_dict()
     data["edges"].append({"from": "night", "to": "close"})
     with pytest.raises(ValueError):
         WorkflowGraph.from_dict(data)
-
 
 def test_graph_rejects_unreachable_nodes():
     data = build_graph().to_dict()
@@ -86,18 +78,15 @@ def test_graph_rejects_unreachable_nodes():
     with pytest.raises(ValueError, match="reachable"):
         WorkflowGraph.from_dict(data)
 
-
 def test_graph_rejects_python_or_shell_action():
     data = build_graph().to_dict()
     data["nodes"][1]["type"] = "action.python"
     with pytest.raises(ValueError, match="Unsupported node type"):
         WorkflowGraph.from_dict(data)
 
-
 def test_graph_roundtrip():
     graph = build_graph()
     assert WorkflowGraph.from_dict(graph.to_dict()) == graph
-
 
 def make_trigger_graph(kind, config):
     return WorkflowGraph.from_dict({
@@ -108,7 +97,6 @@ def make_trigger_graph(kind, config):
         ],
         "edges": [{"from": "start", "to": "done"}],
     })
-
 
 def test_schedule_trigger_validates_time_and_weekdays():
     valid = make_trigger_graph(
@@ -121,11 +109,9 @@ def test_schedule_trigger_validates_time_and_weekdays():
     with pytest.raises(ValueError, match="weekdays"):
         make_trigger_graph("trigger.schedule", {"time": "07:45", "days": [1, 1]})
 
-
 def test_startup_trigger_rejects_config():
     with pytest.raises(ValueError, match="does not accept configuration"):
         make_trigger_graph("trigger.startup", {"delay": 1})
-
 
 def test_runner_accepts_startup_and_schedule_events():
     startup = make_trigger_graph("trigger.startup", {})
@@ -140,8 +126,6 @@ def test_runner_accepts_startup_and_schedule_events():
     )
     assert startup_result.started and startup_result.completed
     assert schedule_result.started and schedule_result.completed
-
-
 
 def test_repeat_action_executes_registered_tool_exactly_n_times():
     data = {
@@ -167,7 +151,6 @@ def test_repeat_action_executes_registered_tool_exactly_n_times():
 
     assert result.completed
     assert [step.output for step in result.steps] == ["Volume 35"] * 3
-
 
 def test_repeat_action_runs_with_bounded_count_without_confirmation():
     data = {
@@ -195,7 +178,6 @@ def test_repeat_action_runs_with_bounded_count_without_confirmation():
     assert result.started and result.completed
     assert [step.output for step in result.steps] == ["Volume 35"] * 4
 
-
 @pytest.mark.parametrize("count", [0, 11, True, 1.5])
 def test_repeat_action_rejects_unbounded_or_invalid_counts(count):
     data = {
@@ -212,8 +194,6 @@ def test_repeat_action_rejects_unbounded_or_invalid_counts(count):
     }
     with pytest.raises(ValueError, match="1..10"):
         WorkflowGraph.from_dict(data)
-
-
 
 def test_weekday_condition_executes_the_matching_branch():
     graph = WorkflowGraph.from_dict({
@@ -236,7 +216,6 @@ def test_weekday_condition_executes_the_matching_branch():
     assert result.completed
     assert "Ожидание 0 сек." in result.steps[0].output
 
-
 def test_weekday_condition_rejects_invalid_values():
     for value in (0, 8, True, 2.5):
         with pytest.raises(ValueError, match="ISO weekday"):
@@ -254,8 +233,6 @@ def test_weekday_condition_rejects_invalid_values():
                     {"from": "day", "to": "no", "when": "false"},
                 ],
             })
-
-
 
 def test_text_trigger_accepts_multiple_alias_phrases():
     graph = WorkflowGraph.from_dict({
@@ -276,7 +253,6 @@ def test_text_trigger_accepts_multiple_alias_phrases():
         result = runner.run(graph, WorkflowTrigger("text", phrase))
         assert result.started and result.completed
 
-
 def test_text_trigger_rejects_duplicate_or_oversized_alias_lists():
     for phrases in ([], ["same", "same"], ["x" * 129], ["one"] * 17):
         with pytest.raises(ValueError, match="phrases|duplicate"):
@@ -288,7 +264,6 @@ def test_text_trigger_rejects_duplicate_or_oversized_alias_lists():
                 ],
                 "edges": [{"from": "start", "to": "end"}],
             })
-
 
 def test_text_trigger_does_not_accept_phrase_and_phrases_together():
     with pytest.raises(ValueError, match="phrase or phrases"):
@@ -305,21 +280,17 @@ def test_text_trigger_does_not_accept_phrase_and_phrases_together():
             "edges": [{"from": "start", "to": "end"}],
         })
 
-
-
 def test_graph_rejects_non_string_node_types_without_type_error():
     data = build_graph().to_dict()
     data["nodes"][0]["type"] = []
     with pytest.raises(ValueError, match="Unsupported node type"):
         WorkflowGraph.from_dict(data)
 
-
 def test_graph_rejects_unhashable_edge_branches_without_type_error():
     data = build_graph().to_dict()
     data["edges"][2]["when"] = []
     with pytest.raises(ValueError, match="Edge branch"):
         WorkflowGraph.from_dict(data)
-
 
 def test_graph_rejects_unhashable_hour_operators_without_type_error():
     data = build_graph().to_dict()
