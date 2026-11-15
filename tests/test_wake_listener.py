@@ -225,9 +225,9 @@ def test_listener_rate_limits_repeated_overflow_status(tmp_path, monkeypatch):
         def read(self, frames):
             listener_box["reads"] += 1
             count = listener_box["reads"]
-            if count >= 4:
+            if count >= 5:
                 listener_box["listener"].stop()
-            # Three continuous overflow reports followed by one healthy block.
+            # Three continuous overflow reports followed by a healthy block.
             return bytes(frames * 2), count <= 3
 
         def __exit__(self, exc_type, exc, traceback):
