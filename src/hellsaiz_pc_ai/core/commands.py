@@ -4,6 +4,7 @@ import random
 import re
 import unicodedata
 from datetime import datetime, timedelta
+from difflib import get_close_matches
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote_plus
@@ -161,6 +162,35 @@ PERSONA_ACKS: dict[str, tuple[str, ...]] = {
 # Город по умолчанию для погоды, пока пользователь не задаёт его в настройках.
 DEFAULT_CITY = "Ставрополь"
 
+# Частые ослышанные слова после STT: вариант -> каноническое слово.
+# Применяется к нормализованной команде до сопоставления с правилами.
+STT_FIXUPS = {
+    "гроукость": "громкость",
+    "громкасть": "громкость",
+    "громкост": "громкость",
+    "громкостьь": "громкость",
+    "глокость": "громкость",
+    "блакнот": "блокнот",
+    "блокно": "блокнот",
+    "колькулятор": "калькулятор",
+    "кулькулятор": "калькулятор",
+    "диспечер": "диспетчер",
+    "диспетчир": "диспетчер",
+    "телегром": "телеграм",
+    "тэлеграм": "телеграм",
+    "дискор": "дискорд",
+    "дискордь": "дискорд",
+    "спотифы": "спотифай",
+    "впина": "впн",
+    "впна": "впн",
+    "напомниь": "напомни",
+    "напоминь": "напомни",
+    "почеми": "который",
+    "погоде": "погода",
+    "погодаь": "погода",
+    "тэмпература": "погода",
+}
+
 
 class CommandRouter:
     """Deterministic command dispatcher. It never calls a language model."""
@@ -282,12 +312,48 @@ class CommandRouter:
             )
             if match:
                 return value[match.end():].lstrip(" \t,.:;!?-")
+        # Ослышанное имя ассистента: сравнение первого слова по похожести.
+        tokens = value.split(" ", 1)
+        if len(tokens) == 2 and len(tokens[0]) >= 4:
+            candidate = self._normalize_phrase(tokens[0])
+            best = get_close_matches(candidate, self.wake_aliases, n=1, cutoff=0.75)
+            if best:
+                return tokens[1].lstrip(" \t,.:;!?-")
         return value
+
+    def _app_vocabulary(self) -> dict[str, str]:
+        vocabulary: dict[str, str] = {}
+        for canonical in self.allowed_apps:
+            vocabulary.setdefault(self._normalize_phrase(canonical), canonical)
+        for synonym, canonical in self.APP_SYNONYMS.items():
+            if canonical in self.allowed_apps:
+                vocabulary.setdefault(self._normalize_phrase(synonym), canonical)
+        for phrase, canonical in self.app_alias_lookup.items():
+            vocabulary.setdefault(phrase, canonical)
+        return vocabulary
+
+    def _fuzzy_app(self, target: str) -> str | None:
+        if len(target) < 4:
+            return None
+        vocabulary = self._app_vocabulary()
+        best = get_close_matches(target, vocabulary, n=1, cutoff=0.72)
+        return vocabulary[best[0]] if best else None
+
+    def _fuzzy_process(self, target: str) -> str | None:
+        if len(target) < 4:
+            return None
+        best = get_close_matches(target, self.allowed_processes, n=1, cutoff=0.72)
+        return best[0] if best else None
 
     def normalize(self, text: str) -> str:
         value = self.strip_wake_name(text)
         value = unicodedata.normalize("NFKC", value).casefold().replace("ё", "е")
-        return re.sub(r"[\s.,!?;:]+", " ", value).strip()
+        value = re.sub(r"[\s.,!?;:]+", " ", value).strip()
+        if value:
+            words = value.split(" ")
+            corrected = [STT_FIXUPS.get(word, word) for word in words]
+            value = " ".join(corrected)
+        return value
 
     def route(self, text: str, confirm: ConfirmCallback | None = None) -> str | None:
         command = self.normalize(text)
@@ -726,8 +792,11 @@ class CommandRouter:
                 target = command[len(prefix):].strip()
                 alias = self.PROCESS_SYNONYMS.get(target, target)
                 if alias not in self.allowed_processes:
-                    options = ", ".join(sorted(self.allowed_processes)) or "список пуст"
-                    return f"Процесс «{target}» не добавлен в allowlist. Доступно: {options}."
+                    fuzzy_process = self._fuzzy_process(target)
+                    if fuzzy_process is None:
+                        options = ", ".join(sorted(self.allowed_processes)) or "список пуст"
+                        return f"Процесс «{target}» не добавлен в allowlist. Доступно: {options}."
+                    alias = fuzzy_process
                 return self._execute("close_process", {"process": alias}, confirm)
 
         for prefix in self.OPEN_PREFIXES:
@@ -762,8 +831,11 @@ class CommandRouter:
                     self.APP_SYNONYMS.get(normalized_target, normalized_target),
                 )
                 if alias not in self.allowed_apps:
-                    options = ", ".join(sorted(self.allowed_apps)) or "нет разрешённых приложений"
-                    return f"Приложение «{target}» не добавлено в список разрешённых. Доступно: {options}."
+                    fuzzy_alias = self._fuzzy_app(normalized_target)
+                    if fuzzy_alias is None:
+                        options = ", ".join(sorted(self.allowed_apps)) or "нет разрешённых приложений"
+                        return f"Приложение «{target}» не добавлено в список разрешённых. Доступно: {options}."
+                    alias = fuzzy_alias
                 return self._execute("open_app", {"app": alias}, confirm)
 
         return None
