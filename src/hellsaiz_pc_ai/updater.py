@@ -29,6 +29,22 @@ class ApplyUpdateError(RuntimeError):
     pass
 
 
+def _read_active_state(active_path: Path) -> tuple[dict[str, Any], str]:
+    try:
+        active = json.loads(active_path.read_text(encoding="utf-8"))
+        if not isinstance(active, dict):
+            raise ValueError("active.json must contain a JSON object")
+        active_version = active.get("active_version")
+        if not isinstance(active_version, str) or not active_version.strip():
+            raise ValueError("active_version must be a non-empty string")
+        _version_parts(active_version)
+    except (OSError, UnicodeError, ValueError, TypeError, UpdateCheckError) as exc:
+        raise ApplyUpdateError(
+            "Не удалось определить текущую установленную версию из active.json."
+        ) from exc
+    return active, active_version
+
+
 def run_package_self_test() -> int:
     """Exercise the cryptographic primitive required by signed update manifests."""
     try:
@@ -266,13 +282,11 @@ def apply_update(
     active_path = root / "active.json"
     if active_path.is_symlink():
         raise ApplyUpdateError("Файл active.json не должен быть символической ссылкой.")
+    active, active_version = _read_active_state(active_path)
     try:
-        active = json.loads(active_path.read_text(encoding="utf-8"))
-        active_version = str(active["active_version"])
-        _version_parts(active_version)
         _version_parts(from_version)
-    except (OSError, ValueError, KeyError, json.JSONDecodeError, UpdateCheckError) as exc:
-        raise ApplyUpdateError("Не удалось определить текущую установленную версию.") from exc
+    except UpdateCheckError as exc:
+        raise ApplyUpdateError("Передана некорректная версия исходной установки.") from exc
     if active_version != from_version:
         raise ApplyUpdateError("Текущая версия приложения изменилась. Повторите проверку обновлений.")
     if _version_parts(manifest["version"]) <= _version_parts(active_version):

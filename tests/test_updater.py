@@ -15,6 +15,7 @@ from hellsaiz_pc_ai.updater import (
     _extract_archive,
     _verify_payload,
     _wait_for_parent,
+    _read_active_state,
 )
 
 
@@ -209,3 +210,21 @@ def test_full_update_migrates_existing_install_and_preserves_user_data(
         assert (versions / "0.1.3" / "HellsaizPC_AI.exe").read_bytes() == b"old-app"
         assert not (versions / APP_VERSION).exists()
         assert (user_data / "profile.json").is_file()
+
+@pytest.mark.parametrize(
+    "contents",
+    [
+        "[]",
+        "null",
+        '{"active_version": 123}',
+        "{}",
+        '{"active_version": "../outside"}',
+    ],
+)
+def test_active_state_rejects_malformed_json(tmp_path: Path, contents: str):
+    active_path = tmp_path / "active.json"
+    active_path.write_text(contents, encoding="utf-8")
+
+    with pytest.raises(ApplyUpdateError, match="active.json"):
+        _read_active_state(active_path)
+
