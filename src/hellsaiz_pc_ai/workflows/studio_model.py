@@ -130,15 +130,7 @@ def build_workflow_graph(
         # The first node in each branch needs an explicit true/false edge.
         true_first = next(node for node in nodes if node.id == "true_01")
         false_first = next(node for node in nodes if node.id == "false_01")
-        edges[-len(true_actions or [None]) - len(false_actions or [None]):] = [
-            edge for edge in edges[
-                -len(true_actions or [None]) - len(false_actions or [None]):
-            ]
-        ]
-        edges = [
-            edge for edge in edges
-            if not (edge.source == condition_id and edge.target in {"true_01", "false_01"})
-        ]
+        edges = [edge for edge in edges if edge.source != condition_id]
         edges.extend([
             GraphEdge(condition_id, true_first.id, "true"),
             GraphEdge(condition_id, false_first.id, "false"),
