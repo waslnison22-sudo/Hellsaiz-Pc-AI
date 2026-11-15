@@ -15,7 +15,7 @@ def ack_variants(suffix: str) -> set[str]:
     return {f"{ack} {suffix}" for ack in ACKNOWLEDGMENTS}
 
 
-def make_router(allowed_apps=None, app_aliases=None, wake_aliases=None, allowed_processes=None, persona=None):
+def make_router(allowed_apps=None, app_aliases=None, wake_aliases=None, allowed_processes=None, persona=None, volume_step=10):
     registry = ToolRegistry()
     registry.register(ToolSpec(
         "get_local_time", "time",
@@ -36,6 +36,16 @@ def make_router(allowed_apps=None, app_aliases=None, wake_aliases=None, allowed_
         "open_url", "open url",
         {"type": "object", "properties": {"url": {"type": "string"}}, "required": ["url"]},
         RiskLevel.SAFE, lambda args: ToolResult(True, f"opened url {args['url']}"),
+    ))
+    registry.register(ToolSpec(
+        "send_media_key", "media key",
+        {"type": "object", "properties": {"key": {"type": "string"}}, "required": ["key"]},
+        RiskLevel.SAFE, lambda args: ToolResult(True, f"media {args['key']}"),
+    ))
+    registry.register(ToolSpec(
+        "adjust_volume", "adjust volume",
+        {"type": "object", "properties": {"delta": {"type": "integer"}}, "required": ["delta"]},
+        RiskLevel.CONFIRM, lambda args: ToolResult(True, f"adjusted {args['delta']}"),
     ))
     registry.register(ToolSpec(
         "set_volume", "volume",
@@ -127,6 +137,7 @@ def make_router(allowed_apps=None, app_aliases=None, wake_aliases=None, allowed_
         app_aliases,
         wake_aliases,
         persona,
+        volume_step,
     )
 
 
@@ -186,6 +197,24 @@ def test_volume_extremes_route_without_numbers():
     assert router.route("громкость на полную", approve) in ack_variants("volume 100")
     assert router.route("громкость на минимум", approve) in ack_variants("volume 0")
     assert router.route("выключи звук", approve) in ack_variants("volume 0")
+
+
+def test_media_keys_map_to_send_media_key():
+    router = make_router()
+    assert router.route("пауза", approve) in ack_variants("media play_pause")
+    assert router.route("продолжи", approve) in ack_variants("media play_pause")
+    assert router.route("следующий трек", approve) in ack_variants("media next_track")
+    assert router.route("предыдущая песня", approve) in ack_variants("media previous_track")
+
+
+def test_relative_volume_uses_adjust_volume():
+    router = make_router()
+    assert router.route("громче", approve) in ack_variants("adjusted 10")
+    assert router.route("тише", approve) in ack_variants("adjusted -10")
+    assert router.route("громче на 20", approve) in ack_variants("adjusted 20")
+    assert router.route("убавь громкость на 5", approve) in ack_variants("adjusted -5")
+    step_router = make_router(volume_step=25)
+    assert step_router.route("громче", approve) in ack_variants("adjusted 25")
 
 
 def test_close_process_runs_immediately_but_keeps_allowlist():
