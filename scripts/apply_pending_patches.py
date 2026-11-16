@@ -13,10 +13,19 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 
 
 def main() -> int:
+    # GitHub's Windows runner may use cp1252 for stdout. Patch status messages
+    # contain Russian text, so force UTF-8 before printing or the second,
+    # idempotent invocation can fail after all patches were already applied.
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(encoding="utf-8", errors="replace")
+
     patch_dir = Path("docs/patches")
     if not patch_dir.is_dir():
         print("docs/patches отсутствует — патчей нет.")
