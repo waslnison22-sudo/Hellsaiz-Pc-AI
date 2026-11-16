@@ -10,9 +10,9 @@ On the first successful application start, the versioned app creates or repairs 
 
 ## Updating an existing 0.1.3 installation
 
-Do not uninstall the old application and do not extract the update ZIP over the installation folder. Keep the existing installation directory, including the root-level launcher and updater. Start Hellsaiz PC AI 0.1.3, open **Настройки → Обновления**, save a fine-grained GitHub token with read-only **Contents** permission for this private repository, check for updates, and choose the manual install action when 0.1.4 is offered.
+Do not uninstall the old application and do not extract the update ZIP over the installation folder. Keep the existing installation directory, including the root-level launcher and updater. Start Hellsaiz PC AI 0.1.3, open **Настройки → Обновления**, save a fine-grained GitHub token with read-only **Contents** permission for this private repository, check for updates, and choose the manual install action when 0.1.5 is offered.
 
-The updater stages 0.1.4 in a separate `versions/0.1.4/` directory, verifies the signed manifest and every file hash, then switches `active.json`. It keeps 0.1.3 until the new application reports a successful startup. Chat history, profiles, wallpapers, downloaded voice models, reminders, and other user data remain outside the version directory and are not overwritten. If startup validation fails, the active version is restored to 0.1.3 automatically.
+The updater stages 0.1.5 in a separate `versions/0.1.5/` directory, verifies the signed manifest and every file hash, then switches `active.json`. It keeps 0.1.3 until the new application reports a successful startup. Chat history, profiles, wallpapers, downloaded voice models, reminders, and other user data remain outside the version directory and are not overwritten. If startup validation fails, the active version is restored to 0.1.3 automatically.
 
 The update process requires the root-level `HellsaizLauncher.exe` and `HellsaizUpdater.exe` from the existing portable installation. If either file is missing, use the full installer or portable package to repair the installation before applying an in-app update.
 
@@ -24,11 +24,11 @@ The updater verifies the pinned Ed25519 manifest signature, file paths, sizes an
 
 ## Release acceptance test
 
-Before uploading a new release, the Windows workflow downloads the previous stable portable package and runs its own launcher/updater against the newly signed full ZIP. For the current 0.1.4 baseline this is an actual 0.1.3 → 0.1.4 update, not a mocked updater call. The workflow verifies:
+Before uploading a new release, the Windows workflow downloads the previous stable portable package and runs its own launcher/updater against the newly signed full ZIP. For the current 0.1.5 baseline this is an actual 0.1.3 → 0.1.5 update, not a mocked updater call. The workflow verifies:
 
 - the previous 0.1.3 launcher and updater can stage and activate the new version;
-- the new application writes `health/0.1.4.ok` after creating its main window;
-- `active.json` selects 0.1.4 and the 0.1.3 folder remains available for rollback;
+- the new application writes `health/0.1.5.ok` after creating its main window;
+- `active.json` selects 0.1.5 and the 0.1.3 folder remains available for rollback;
 - a separate LocalAppData sentinel remains byte-for-byte unchanged.
 
 Release publication is blocked if any of those checks fail. The previous 0.1.3 portable package is therefore a required release input, not merely a convenience download.
