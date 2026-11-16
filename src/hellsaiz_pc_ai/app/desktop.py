@@ -292,12 +292,12 @@ def main() -> int:
         print("PySide6 is missing. Run: pip install -e .")
         return 2
 
-    from hellsaiz_pc_ai.app.workflow_studio import WorkflowStudioPage
-
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+
+    from hellsaiz_pc_ai.app.workflow_studio import WorkflowStudioPage
     settings = load_settings()
     app = QApplication.instance() or QApplication([])
     instance_lock = SingleInstanceLock(settings.workflows_path.parent / "assistant.lock")
