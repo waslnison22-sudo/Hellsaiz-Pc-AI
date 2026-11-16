@@ -41,8 +41,6 @@ from hellsaiz_pc_ai.workflows.library import WorkflowLibrary
 from hellsaiz_pc_ai.workflows.qt_canvas import WorkflowCanvas
 from hellsaiz_pc_ai.workflows.studio_model import (
     ACTION_LABELS,
-    TRIGGER_LABELS,
-    WEEKDAY_LABELS,
     build_workflow_graph,
     describe_action,
     describe_trigger,
