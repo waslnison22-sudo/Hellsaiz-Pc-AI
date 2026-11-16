@@ -9,10 +9,12 @@ callbacks/widgets; no class silently captures surrounding function state.
 from __future__ import annotations
 
 import logging
+import threading
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QObject, QThread, Signal, Slot
+from PySide6.QtCore import QObject, QThread, Qt, Signal, Slot
 
 from hellsaiz_pc_ai import startup_task
 from hellsaiz_pc_ai.network import v2raytun
@@ -84,11 +86,13 @@ class WakeListenerWorker(QThread):
         model_dir: Path,
         aliases: tuple[str, ...],
         device: str | None = None,
+        command_timeout_seconds: float = 8.0,
     ) -> None:
         super().__init__()
         self.model_dir = model_dir
         self.aliases = aliases
         self.device = device
+        self.command_timeout_seconds = command_timeout_seconds
         self.listener = None
 
     def run(self) -> None:
@@ -101,6 +105,7 @@ class WakeListenerWorker(QThread):
                 on_command=self.command.emit,
                 on_status=self.status.emit,
                 device=self.device,
+                command_timeout_seconds=self.command_timeout_seconds,
             )
             self.listener.listen()
         except Exception as exc:
@@ -467,3 +472,53 @@ class UpdateWorker(QThread):
         except Exception as exc:
             logging.exception("Update operation failed")
             self.failed.emit(f"Ошибка обновления: {exc}")
+
+
+@dataclass
+class ToolConfirmationRequest:
+    tool: Any
+    arguments: dict[str, Any]
+    policy: str
+    completed: threading.Event = field(default_factory=threading.Event)
+    accepted: bool = False
+
+
+class ToolConfirmationBridge(QObject):
+    """Wait for a confirmation decision made by the GUI thread."""
+
+    requested = Signal(object)
+
+    def __init__(self, handler: Any, parent: QObject | None = None) -> None:
+        super().__init__(parent)
+        self.handler = handler
+        self.requested.connect(
+            self._dispatch,
+            Qt.ConnectionType.QueuedConnection,
+        )
+
+    @Slot(object)
+    def _dispatch(self, request: ToolConfirmationRequest) -> None:
+        try:
+            request.accepted = bool(self.handler(request))
+        except Exception:
+            logging.exception("Tool confirmation dialog failed")
+            request.accepted = False
+        finally:
+            request.completed.set()
+
+    def confirm(
+        self,
+        tool: Any,
+        arguments: dict[str, Any],
+        policy: str,
+        timeout_seconds: float = 180.0,
+    ) -> bool:
+        request = ToolConfirmationRequest(tool, dict(arguments), policy)
+        if QThread.currentThread() == self.thread():
+            self._dispatch(request)
+            return request.accepted
+        self.requested.emit(request)
+        if not request.completed.wait(timeout_seconds):
+            logging.error("Timed out waiting for tool confirmation: %s", getattr(tool, "name", "unknown"))
+            return False
+        return request.accepted
