@@ -29,11 +29,22 @@ class OpenAICompatibleProvider:
 
     def __init__(
         self, base_url: str, model: str, api_key: str = "not-needed",
-        timeout_seconds: int = 120, allow_remote: bool = False
+        timeout_seconds: int = 120, allow_remote: bool = False,
+        temperature: float = 0.3, max_tokens: int = 2000,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.api_key = api_key
+        if (
+            isinstance(temperature, bool)
+            or not isinstance(temperature, (int, float))
+            or not 0.0 <= float(temperature) <= 1.0
+        ):
+            raise ValueError("LLM temperature must be between 0.0 and 1.0.")
+        if isinstance(max_tokens, bool) or not isinstance(max_tokens, int) or not 200 <= max_tokens <= 4000:
+            raise ValueError("LLM max_tokens must be between 200 and 4000.")
+        self.temperature = float(temperature)
+        self.max_tokens = max_tokens
         if (
             isinstance(timeout_seconds, bool)
             or not isinstance(timeout_seconds, (int, float))
@@ -105,7 +116,12 @@ class OpenAICompatibleProvider:
         }
 
     def complete(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> dict[str, Any]:
-        payload: dict[str, Any] = {"model": self.model, "messages": messages, "temperature": 0.3}
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens,
+        }
         if tools:
             payload.update(tools=tools, tool_choice="auto")
         request = Request(
