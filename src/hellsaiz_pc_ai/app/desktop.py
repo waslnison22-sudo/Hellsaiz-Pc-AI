@@ -1834,6 +1834,100 @@ def main() -> int:
     )
     always_listen_check.setChecked(bool(profile_data.get("always_listen", False)))
     settings_layout.addWidget(always_listen_check)
+
+    behavior_title = QLabel("ПОВЕДЕНИЕ ПОМОЩНИКА")
+    behavior_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
+    settings_layout.addWidget(behavior_title)
+
+    wake_timeout_row = QHBoxLayout()
+    wake_timeout_row.addWidget(QLabel("Пауза после wake-слова"))
+    wake_command_timeout_combo = QComboBox()
+    for seconds, label in (
+        (3, "3 сек."),
+        (5, "5 сек."),
+        (8, "8 сек. · как раньше"),
+        (10, "10 сек."),
+        (15, "15 сек."),
+    ):
+        wake_command_timeout_combo.addItem(label, seconds)
+    wake_timeout_index = wake_command_timeout_combo.findData(
+        int(profile_data.get("wake_command_timeout", 8))
+    )
+    wake_command_timeout_combo.setCurrentIndex(max(0, wake_timeout_index))
+    wake_timeout_row.addWidget(wake_command_timeout_combo, 1)
+    settings_layout.addLayout(wake_timeout_row)
+
+    tts_barge_in_check = QCheckBox("Прерывать озвучку при новой команде")
+    tts_barge_in_check.setChecked(bool(profile_data.get("tts_barge_in", True)))
+    settings_layout.addWidget(tts_barge_in_check)
+
+    volume_step_row = QHBoxLayout()
+    volume_step_row.addWidget(QLabel("Шаг громкости голосом"))
+    volume_step_combo = QComboBox()
+    for step in (5, 10, 20):
+        volume_step_combo.addItem(f"{step}%", step)
+    volume_step_combo.setCurrentIndex(
+        max(0, volume_step_combo.findData(int(profile_data.get("volume_step", 10))))
+    )
+    volume_step_row.addWidget(volume_step_combo, 1)
+    settings_layout.addLayout(volume_step_row)
+
+    confirm_policy_row = QHBoxLayout()
+    confirm_policy_row.addWidget(QLabel("Подтверждение действий"))
+    confirm_policy_combo = QComboBox()
+    confirm_policy_combo.addItem("Спрашивать всегда", "always")
+    confirm_policy_combo.addItem("Только для опасных действий", "risky")
+    confirm_policy_combo.addItem("Не спрашивать", "never")
+    confirm_policy_combo.setCurrentIndex(
+        max(0, confirm_policy_combo.findData(str(profile_data.get("confirm_policy", "never"))))
+    )
+    confirm_policy_row.addWidget(confirm_policy_combo, 1)
+    settings_layout.addLayout(confirm_policy_row)
+
+    reply_style_row = QHBoxLayout()
+    reply_style_row.addWidget(QLabel("Стиль ответов"))
+    reply_style_combo = QComboBox()
+    reply_style_combo.addItem("Кратко", "brief")
+    reply_style_combo.addItem("Обычно", "normal")
+    reply_style_combo.addItem("Подробно", "detailed")
+    reply_style_combo.setCurrentIndex(
+        max(0, reply_style_combo.findData(str(profile_data.get("reply_style", "normal"))))
+    )
+    reply_style_row.addWidget(reply_style_combo, 1)
+    settings_layout.addLayout(reply_style_row)
+
+    save_behavior_button = QPushButton("Сохранить поведение помощника")
+    behavior_status = QLabel("Изменения применяются к новым командам.")
+    behavior_status.setWordWrap(True)
+    behavior_status.setStyleSheet("color:#929aa6;")
+    behavior_save_row = QHBoxLayout()
+    behavior_save_row.addWidget(behavior_status, 1)
+    behavior_save_row.addWidget(save_behavior_button)
+    settings_layout.addLayout(behavior_save_row)
+
+    def save_assistant_behavior() -> None:
+        updates = {
+            "wake_command_timeout": int(wake_command_timeout_combo.currentData()),
+            "tts_barge_in": tts_barge_in_check.isChecked(),
+            "volume_step": int(volume_step_combo.currentData()),
+            "confirm_policy": str(confirm_policy_combo.currentData()),
+            "reply_style": str(reply_style_combo.currentData()),
+        }
+        try:
+            persist_ai_profile_updates(updates)
+        except (OSError, ValueError) as exc:
+            behavior_status.setText(f"Не удалось сохранить настройки: {exc}")
+            return
+        if assistant is not None:
+            assistant.system_prompt = build_system_prompt(
+                settings.llm.system_prompt, updates["reply_style"]
+            )
+        stop_wake_listener()
+        behavior_status.setText("Настройки сохранены. Новые параметры wake-слова и ответов применены.")
+        if always_listen_check.isChecked():
+            QTimer.singleShot(250, start_wake_listener)
+
+    save_behavior_button.clicked.connect(save_assistant_behavior)
     wake_listener_status = QLabel("Фоновое прослушивание выключено.")
     wake_listener_status.setWordWrap(True)
     wake_listener_status.setStyleSheet("color:#929aa6;")
