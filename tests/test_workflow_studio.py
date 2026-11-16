@@ -113,13 +113,16 @@ def test_studio_builds_and_saves_scenario_without_manual_ids(tmp_path):
         allowed_apps={"notepad": ("notepad.exe",)},
     )
     studio.name_edit.setText("Тихий вечер")
-    studio.phrase_edit.setText("тихий вечер, сделай потише")
+    studio.phrase_edit.setPlainText("тихий вечер\nсделай потише")
     studio._actions["main"] = [
         {"kind": "tool", "name": "set_volume", "arguments": {"percent": 25}}
     ]
     graph = studio._build_current_graph()
     assert graph.nodes[0].config["phrases"] == ["тихий вечер", "сделай потише"]
+    changes = []
+    studio.workflows_changed.connect(lambda: changes.append(True))
     assert studio.save_current()
+    assert changes == [True]
     entries = library.list()
     assert len(entries) == 1
     workflow_id, saved_graph = entries[0]
@@ -223,6 +226,104 @@ def test_legacy_complex_graph_can_be_edited_in_developer_json_mode(tmp_path):
     assert saved.name == "Старый сценарий — исправлен"
     saved_late = next(node for node in saved.nodes if node.id == "late")
     assert saved_late.config["arguments"]["legacy_flag"] is False
+
+
+def test_existing_trigger_phrases_keep_commas_and_semicolons(tmp_path):
+    _application()
+    phrases = [
+        "ночной режим, если уже поздно",
+        "не беспокоить; я занят",
+    ]
+    graph = build_workflow_graph(
+        name="Сложные фразы",
+        trigger_kind="text",
+        trigger_config={"phrases": phrases},
+        actions=[{"kind": "wait", "seconds": 1}],
+    )
+    studio = WorkflowStudioPage(WorkflowLibrary(tmp_path / "phrases"), _registry())
+    from hellsaiz_pc_ai.workflows.studio_model import workflow_to_draft
+
+    studio._set_draft(workflow_to_draft(graph))
+    rebuilt = studio._build_current_graph()
+    assert rebuilt.nodes[0].config["phrases"] == phrases
+
+
+def test_legacy_tool_not_in_registry_survives_simple_editor_save(tmp_path):
+    _application()
+    library = WorkflowLibrary(tmp_path / "legacy-tool")
+    legacy = WorkflowGraph.from_dict({
+        "name": "Старое действие",
+        "nodes": [
+            {"id": "start", "type": "trigger.text", "config": {"phrase": "старое действие"}},
+            {
+                "id": "action_01",
+                "type": "action.tool",
+                "config": {
+                    "name": "removed_legacy_tool",
+                    "arguments": {"legacy_mode": "safe"},
+                },
+            },
+        ],
+        "edges": [{"from": "start", "to": "action_01"}],
+    })
+    library.save("legacy-tool", legacy)
+    studio = WorkflowStudioPage(library, _registry())
+    studio._refresh_library(select_id="legacy-tool")
+    studio.load_selected()
+    assert studio._editable
+    assert studio.save_current()
+    saved = library.load("legacy-tool")
+    assert saved.nodes[1].config == {
+        "name": "removed_legacy_tool",
+        "arguments": {"legacy_mode": "safe"},
+    }
+
+
+def test_run_rejection_message_is_not_overwritten_by_studio():
+    _application()
+    from pathlib import Path
+
+    studio = WorkflowStudioPage(WorkflowLibrary(Path.cwd() / ".tmp-run-rejection"), _registry())
+    studio.name_edit.setText("Занятый сценарий")
+    studio.phrase_edit.setPlainText("проверка")
+    studio._actions["main"] = [{"kind": "wait", "seconds": 1}]
+    studio.run_requested.connect(
+        lambda *_args: studio.status_label.setText(
+            "Сейчас выполняется другая задача. Повтори позже."
+        )
+    )
+    studio.run_current()
+    assert studio.status_label.text() == (
+        "Сейчас выполняется другая задача. Повтори позже."
+    )
+    studio.workflow_library.directory.rmdir()
+
+
+def test_action_picker_refreshes_after_first_app_is_registered(tmp_path):
+    _application()
+    registry = _registry()
+    registry.register(ToolSpec(
+        name="open_app",
+        description="Открыть разрешённое приложение.",
+        parameters={
+            "type": "object",
+            "properties": {"app": {"type": "string"}},
+            "required": ["app"],
+            "additionalProperties": False,
+        },
+        risk=RiskLevel.SAFE,
+        handler=lambda _args: ToolResult(True, "Открыто"),
+    ))
+    allowed_apps = {}
+    studio = WorkflowStudioPage(
+        WorkflowLibrary(tmp_path / "dynamic-apps"),
+        registry,
+        allowed_apps=allowed_apps,
+    )
+    assert "open_app" not in {spec.name for spec in studio._tool_specs}
+    allowed_apps["notepad"] = ("notepad.exe",)
+    studio.refresh_available_actions()
+    assert "open_app" in {spec.name for spec in studio._tool_specs}
 
 
 def test_canvas_uses_friendly_labels_and_emits_double_click():
