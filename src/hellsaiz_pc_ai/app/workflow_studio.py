@@ -390,8 +390,10 @@ class ToolActionDialog(QDialog):
         self.registry = registry
         self.spec = spec
         self.initial = initial or {}
-        self.allowed_apps = allowed_apps or {}
-        self.allowed_processes = allowed_processes or {}
+        # Keep these dictionaries by reference: the Applications page can update
+        # the allowlist while this page is still open.
+        self.allowed_apps = allowed_apps if allowed_apps is not None else {}
+        self.allowed_processes = allowed_processes if allowed_processes is not None else {}
         self.result_action: dict[str, Any] | None = None
         self.fields: dict[str, Any] = {}
         self.required = set(spec.parameters.get("required", []))
@@ -430,7 +432,9 @@ class ToolActionDialog(QDialog):
             warning.setObjectName("warningText")
             layout.addWidget(warning)
         elif spec.name == "close_process":
-            warning = QLabel("Будет выполнено штатное завершение выбранного процесса.")
+            warning = QLabel(
+                "Процесс будет принудительно завершён. Несохранённые данные могут быть потеряны."
+            )
             warning.setObjectName("warningText")
             layout.addWidget(warning)
         buttons = QDialogButtonBox(
@@ -589,6 +593,7 @@ class WorkflowStudioPage(QWidget):
     """A guided, non-code editor for the application's validated workflow graphs."""
 
     run_requested = Signal(str, str, str)
+    workflows_changed = Signal()
 
     def __init__(
         self,
@@ -867,6 +872,7 @@ class WorkflowStudioPage(QWidget):
             self._dirty = False
             self._update_preview(graph)
         self._refresh_library(select_id=workflow_id)
+        self.workflows_changed.emit()
         self.detail_tabs.setCurrentIndex(2)
         self.status_label.setText(
             f"Сценарий «{graph.name}» проверен и сохранён. Структура графа корректна."
@@ -885,9 +891,14 @@ class WorkflowStudioPage(QWidget):
         self.trigger_stack = QStackedWidget()
         phrase_page = QWidget()
         phrase_layout = QVBoxLayout(phrase_page)
-        self.phrase_edit = QLineEdit()
-        self.phrase_edit.setPlaceholderText("Например: ночной режим, спокойной ночи")
-        phrase_help = QLabel("Несколько фраз разделяй запятыми. Любая из них запустит сценарий.")
+        self.phrase_edit = QPlainTextEdit()
+        self.phrase_edit.setMaximumHeight(76)
+        self.phrase_edit.setPlaceholderText(
+            "Например:\nночной режим\nспокойной ночи, пора спать"
+        )
+        phrase_help = QLabel(
+            "Каждую фразу указывай с новой строки. Запятые и точки с запятой внутри фразы сохраняются."
+        )
         phrase_help.setObjectName("secondaryText")
         phrase_layout.addWidget(self.phrase_edit)
         phrase_layout.addWidget(phrase_help)
@@ -1101,7 +1112,7 @@ class WorkflowStudioPage(QWidget):
         if trigger_kind == "text":
             phrases = [
                 item.strip()
-                for item in self.phrase_edit.text().replace(";", ",").split(",")
+                for item in self.phrase_edit.toPlainText().splitlines()
                 if item.strip()
             ]
             trigger_config = {"phrase": phrases[0]} if len(phrases) == 1 else {"phrases": phrases}
@@ -1140,6 +1151,10 @@ class WorkflowStudioPage(QWidget):
             "false_actions": copy.deepcopy(self._actions["false"]),
         }
 
+    def refresh_available_actions(self) -> None:
+        """Refresh the action picker after the Applications allowlist changes."""
+        self._tool_specs = self._available_tool_specs()
+
     def _build_current_graph(self) -> WorkflowGraph:
         draft = self._draft_from_controls()
         if not draft["name"]:
@@ -1148,8 +1163,14 @@ class WorkflowStudioPage(QWidget):
         for node in graph.nodes:
             if node.kind not in {"action.tool", "action.repeat"}:
                 continue
+            tool_name = str(node.config.get("name", ""))
+            # Preserve legacy nodes whose tools are no longer registered. The graph
+            # validator keeps their data; execution reports an error only if the
+            # runner reaches one of these nodes in the selected branch.
+            if self.registry.get_spec(tool_name) is None:
+                continue
             result = self.registry.validate_arguments(
-                node.config["name"],
+                tool_name,
                 node.config.get("arguments", {}),
             )
             if not result.ok:
@@ -1183,7 +1204,7 @@ class WorkflowStudioPage(QWidget):
         trigger_config = draft.get("trigger_config") or {}
         if trigger_kind == "text":
             phrases = trigger_config.get("phrases", [trigger_config.get("phrase", "")])
-            self.phrase_edit.setText(", ".join(str(item) for item in phrases))
+            self.phrase_edit.setPlainText("\n".join(str(item) for item in phrases))
         elif trigger_kind == "schedule":
             time_value = QTime.fromString(str(trigger_config.get("time", "09:00")), "HH:mm")
             self.schedule_time.setTime(time_value if time_value.isValid() else QTime(9, 0))
@@ -1351,6 +1372,7 @@ class WorkflowStudioPage(QWidget):
         self.status_label.setText(f"Загружен сценарий «{graph.name}».")
 
     def add_action(self, branch: str) -> None:
+        self.refresh_available_actions()
         picker = ActionPickerDialog(self._tool_specs, self)
         if picker.exec() != QDialog.DialogCode.Accepted or not picker.selected_name:
             return
@@ -1456,6 +1478,7 @@ class WorkflowStudioPage(QWidget):
         self.run_button.setEnabled(True)
         self._update_preview(graph)
         self._refresh_library(select_id=workflow_id)
+        self.workflows_changed.emit()
         self.status_label.setText(f"Сценарий «{graph.name}» сохранён на этом компьютере.")
         return True
 
@@ -1484,8 +1507,10 @@ class WorkflowStudioPage(QWidget):
             self.status_label.setText("Сначала сохрани сценарий.")
             return
         kind, value = self._trigger_values(graph)
+        # A synchronous receiver may replace this provisional message when a run
+        # is rejected because another task is active.
+        self.status_label.setText("Передаю сценарий на запуск…")
         self.run_requested.emit(self._workflow_id, kind, value)
-        self.status_label.setText(f"Сценарий «{graph.name}» передан на запуск.")
 
     def delete_selected(self) -> None:
         if not self._workflow_id:
@@ -1510,6 +1535,7 @@ class WorkflowStudioPage(QWidget):
         self._dirty = False
         self._set_draft(_default_draft())
         self._refresh_library()
+        self.workflows_changed.emit()
         self.status_label.setText("Сценарий удалён.")
 
     def _reset_canvas_layout(self) -> None:
