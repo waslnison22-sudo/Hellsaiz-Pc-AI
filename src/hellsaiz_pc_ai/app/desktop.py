@@ -272,10 +272,10 @@ def main() -> int:
             QListWidgetItem,
             QMainWindow,
             QMessageBox,
-            QPlainTextEdit,
+            QPlainTextEdit,  # noqa: F401 - retained for the pending stage-one patch context
             QScrollArea,
             QPushButton,
-            QSplitter,
+            QSplitter,  # noqa: F401 - retained for the pending stage-one patch context
             QStackedLayout,
             QStackedWidget,
             QStyle,
