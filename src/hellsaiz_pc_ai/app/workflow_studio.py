@@ -6,6 +6,7 @@ import uuid
 from typing import Any
 
 from PySide6.QtCore import Qt, QTime, Signal
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -736,7 +737,7 @@ class WorkflowStudioPage(QWidget):
         technical_layout.addWidget(technical_hint)
         self.technical_json = QPlainTextEdit()
         self.technical_json.setPlaceholderText("Схема появится после создания или выбора сценария.")
-        self.technical_json.setFont(__import__("PySide6.QtGui", fromlist=["QFont"]).QFont("Consolas", 9))
+        self.technical_json.setFont(QFont("Consolas", 9))
         technical_layout.addWidget(self.technical_json, 1)
         technical_buttons = QHBoxLayout()
         self.apply_json_button = QPushButton("Проверить и сохранить JSON")
