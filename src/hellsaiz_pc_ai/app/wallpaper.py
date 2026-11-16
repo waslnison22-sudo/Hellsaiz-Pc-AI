@@ -82,15 +82,41 @@ class WallpaperStore:
             if temporary.stat().st_size != size:
                 raise WallpaperError("Файл обоев скопирован не полностью.")
             temporary.replace(destination)
-            self._save({"filename": filename})
+            previous_fit = self.fit_mode()
+            self._save({"filename": filename, "fit_mode": previous_fit})
         except Exception:
             temporary.unlink(missing_ok=True)
             destination.unlink(missing_ok=True)
             raise
         return destination
 
+    def fit_mode(self) -> str:
+        if not self.preferences_path.is_file() or self.preferences_path.is_symlink():
+            return "fill"
+        try:
+            data = json.loads(self.preferences_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, json.JSONDecodeError):
+            return "fill"
+        mode = data.get("fit_mode") if isinstance(data, dict) else None
+        return mode if mode in ("fill", "fit", "stretch") else "fill"
+
+    def set_fit_mode(self, mode: str) -> None:
+        if mode not in ("fill", "fit", "stretch"):
+            raise WallpaperError("Неизвестный режим подгонки обоев.")
+        if not self.preferences_path.is_file() or self.preferences_path.is_symlink():
+            self._save({"filename": None, "fit_mode": mode})
+            return
+        try:
+            data = json.loads(self.preferences_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, json.JSONDecodeError):
+            data = {}
+        if not isinstance(data, dict):
+            data = {}
+        data["fit_mode"] = mode
+        self._save(data)
+
     def clear(self) -> None:
-        self._save({"filename": None})
+        self._save({"filename": None, "fit_mode": self.fit_mode()})
 
     def _save(self, value: dict[str, str | None]) -> None:
         self.preferences_path.parent.mkdir(parents=True, exist_ok=True)

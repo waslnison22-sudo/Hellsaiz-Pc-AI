@@ -1,0 +1,305 @@
+--- a/src/hellsaiz_pc_ai/app/desktop.py
++++ b/src/hellsaiz_pc_ai/app/desktop.py
+@@ -259 +259,12 @@
+-        from PySide6.QtCore import QObject, QEasingCurve, QPropertyAnimation, Qt, QThread, QTimer, Signal, Slot
++        from PySide6.QtCore import (
++            QObject,
++            QEasingCurve,
++            QEvent,
++            QPropertyAnimation,
++            QSize,
++            Qt,
++            QThread,
++            QTimer,
++            Signal,
++            Slot,
++        )
+@@ -261 +272 @@
+-        from PySide6.QtGui import QDesktopServices, QFont, QMovie, QPixmap
++        from PySide6.QtGui import QDesktopServices, QFont, QImageReader, QMovie, QPixmap
+@@ -495,0 +507 @@
++                from_local_command = False
+@@ -515,0 +528,2 @@
++                        if answer is not None:
++                            from_local_command = True
+@@ -543 +557,3 @@
+-                if self.speak_reply:
++                # Голосом озвучиваются только ответы ИИ; подтверждения локальных
++                # команд и сценариев не озвучиваются никогда.
++                if self.speak_reply and self.workflow_trigger is None and not from_local_command:
+@@ -628 +644 @@
+-    profile_heading = QLabel("ПРОФИЛЬ ИИ И ГОЛОСА")
++    profile_heading = QLabel("Профиль ИИ и голос")
+@@ -736,0 +753 @@
++    profile_toggle_open = {"state": False}
+@@ -739 +756,2 @@
+-        if profile_panel.maximumHeight() == 0 else None
++        if profile_panel.maximumHeight() == 0 and not profile_toggle_open["state"]
++        else None
+@@ -927 +945,3 @@
+-        if not profile_panel.isVisible():
++        opening = not profile_panel.isVisible() or profile_panel.maximumHeight() <= 1
++        profile_toggle_open["state"] = opening
++        if opening:
+@@ -928,0 +949,2 @@
++            profile_panel.adjustSize()
++            target = max(64, profile_panel.sizeHint().height() + 12)
+@@ -931 +953 @@
+-            profile_animation.setEndValue(profile_panel.sizeHint().height() + 12)
++            profile_animation.setEndValue(target)
+@@ -933 +954,0 @@
+-            profile_button.setText("ИИ / Голос  ⌄")
+@@ -935 +956 @@
+-            profile_animation.setStartValue(profile_panel.height())
++            profile_animation.setStartValue(max(profile_panel.height(), 1))
+@@ -938 +959 @@
+-            profile_button.setText("ИИ / Голос  ⌃")
++        profile_button.setText("ИИ / Голос  ⌄" if opening else "ИИ / Голос  ⌃")
+@@ -1087,2 +1108,2 @@
+-    reminder_title = QLabel("НАПОМИНАНИЯ / ЛОКАЛЬНОЕ ХРАНИЛИЩЕ")
+-    reminder_title.setStyleSheet("font-size:18px; font-weight:650; color:#f1f2f4;")
++    reminder_title = QLabel("Напоминания")
++    reminder_title.setStyleSheet("font-size:20px; font-weight:650; color:#f1f2f4;")
+@@ -1155,2 +1176,2 @@
+-    apps_title = QLabel("ПРИЛОЖЕНИЯ")
+-    apps_title.setStyleSheet("font-size:18px; font-weight:650; color:#f1f2f4;")
++    apps_title = QLabel("Приложения")
++    apps_title.setStyleSheet("font-size:20px; font-weight:650; color:#f1f2f4;")
+@@ -1280,4 +1301,4 @@
+-    wallpaper_layout.setContentsMargins(28, 24, 28, 24)
+-    wallpaper_layout.setSpacing(14)
+-    wallpaper_title = QLabel("ОБОИ")
+-    wallpaper_title.setStyleSheet("font-size:24px; font-weight:650; color:#eef2f7;")
++    wallpaper_layout.setContentsMargins(0, 6, 0, 10)
++    wallpaper_layout.setSpacing(10)
++    wallpaper_title = QLabel("Оформление и обои")
++    wallpaper_title.setStyleSheet("font-size:20px; font-weight:650; color:#eef2f7;")
+@@ -1298 +1319 @@
+-    wallpaper_preview_title = QLabel("ПРЕДПРОСМОТР")
++    wallpaper_preview_title = QLabel("Предпросмотр")
+@@ -1307,0 +1329,10 @@
++    wallpaper_fit_label = QLabel("Подгонка:")
++    wallpaper_fit_combo = QComboBox()
++    wallpaper_fit_combo.addItem("Заполнить экран (без искажений)", "fill")
++    wallpaper_fit_combo.addItem("Вписать целиком", "fit")
++    wallpaper_fit_combo.addItem("Растянуть по окну", "stretch")
++    wallpaper_fit_combo.setCurrentIndex(
++        max(0, wallpaper_fit_combo.findData(wallpaper_store.fit_mode()))
++    )
++    wallpaper_actions.addWidget(wallpaper_fit_label)
++    wallpaper_actions.addWidget(wallpaper_fit_combo, 1)
+@@ -1323,0 +1355,6 @@
++            wallpaper_resolution = QImageReader(str(selected_wallpaper)).size()
++            resolution_text = (
++                f"Разрешение: {wallpaper_resolution.width()}\u00d7{wallpaper_resolution.height()}"
++                if wallpaper_resolution.isValid() and wallpaper_resolution.width() > 0
++                else "Разрешение: неизвестно"
++            )
+@@ -1326 +1363 @@
+-                f"Размер: {selected_wallpaper.stat().st_size / (1024 * 1024):.1f} МБ"
++                f"{resolution_text} \u00b7 Размер: {selected_wallpaper.stat().st_size / (1024 * 1024):.1f} МБ"
+@@ -1352,0 +1390,4 @@
++    def change_wallpaper_fit() -> None:
++        wallpaper_store.set_fit_mode(str(wallpaper_fit_combo.currentData() or "fill"))
++        apply_wallpaper()
++
+@@ -1356 +1396,0 @@
+-    tabs.addTab(wallpaper_page, "Обои")
+@@ -1363,2 +1403,2 @@
+-    voices_title = QLabel("БИБЛИОТЕКА ГОЛОСОВ")
+-    voices_title.setStyleSheet("font-size:24px; font-weight:650; color:#eef2f7;")
++    voices_title = QLabel("Голоса")
++    voices_title.setStyleSheet("font-size:20px; font-weight:650; color:#eef2f7;")
+@@ -1387,0 +1428,18 @@
++    voices_hint = QLabel(
++        "Совет: голос Денис звучит механически — попробуй Дмитрия, Ирину или Руслана ниже."
++    )
++    voices_hint.setWordWrap(True)
++    voices_hint.setStyleSheet("color:#8e98a6; font-size:11px;")
++    voices_layout.addWidget(voices_hint)
++    recommended_voice_buttons: list[tuple[QPushButton, str]] = []
++    recommended_voice_row = QHBoxLayout()
++    for recommended_label, recommended_voice_id in (
++        ("Dmitri", "ru_RU-dmitri-medium"),
++        ("Irina", "ru_RU-irina-medium"),
++        ("Ruslan", "ru_RU-ruslan-medium"),
++    ):
++        recommended_button = QPushButton(recommended_label)
++        recommended_button.setToolTip(f"Скачать и прослушать: {recommended_voice_id}")
++        recommended_voice_row.addWidget(recommended_button)
++        recommended_voice_buttons.append((recommended_button, recommended_voice_id))
++    voices_layout.addLayout(recommended_voice_row)
+@@ -1643,0 +1702,6 @@
++    def download_recommended_voice(voice_id: str) -> None:
++        index = voice_catalog.findData(voice_id)
++        if index >= 0:
++            voice_catalog.setCurrentIndex(index)
++        download_selected_voice()
++
+@@ -1644,0 +1709,4 @@
++    for recommended_button, recommended_voice_id in recommended_voice_buttons:
++        recommended_button.clicked.connect(
++            lambda _=False, vid=recommended_voice_id: download_recommended_voice(vid)
++        )
+@@ -1659,2 +1727,2 @@
+-    settings_title = QLabel("НАСТРОЙКИ")
+-    settings_title.setStyleSheet("font-size:18px; font-weight:650; color:#f1f2f4;")
++    settings_title = QLabel("Настройки")
++    settings_title.setStyleSheet("font-size:20px; font-weight:650; color:#f1f2f4;")
+@@ -1661,0 +1730 @@
++    settings_layout.addWidget(wallpaper_page)
+@@ -1665 +1734 @@
+-    speech_title = QLabel("РАСПОЗНАВАНИЕ РЕЧИ")
++    speech_title = QLabel("Распознавание речи")
+@@ -2082 +2151 @@
+-    ocr_title = QLabel("ЛОКАЛЬНОЕ РАСПОЗНАВАНИЕ ЭКРАНА")
++    ocr_title = QLabel("Распознавание экрана")
+@@ -2219 +2288 @@
+-    file_access_title = QLabel("ДОСТУП К ФАЙЛАМ")
++    file_access_title = QLabel("Доступ к файлам")
+@@ -2320 +2389 @@
+-    network_title = QLabel("СЕТЬ И v2RAYTUN")
++    network_title = QLabel("Сеть и v2RayTun")
+@@ -2455 +2524 @@
+-    telegram_title = QLabel("TELEGRAM WORKER")
++    telegram_title = QLabel("Telegram")
+@@ -2677 +2746 @@
+-    startup_title = QLabel("АВТОЗАПУСК WINDOWS")
++    startup_title = QLabel("Автозапуск Windows")
+@@ -2733 +2802 @@
+-    update_title = QLabel("ОБНОВЛЕНИЯ")
++    update_title = QLabel("Обновления")
+@@ -2973,0 +3043 @@
++    wallpaper_layer.setAlignment(Qt.AlignmentFlag.AlignCenter)
+@@ -2975,0 +3046,3 @@
++    wallpaper_dim = QLabel()
++    wallpaper_dim.setObjectName("wallpaperDim")
++    wallpaper_dim.setStyleSheet("background:rgba(4, 6, 10, 128);")
+@@ -2998,3 +3070,0 @@
+-    sidebar_caption = QLabel("PERSONAL ASSISTANT")
+-    sidebar_caption.setStyleSheet("font-size:9px; letter-spacing:1.7px; color:#788391;")
+-    sidebar_layout.addWidget(sidebar_caption)
+@@ -3017,0 +3088 @@
++    root_layout.addWidget(wallpaper_dim)
+@@ -3019 +3090 @@
+-    root_layout.setCurrentIndex(1)
++    root_layout.setCurrentIndex(2)
+@@ -3020,0 +3092,25 @@
++
++    def scale_wallpaper(pixmap: QPixmap, mode: str) -> QPixmap:
++        size = window.size()
++        if size.isEmpty():
++            return pixmap
++        if mode == "stretch":
++            return pixmap.scaled(
++                size,
++                Qt.AspectRatioMode.IgnoreAspectRatio,
++                Qt.TransformationMode.SmoothTransformation,
++            )
++        if mode == "fit":
++            return pixmap.scaled(
++                size,
++                Qt.AspectRatioMode.KeepAspectRatio,
++                Qt.TransformationMode.SmoothTransformation,
++            )
++        expanded = pixmap.scaled(
++            size,
++            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
++            Qt.TransformationMode.SmoothTransformation,
++        )
++        left = max(0, (expanded.width() - size.width()) // 2)
++        top = max(0, (expanded.height() - size.height()) // 2)
++        return expanded.copy(left, top, size.width(), size.height())
+@@ -3028,0 +3125 @@
++        wallpaper_layer.setStyleSheet("background:#080b11;")
+@@ -3031,3 +3128,3 @@
+-            wallpaper_layer.setStyleSheet("background:#080b11;")
+-            return
+-        wallpaper_layer.setStyleSheet("background:#080b11;")
++            return
++        mode = wallpaper_store.fit_mode()
++        wallpaper_layer.setScaledContents(mode == "stretch")
+@@ -3036,4 +3133 @@
+-            if movie.isValid():
+-                wallpaper_movie = movie
+-                wallpaper_layer.setMovie(movie)
+-                movie.start()
++            if not movie.isValid():
+@@ -3040,0 +3135,28 @@
++            window_size = window.size()
++            if not window_size.isEmpty() and mode != "stretch":
++                frame_size = movie.frameRect().size()
++                if (
++                    frame_size.isValid()
++                    and frame_size.width() > 0
++                    and frame_size.height() > 0
++                ):
++                    if mode == "fill":
++                        ratio = max(
++                            window_size.width() / frame_size.width(),
++                            window_size.height() / frame_size.height(),
++                        )
++                    else:
++                        ratio = min(
++                            window_size.width() / frame_size.width(),
++                            window_size.height() / frame_size.height(),
++                        )
++                    movie.setScaledSize(
++                        QSize(
++                            max(1, round(frame_size.width() * ratio)),
++                            max(1, round(frame_size.height() * ratio)),
++                        )
++                    )
++            wallpaper_movie = movie
++            wallpaper_layer.setMovie(movie)
++            movie.start()
++            return
+@@ -3042 +3164,3 @@
+-        if not pixmap.isNull():
++        if pixmap.isNull():
++            return
++        if mode == "stretch":
+@@ -3045 +3169 @@
+-            wallpaper_layer.setStyleSheet("background:#080b11;")
++            wallpaper_layer.setPixmap(scale_wallpaper(pixmap, mode))
+@@ -3047,0 +3172,15 @@
++    wallpaper_fit_combo.currentIndexChanged.connect(change_wallpaper_fit)
++
++    class WallpaperResizeBridge(QObject):
++        """Forwards window resize events so the wallpaper can rescale in place."""
++
++        resized = Signal()
++
++        def eventFilter(self, watched: QObject, event: Any) -> bool:
++            if event.type() == QEvent.Type.Resize:
++                self.resized.emit()
++            return False
++
++    wallpaper_resize_bridge = WallpaperResizeBridge(window)
++    wallpaper_resize_bridge.resized.connect(apply_wallpaper)
++    window.installEventFilter(wallpaper_resize_bridge)
+@@ -3075 +3213,0 @@
+-        profile_button.setEnabled(False)
+@@ -3089,0 +3228,2 @@
++        error_state = {"last": None}
++
+@@ -3090,0 +3231 @@
++            error_state["last"] = None
+@@ -3095,0 +3237,8 @@
++        def show_error(message: str) -> None:
++            if error_state["last"] == message:
++                return
++            error_state["last"] = message
++            transcript.append(
++                f"<p style='color:#ff7b72;'><b>Ошибка:</b> {escape(message)}</p>"
++            )
++
+@@ -3098,5 +3247 @@
+-        worker.failed.connect(
+-            lambda message: transcript.append(
+-                f"<p style='color:#c5c9d0;'><b>Ошибка:</b> {escape(message)}</p>"
+-            )
+-        )
++        worker.failed.connect(show_error)
+@@ -3105 +3249,0 @@
+-        worker.finished.connect(lambda: profile_button.setEnabled(True))
