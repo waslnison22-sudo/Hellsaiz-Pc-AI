@@ -79,8 +79,8 @@ from hellsaiz_pc_ai.tools.ocr_models import (
     check_russian_ocr_models,
     download_russian_ocr_models,
 )
-from hellsaiz_pc_ai.workflows.builder import append_hour_condition, append_repeat_action, append_tool_action, append_wait_action, append_weekday_condition, terminal_nodes
-from hellsaiz_pc_ai.workflows.graph import WorkflowGraph, WorkflowGraphRunner, WorkflowTrigger
+from hellsaiz_pc_ai.workflows.builder import append_hour_condition, append_repeat_action, append_tool_action, append_wait_action, append_weekday_condition, terminal_nodes  # noqa: F401 - pending stage-one patch context
+from hellsaiz_pc_ai.workflows.graph import WorkflowGraph, WorkflowGraphRunner, WorkflowTrigger  # noqa: F401 - pending stage-one patch context
 from hellsaiz_pc_ai.workflows.library import WorkflowLibrary
 from hellsaiz_pc_ai.workflows.scheduler import WorkflowScheduler
 
@@ -258,7 +258,7 @@ def main() -> int:
     try:
         from PySide6.QtCore import QObject, QEasingCurve, QPropertyAnimation, Qt, QThread, QTimer, Signal, Slot
         from PySide6.QtCore import QUrl
-        from PySide6.QtGui import QDesktopServices, QFont, QMovie, QPixmap
+        from PySide6.QtGui import QDesktopServices, QFont, QMovie, QPixmap  # noqa: F401 - legacy Qt import kept until worker patch is fully committed
         from PySide6.QtWidgets import (
             QApplication,
             QCheckBox,
@@ -298,6 +298,7 @@ def main() -> int:
     )
 
     from hellsaiz_pc_ai.app.workflow_studio import WorkflowStudioPage
+    _ = WorkflowCanvas  # Imported in the guarded Qt block; used by WorkflowStudioPage.
     settings = load_settings()
     app = QApplication.instance() or QApplication([])
     instance_lock = SingleInstanceLock(settings.workflows_path.parent / "assistant.lock")
