@@ -99,6 +99,10 @@ jobs:
         run: |
           $currentTag = "${{ steps.release.outputs.tag }}"
           $releases = gh release list --limit 100 --json tagName,isDraft,isPrerelease | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not list GitHub releases."
+          }
+
           $requiredPreviousAssets = @(
             "HellsaizPC_AI-update-manifest.json",
             "HellsaizPC_AI-update-manifest.sig",
@@ -109,10 +113,12 @@ jobs:
             if ($candidate.tagName -eq $currentTag -or $candidate.isDraft -or $candidate.isPrerelease) {
               continue
             }
-            $candidateRelease = gh release view $candidate.tagName --json assets | ConvertFrom-Json
+
+            $candidateJson = gh release view $candidate.tagName --json assets
             if ($LASTEXITCODE -ne 0) {
               continue
             }
+            $candidateRelease = $candidateJson | ConvertFrom-Json
             $candidateAssetNames = @($candidateRelease.assets | ForEach-Object { $_.name })
             $hasRequiredAssets = $true
             foreach ($requiredAsset in $requiredPreviousAssets) {
@@ -130,23 +136,32 @@ jobs:
           if ($null -eq $previous) {
             throw "No previous stable release with a complete portable update baseline was found."
           }
+
           $directory = Join-Path $env:RUNNER_TEMP "hellsaiz-previous-release"
           New-Item -ItemType Directory -Force -Path $directory | Out-Null
           gh release download $previous.tagName --pattern "HellsaizPC_AI-update-manifest.json" --pattern "HellsaizPC_AI-update-manifest.sig" --pattern "HellsaizPC_AI-windows-x64-portable.zip" --dir $directory
-            if ($LASTEXITCODE -eq 0) {
-              "tag=$($previous.tagName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-              "version=$($previous.tagName.TrimStart('v'))" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-              "manifest=$directory\HellsaizPC_AI-update-manifest.json" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-              "signature=$directory\HellsaizPC_AI-update-manifest.sig" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-              "portable=$directory\HellsaizPC_AI-windows-x64-portable.zip" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-            } else {
-              throw "Previous stable release assets could not be downloaded."
-            }
-            if (-not (Test-Path (Join-Path $directory "HellsaizPC_AI-windows-x64-portable.zip") -PathType Leaf)) {
-              throw "Previous stable release does not contain the portable launcher layout required for update testing."
+          if ($LASTEXITCODE -ne 0) {
+            throw "Previous stable release assets could not be downloaded."
+          }
+
+          $requiredLocalFiles = @(
+            "HellsaizPC_AI-update-manifest.json",
+            "HellsaizPC_AI-update-manifest.sig",
+            "HellsaizPC_AI-windows-x64-portable.zip"
+          )
+          foreach ($file in $requiredLocalFiles) {
+            if (-not (Test-Path (Join-Path $directory $file) -PathType Leaf)) {
+              throw "Downloaded baseline is missing: $file"
             }
           }
 
+          "tag=$($previous.tagName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "version=$($previous.tagName.TrimStart('v'))" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "manifest=$directory\HellsaizPC_AI-update-manifest.json" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "signature=$directory\HellsaizPC_AI-update-manifest.sig" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "portable=$directory\HellsaizPC_AI-windows-x64-portable.zip" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Selected previous update baseline: $($previous.tagName)"
+          
       - name: Smoke-test frozen desktop, launcher and updater
         shell: pwsh
         run: |
