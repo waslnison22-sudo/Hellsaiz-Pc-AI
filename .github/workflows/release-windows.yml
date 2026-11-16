@@ -2,8 +2,12 @@ name: Windows Release
 
 on:
   push:
+    branches:
+      - "dev/bootstrap"
     tags:
       - "v*"
+    paths:
+      - ".release-v0.1.5"
 
 permissions:
   contents: write
@@ -15,7 +19,24 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        
+
+      - name: Resolve release target
+        id: release
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF -eq "refs/heads/dev/bootstrap") {
+            $tag = "v0.1.5"
+          } else {
+            $tag = "${{ steps.release.outputs.tag }}"
+          }
+          if ($tag -ne "v0.1.5") {
+            throw "This workflow is configured for the v0.1.5 release only."
+          }
+          $version = $tag.TrimStart("v")
+          "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Release target: $tag ($version)"
+
       - name: Apply pending refactoring patches
         shell: pwsh
         run: |
@@ -57,7 +78,7 @@ jobs:
         env:
           HELLSAIZ_UPDATE_SIGNING_KEY: ${{ secrets.HELLSAIZ_UPDATE_SIGNING_KEY }}
         run: |
-          $version = $env:GITHUB_REF_NAME.TrimStart("v")
+          $version = ${{ steps.release.outputs.version }}
           python scripts/set_version.py $version
           if ($LASTEXITCODE -ne 0) { throw "Version setup failed." }
 
@@ -76,7 +97,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $currentTag = $env:GITHUB_REF_NAME
+          $currentTag = "${{ steps.release.outputs.tag }}"
           $releases = gh release list --limit 100 --json tagName,isDraft,isPrerelease | ConvertFrom-Json
           $requiredPreviousAssets = @(
             "HellsaizPC_AI-update-manifest.json",
@@ -157,7 +178,7 @@ jobs:
         env:
           HELLSAIZ_UPDATE_SIGNING_KEY: ${{ secrets.HELLSAIZ_UPDATE_SIGNING_KEY }}
         run: |
-          $version = $env:GITHUB_REF_NAME.TrimStart("v")
+          $version = ${{ steps.release.outputs.version }}
           $arguments = @(
             "scripts/package_release.py",
             "--version", $version,
@@ -185,7 +206,7 @@ jobs:
       - name: Compile Windows setup installer
         shell: pwsh
         run: |
-          $version = $env:GITHUB_REF_NAME.TrimStart("v")
+          $version = ${{ steps.release.outputs.version }}
           $compiler = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6/ISCC.exe"
           if (-not (Test-Path $compiler)) {
             choco install innosetup --yes --no-progress
@@ -215,7 +236,7 @@ jobs:
           $activePath = Join-Path $smokeRoot "active.json"
           if (-not (Test-Path $activePath -PathType Leaf)) { throw "Installer did not create active.json." }
           $installed = Get-Content $activePath -Raw | ConvertFrom-Json
-          if ($installed.active_version -ne $env:GITHUB_REF_NAME.TrimStart("v")) {
+          if ($installed.active_version -ne ${{ steps.release.outputs.version }}) {
             throw "Installer selected an unexpected application version."
           }
           foreach ($required in @("HellsaizLauncher.exe", "HellsaizUpdater.exe")) {
@@ -269,7 +290,7 @@ jobs:
           $activePath = Join-Path $stage "active.json"
           $active = Get-Content $activePath -Raw | ConvertFrom-Json
           $previousVersion = "${{ steps.previous.outputs.version }}"
-          $version = $env:GITHUB_REF_NAME.TrimStart("v")
+          $version = ${{ steps.release.outputs.version }}
           if ($active.active_version -ne $previousVersion) {
             throw "Previous portable package version mismatch. Expected $previousVersion, found $($active.active_version)."
           }
