@@ -118,3 +118,42 @@ def test_corrupted_profile_store_is_rejected(tmp_path: Path):
     path.write_text(json.dumps({"schema_version": 1, "active_profile": "missing", "profiles": []}))
     with pytest.raises(ValueError):
         load_profile_store(path)
+
+
+def test_existing_profiles_receive_generation_parameter_defaults():
+    profile = validate_profile({
+        "name": "Old profile",
+        "provider": "lm-studio",
+        "base_url": "http://127.0.0.1:1234/v1",
+        "model": "local-model",
+        "enabled": False,
+    })
+    assert profile["temperature"] == 0.3
+    assert profile["max_tokens"] == 2000
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"temperature": -0.1},
+        {"temperature": 1.1},
+        {"temperature": float("nan")},
+        {"temperature": True},
+        {"max_tokens": 199},
+        {"max_tokens": 4001},
+        {"max_tokens": True},
+    ],
+)
+def test_invalid_generation_parameters_are_rejected(changes):
+    profile = {
+        "name": "Local",
+        "provider": "lm-studio",
+        "base_url": "http://127.0.0.1:1234/v1",
+        "model": "local-model",
+        "enabled": False,
+        "temperature": 0.3,
+        "max_tokens": 2000,
+    }
+    profile.update(changes)
+    with pytest.raises(ValueError):
+        validate_profile(profile)
