@@ -162,9 +162,18 @@ class ToolRegistry:
         if not validation.ok:
             return validation
         spec = self._tools[name]
-        # RiskLevel remains descriptive metadata. The personal assistant runs
-        # explicitly requested, allowlisted tools immediately without a modal
-        # confirmation; argument schemas and tool-level allowlists still apply.
+        if confirm is not None:
+            try:
+                accepted = bool(confirm(spec, arguments))
+            except Exception as exc:
+                return ToolResult(
+                    False,
+                    f"Не удалось получить подтверждение действия: {type(exc).__name__}: {exc}",
+                )
+            if not accepted:
+                return ToolResult(False, "Действие отменено пользователем.")
+        # Confirmation only adds a user decision. Registered-tool allowlists and
+        # the argument schema above remain mandatory for every policy.
         try:
             return spec.handler(arguments)
         except Exception as exc:
