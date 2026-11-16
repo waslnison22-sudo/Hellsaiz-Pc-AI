@@ -51,3 +51,40 @@ def test_active_wallpaper_rejects_path_traversal(tmp_path: Path):
     store.preferences_path.write_text('{"filename":"../secret.png"}', encoding="utf-8")
 
     assert store.active_wallpaper() is None
+
+
+def test_fit_mode_defaults_to_fill_and_persists(tmp_path: Path):
+    store = WallpaperStore(tmp_path / "profile")
+
+    assert store.fit_mode() == "fill"
+
+    store.set_fit_mode("fit")
+    assert store.fit_mode() == "fit"
+
+    store.set_fit_mode("stretch")
+    assert json.loads(store.preferences_path.read_text())["fit_mode"] == "stretch"
+
+
+def test_set_fit_mode_rejects_unknown_values(tmp_path: Path):
+    store = WallpaperStore(tmp_path / "profile")
+
+    with pytest.raises(WallpaperError):
+        store.set_fit_mode("bogus")
+
+
+def test_import_wallpaper_preserves_fit_mode(tmp_path: Path):
+    store = WallpaperStore(tmp_path / "profile")
+    store.set_fit_mode("fit")
+    store.import_wallpaper(make_png(tmp_path / "wall.png"))
+
+    assert store.fit_mode() == "fit"
+
+
+def test_clear_preserves_fit_mode(tmp_path: Path):
+    store = WallpaperStore(tmp_path / "profile")
+    store.set_fit_mode("stretch")
+    store.import_wallpaper(make_png(tmp_path / "wall.png"))
+    store.clear()
+
+    assert store.fit_mode() == "stretch"
+    assert store.active_wallpaper() is None
