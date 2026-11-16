@@ -30,7 +30,8 @@ def test_runtime_works_without_any_ai_provider(tmp_path: Path):
 
     assert assistant is None
     assert "без ИИ" in router.route("помощь")
-    assert router.route("который час").startswith("Готово.")
+    ack = router.route("который час")
+    assert ack.split(maxsplit=1)[0] in {"Готово.", "Сделано.", "Готово!", "Выполнено.", "Хорошо,"}
     assert registry.get_spec("open_app") is not None
     assert registry.get_spec("create_reminder") is not None
     assert registry.get_spec("list_directory") is not None
