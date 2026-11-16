@@ -79,7 +79,7 @@ from hellsaiz_pc_ai.tools.ocr_models import (
     check_russian_ocr_models,
     download_russian_ocr_models,
 )
-from hellsaiz_pc_ai.workflows.builder import append_hour_condition, append_repeat_action, append_tool_action, append_wait_action, append_weekday_condition, terminal_nodes  # noqa: F401 - pending stage-one patch context
+from hellsaiz_pc_ai.workflows.builder import append_hour_condition, append_repeat_action, append_tool_action, append_wait_action, append_weekday_condition, terminal_nodes
 from hellsaiz_pc_ai.workflows.graph import WorkflowGraph, WorkflowGraphRunner, WorkflowTrigger  # noqa: F401 - pending stage-one patch context
 from hellsaiz_pc_ai.workflows.library import WorkflowLibrary
 from hellsaiz_pc_ai.workflows.scheduler import WorkflowScheduler
