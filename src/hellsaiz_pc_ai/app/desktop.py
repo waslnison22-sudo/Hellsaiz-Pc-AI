@@ -4,6 +4,7 @@ import atexit
 import json
 import logging
 import tempfile
+import threading
 from html import escape
 from pathlib import Path
 from typing import Any
@@ -464,6 +465,30 @@ def main() -> int:
     window.setWindowTitle(settings.app_name)
     window.resize(1240, 820)
     window.setMinimumSize(900, 640)
+
+    def show_tool_confirmation(request: Any) -> bool:
+        if request.policy == "risky" and request.tool.risk == RiskLevel.SAFE:
+            return True
+        details = json.dumps(request.arguments, ensure_ascii=False, indent=2)
+        if len(details) > 1200:
+            details = details[:1200] + "\n…"
+        message = (
+            f"Инструмент: {request.tool.name}\n"
+            f"{request.tool.description}\n\n"
+            f"Параметры:\n{details}\n\n"
+            "Разрешить выполнение этого действия?"
+        )
+        answer = QMessageBox.question(
+            window,
+            "Подтверждение действия",
+            message,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        return answer == QMessageBox.StandardButton.Yes
+
+    confirmation_bridge = ToolConfirmationBridge(show_tool_confirmation, window)
+
     wallpaper_store = WallpaperStore(settings.workflows_path.parent)
     wallpaper_movie = None
     wallpaper_layer = None
@@ -477,6 +502,8 @@ def main() -> int:
     class Worker(QThread):
         completed = Signal(str, str)
         failed = Signal(str)
+        speech_started = Signal()
+        speech_finished = Signal()
 
         def __init__(
             self,
@@ -500,6 +527,23 @@ def main() -> int:
             self.assistant_profile = dict(assistant_profile or profile_data)
             self.voice_name = voice_name
             self.tts_profile = dict(tts_profile or active_tts)
+            self._speech_lock = threading.RLock()
+            self._speech_router = None
+            self._speech_active = False
+
+        @property
+        def is_speaking(self) -> bool:
+            with self._speech_lock:
+                return self._speech_active
+
+        def stop_speech(self) -> None:
+            with self._speech_lock:
+                speech_router = self._speech_router
+                if speech_router is None or not self._speech_active:
+                    return
+                self._speech_active = False
+            speech_router.stop()
+            self.speech_finished.emit()
 
         def run(self) -> None:
             try:
@@ -566,7 +610,15 @@ def main() -> int:
                     if answer is None:
                         answer = router.route(prompt)
                     if answer is None and assistant is not None:
-                        answer = assistant.reply(prompt)
+                        confirm_policy = str(
+                            self.assistant_profile.get("confirm_policy") or "never"
+                        )
+                        confirm_callback = None
+                        if confirm_policy in {"always", "risky"}:
+                            confirm_callback = lambda spec, arguments: confirmation_bridge.confirm(
+                                spec, arguments, confirm_policy
+                            )
+                        answer = assistant.reply(prompt, confirm=confirm_callback)
                     if answer is None:
                         answer = (
                             "Эта фраза пока не входит в список локальных команд. "
@@ -618,9 +670,20 @@ def main() -> int:
                         if preferred_tts not in {"sapi5", "piper"}:
                             preferred_tts = "sapi5"
                         fallback_tts = "sapi5" if preferred_tts == "piper" else "piper"
-                        result = SpeechOutputRouter(
+                        speech_router = SpeechOutputRouter(
                             speakers, preferred_tts, fallback_tts
-                        ).speak(answer)
+                        )
+                        with self._speech_lock:
+                            self._speech_router = speech_router
+                            self._speech_active = True
+                        self.speech_started.emit()
+                        try:
+                            result = speech_router.speak(answer)
+                        finally:
+                            with self._speech_lock:
+                                self._speech_active = False
+                                self._speech_router = None
+                            self.speech_finished.emit()
                         if result.fallback_used:
                             logging.warning(
                                 "TTS fell back to %s because the preferred engine failed: %s",
@@ -2183,7 +2246,10 @@ def main() -> int:
             return
 
         worker = WakeListenerWorker(
-            model_dir, settings.wake_aliases, active_microphone["name"] or None
+            model_dir,
+            settings.wake_aliases,
+            active_microphone["name"] or None,
+            command_timeout_seconds=float(profile_data.get("wake_command_timeout", 8)),
         )
         wake_listener_state["worker"] = worker
 
