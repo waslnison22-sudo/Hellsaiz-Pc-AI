@@ -3,7 +3,7 @@
 Срез: 15 ноября 2026 года  
 Рабочая ветка: `dev/bootstrap`  
 Коммит кода на момент аудита: `eb4600b162d08a8c790d52183ba90fa75578bdc3`  
-Версия в исходниках: `0.1.4`
+Версия в исходниках: `0.1.5`
 
 Этот документ описывает состояние кода и этапов реализации. Он не является подтверждением успешной сборки, тестирования или готовности к публикации.
 
@@ -22,7 +22,7 @@
 | P4 — управление Windows | 80% | Инвентаризация процессов/окон, focus/minimize/maximize/restore/close, UI Automation inspect/click/type с operation-local snapshots и повторной проверкой доступности, ограниченные hotkeys, scoped file operations, optional local Russian OCR | Реальные тесты в Notepad, Explorer, Settings и браузере; custom/protected UI; OCR на разных DPI и нескольких мониторах |
 | P5 — упаковка и обновление | 55% | В исходниках есть PyInstaller pipeline, stable Launcher/Updater, Inno Setup script, signed manifest, проверка SHA-256, staged update, rollback и разделение пользовательских данных | Реальная Windows-сборка, self-tests EXE, silent install/uninstall, обновление существующей 0.1.3, health marker, сохранность данных и failure-path rollback |
 | P6 — сеть и Telegram | 70% | Выбор/запуск v2RayTun EXE, проверка локального HTTP proxy без глобального изменения сети; отдельный Telegram worker, DPAPI token, user/chat allowlists и read-only tool permissions | Живой тест настроенного proxy/client и отдельного Telegram test chat; проверка остановки/повторного старта и отказа при недоступном proxy |
-| P7 — companion foundation | 100% | Renderer-neutral mode/emotion/viseme contracts, thread-safe controller, renderer protocol и безопасная проверка model manifest | Сам renderer намеренно отложен: avatar, overlay host, Live2D/VRM не входят в текущую основу 0.1.4 |
+| P7 — companion foundation | 100% | Renderer-neutral mode/emotion/viseme contracts, thread-safe controller, renderer protocol и безопасная проверка model manifest | Сам renderer намеренно отложен: avatar, overlay host, Live2D/VRM не входят в текущую основу 0.1.5 |
 
 ## Что уже реализовано в кодовой базе
 
@@ -99,7 +99,7 @@
 ## Что не делать в этом цикле
 
 - Не создавать и не публиковать новый release.
-- Не перемещать и не перепривязывать тег `v0.1.4`.
+- Не перемещать и не перепривязывать тег `v0.1.5`.
 - Не менять установленную пользователем версию и не удалять данные.
 - Не считать source implementation эквивалентом проверенному Windows build.
 - Не включать по умолчанию удалённую LLM, Telegram, OCR или hands-free микрофон.
@@ -110,4 +110,4 @@
 - `docs/PRODUCT_REQUIREMENTS.md` — целевой контракт продукта.
 - `docs/WINDOWS_INSTALL_AND_UPDATES.md` — установка, обновление и rollback.
 - `.github/workflows/ci.yml` и `.github/workflows/release-windows.yml` — запланированные проверки и сборка.
-- `docs/RELEASE_READINESS_0.1.4.md` — отдельные условия release acceptance.
+- `docs/RELEASE_READINESS_0.1.5.md` — отдельные условия release acceptance.
