@@ -4,6 +4,8 @@
 # Заменяет прежние stage2/stage3/stage5/stage6/stage7. Порядок конвейера: stage1, stage1b, этот патч.
 # Фикс intent_engine (B005 strip и приоритет поиска файлов) сделан прямым коммитом в ветку.
 # Проверка времени в тесте — платформонезависимая (%Z даёт «UTC» на Linux и полное название на Windows).
+# Правка 16.11.2026: хунки ACKNOWLEDGMENTS-импорта и замены time-ассерта в test_desktop_runtime
+# удалены — контракт уже в ветке (инлайновый пул подтверждений), иначе патч не применяется.
 --- a/src/hellsaiz_pc_ai/core/orchestrator.py
 +++ b/src/hellsaiz_pc_ai/core/orchestrator.py
 @@ -6,1 +5,0 @@
@@ -108,15 +110,8 @@
 +    assert "не являются корректным JSON" in result
 --- a/tests/test_desktop_runtime.py
 +++ b/tests/test_desktop_runtime.py
-@@ -5,0 +6,1 @@
-+from hellsaiz_pc_ai.core.commands import ACKNOWLEDGMENTS
 @@ -14,0 +16,1 @@
 +        allowed_apps={"notepad": ("notepad.exe",)},
-@@ -33,1 +35,3 @@
--    assert router.route("который час").startswith("Готово.")
-+    time_reply = router.route("который час")
-+    assert any(time_reply.startswith(ack) for ack in ACKNOWLEDGMENTS)
-+    assert ":" in time_reply
 --- a/tests/test_screen_ocr_commands.py
 +++ b/tests/test_screen_ocr_commands.py
 @@ -1,1 +1,1 @@
