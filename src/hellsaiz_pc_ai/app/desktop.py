@@ -354,6 +354,38 @@ def main() -> int:
         reminder_store, allowed_apps, profile_data, file_access_settings,
         vision_settings
     ) = build_runtime(settings)
+    ai_profile_path = settings.workflows_path.parent / "ai_profile.json"
+    profile_defaults = {
+        "wake_command_timeout": 8,
+        "tts_barge_in": True,
+        "volume_step": 10,
+        "confirm_policy": "never",
+        "reply_style": "normal",
+    }
+    for key, default_value in profile_defaults.items():
+        if key not in profile_data:
+            profile_data[key] = default_value
+    if profile_data.get("wake_command_timeout") not in {3, 5, 8, 10, 15}:
+        profile_data["wake_command_timeout"] = 8
+    if not isinstance(profile_data.get("tts_barge_in"), bool):
+        profile_data["tts_barge_in"] = True
+    if profile_data.get("volume_step") not in {5, 10, 20}:
+        profile_data["volume_step"] = 10
+    if profile_data.get("confirm_policy") not in {"always", "risky", "never"}:
+        profile_data["confirm_policy"] = "never"
+    if profile_data.get("reply_style") not in {"brief", "normal", "detailed"}:
+        profile_data["reply_style"] = "normal"
+
+    def persist_ai_profile_updates(updates: dict[str, Any]) -> None:
+        previous = dict(profile_data)
+        profile_data.update(updates)
+        try:
+            save_ai_profile(ai_profile_path, profile_data)
+        except (OSError, ValueError):
+            profile_data.clear()
+            profile_data.update(previous)
+            raise
+
     file_access_path = settings.workflows_path.parent / "file_access.json"
     vision_settings_path = settings.workflows_path.parent / "vision.json"
     active_voice = {"name": str(profile_data.get("voice_name") or settings.speech.tts_voice_name)}
