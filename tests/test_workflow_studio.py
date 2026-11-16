@@ -4,12 +4,11 @@ import os
 import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-pytest.importorskip("PySide6")
+pytest.importorskip("PySide6.QtWidgets")
 
 from PySide6.QtWidgets import QApplication
 
 from hellsaiz_pc_ai.app.workflow_studio import (
-    ActionPickerDialog,
     ToolActionDialog,
     WorkflowStudioPage,
     _make_templates,
