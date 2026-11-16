@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,8 @@ def _profile(
     base_url: str,
     model: str,
     enabled: bool = False,
+    temperature: float = 0.3,
+    max_tokens: int = 2000,
 ) -> dict[str, Any]:
     return {
         "name": name,
@@ -26,6 +29,8 @@ def _profile(
         "base_url": base_url.rstrip("/"),
         "model": model,
         "enabled": enabled,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
     }
 
 
@@ -55,6 +60,8 @@ def validate_profile(value: Any) -> dict[str, Any]:
     base_url = value.get("base_url")
     model = value.get("model")
     enabled = value.get("enabled", False)
+    temperature = value.get("temperature", 0.3)
+    max_tokens = value.get("max_tokens", 2000)
     if not isinstance(name, str) or not 1 <= len(name.strip()) <= 48:
         raise ValueError("Название AI-профиля должно содержать от 1 до 48 символов.")
     if any(ord(character) < 32 or ord(character) == 127 for character in name.strip()):
@@ -77,7 +84,23 @@ def validate_profile(value: Any) -> dict[str, Any]:
         raise ValueError("Имя модели должно содержать от 1 до 128 символов.")
     if not isinstance(enabled, bool):
         raise ValueError("Флаг enabled должен быть логическим значением.")
-    return _profile(name.strip(), provider, base_url.strip(), model.strip(), enabled)
+    if (
+        isinstance(temperature, bool)
+        or not isinstance(temperature, (int, float))
+        or not math.isfinite(float(temperature))
+        or not 0.0 <= float(temperature) <= 1.0
+    ):
+        raise ValueError("Творческость должна быть числом от 0.0 до 1.0.")
+    if (
+        isinstance(max_tokens, bool)
+        or not isinstance(max_tokens, int)
+        or not 200 <= max_tokens <= 4000
+    ):
+        raise ValueError("Максимальная длина ответа должна быть от 200 до 4000 токенов.")
+    return _profile(
+        name.strip(), provider, base_url.strip(), model.strip(), enabled,
+        float(temperature), max_tokens,
+    )
 
 
 def load_profile_store(
