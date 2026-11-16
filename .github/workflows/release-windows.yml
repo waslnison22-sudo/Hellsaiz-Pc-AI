@@ -367,10 +367,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = "${{ steps.release.outputs.tag }}"
-          if ($env:GITHUB_REF -eq "refs/heads/dev/bootstrap") {
-            gh api --method PATCH "repos/$env:GITHUB_REPOSITORY/git/refs/tags/$tag" -f sha="$env:GITHUB_SHA" -F force=true
-            if ($LASTEXITCODE -ne 0) { throw "Could not move $tag to the fully tested release commit." }
-          }
           $assets = @(
             Get-ChildItem "dist/release-assets/*" -File |
               Where-Object { $_.Extension -in @(".zip", ".json", ".sig", ".exe") } |
@@ -381,6 +377,10 @@ jobs:
           }
           if (-not ($assets | Where-Object { $_ -like "*HellsaizPC_AI_Setup.exe" })) {
             throw "The Windows installer is missing from release assets."
+          }
+          if ($env:GITHUB_REF -eq "refs/heads/dev/bootstrap") {
+            gh api --method PATCH "repos/$env:GITHUB_REPOSITORY/git/refs/tags/$tag" -f sha="$env:GITHUB_SHA" -F force=true
+            if ($LASTEXITCODE -ne 0) { throw "Could not move $tag to the fully tested release commit." }
           }
           gh release view $tag *> $null
           if ($LASTEXITCODE -eq 0) {
