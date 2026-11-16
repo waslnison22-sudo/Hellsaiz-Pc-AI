@@ -215,12 +215,14 @@ def test_legacy_complex_graph_can_be_edited_in_developer_json_mode(tmp_path):
     assert not studio.technical_json.isReadOnly()
     edited = json.loads(studio.technical_json.toPlainText())
     edited["name"] = "Старый сценарий — исправлен"
-    edited["nodes"][-1]["config"]["arguments"]["legacy_flag"] = False
+    late_node = next(node for node in edited["nodes"] if node["id"] == "late")
+    late_node["config"]["arguments"]["legacy_flag"] = False
     studio.technical_json.setPlainText(json.dumps(edited, ensure_ascii=False, indent=2))
     studio._apply_technical_schema()
     saved = library.load("legacy")
     assert saved.name == "Старый сценарий — исправлен"
-    assert saved.nodes[-1].config["arguments"]["legacy_flag"] is False
+    saved_late = next(node for node in saved.nodes if node.id == "late")
+    assert saved_late.config["arguments"]["legacy_flag"] is False
 
 
 def test_canvas_uses_friendly_labels_and_emits_double_click():
