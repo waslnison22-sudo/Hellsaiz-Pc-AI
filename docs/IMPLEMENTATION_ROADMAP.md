@@ -1,4 +1,4 @@
-# Implementation roadmap — 0.1.4
+# Implementation roadmap — 0.1.5
 
 This roadmap separates source changes from verified release acceptance. A feature is not complete for release merely because its module or UI exists.
 
@@ -25,7 +25,7 @@ Still required: live tests in Notepad, Explorer, Settings and a browser; protect
 
 ## P5 — packaging and update
 Implemented in source: Windows PyInstaller onedir app, stable launcher/updater, Inno installer, signed manifest, verified extraction, staged apply-after-exit, rollback and data separation; startup task support.
-Still required: real Windows package build after the latest dependencies (pywinauto, RapidOCR, MSS, ONNX Runtime), executable self-tests, silent install/uninstall, real update from installed 0.1.3 to 0.1.4, data preservation, health marker and rollback. Verify the signing key matches the updater's embedded public key before publication.
+Still required: real Windows package build after the latest dependencies (pywinauto, RapidOCR, MSS, ONNX Runtime), executable self-tests, silent install/uninstall, real update from installed 0.1.3 to 0.1.5, data preservation, health marker and rollback. Verify the signing key matches the updater's embedded public key before publication.
 
 ## P6 — network and Telegram
 Implemented in source: v2RayTun path selection/launch and local HTTP-proxy health check without global Windows networking changes; optional client auto-launch; separate disabled-by-default Telegram polling worker with DPAPI token, both user/chat allowlists and read-only permission matrix.
@@ -38,4 +38,4 @@ Not implemented by design: no avatar, overlay host, Live2D/VRM renderer or chara
 Recommended path: transparent Qt sprite prototype; Piper PCM mouth animation; Live2D Native adapter after SDK/license verification; VRM as a separate renderer.
 
 ## Release gate
-Do not mark 0.1.4 ready until the latest commit has a real green Windows CI run, all Windows package/install/uninstall checks pass, and the actual 0.1.3 -> 0.1.4 update plus rollback is verified. The latest published stable release remains 0.1.3.
+Do not mark 0.1.5 ready until the latest commit has a real green Windows CI run, all Windows package/install/uninstall checks pass, and the actual 0.1.3 -> 0.1.5 update plus rollback is verified. The latest published stable release remains 0.1.3.
