@@ -783,12 +783,15 @@ class WorkflowStudioPage(QWidget):
         self.technical_json.copy()
 
     def _edit_graph_node(self, node_id: str) -> None:
-        graph = self._selected_graph
-        if graph is None:
+        if self._editable:
             try:
                 graph = self._build_current_graph()
             except (ValueError, TypeError, KeyError):
-                return
+                graph = self._selected_graph
+        else:
+            graph = self._selected_graph
+        if graph is None:
+            return
         node = next((item for item in graph.nodes if item.id == node_id), None)
         if node is None:
             return
