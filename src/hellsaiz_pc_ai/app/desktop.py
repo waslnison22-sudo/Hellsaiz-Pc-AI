@@ -36,6 +36,8 @@ from hellsaiz_pc_ai.telegram import (
 )
 from hellsaiz_pc_ai.version import APP_VERSION
 from hellsaiz_pc_ai.core.orchestrator import AssistantOrchestrator
+from hellsaiz_pc_ai.core.models import RiskLevel
+from hellsaiz_pc_ai.core.reply_style import build_system_prompt
 from hellsaiz_pc_ai.core.registry import ToolRegistry
 from hellsaiz_pc_ai.hotkeys import GlobalHotkeyService, HotkeyUnavailableError
 from hellsaiz_pc_ai.providers.openai_compatible import OpenAICompatibleProvider, ProviderError
@@ -55,6 +57,7 @@ from hellsaiz_pc_ai.tools.reminders import register_reminder_tools
 from hellsaiz_pc_ai.tools.system import register_system_tools
 from hellsaiz_pc_ai.tools.public_info import register_public_info_tools
 from hellsaiz_pc_ai.app.wallpaper import WallpaperError, WallpaperStore
+from hellsaiz_pc_ai.app.profile_store import save_ai_profile
 from hellsaiz_pc_ai.app.theme import build_dark_stylesheet
 from hellsaiz_pc_ai.app.file_access import (
     FileAccessSettings,
@@ -224,9 +227,16 @@ def build_runtime(settings: Settings):
                         profile_model,
                         base_url=profile_base_url or GigaChatProvider.DEFAULT_BASE_URL,
                         timeout_seconds=settings.llm.timeout_seconds,
+                        temperature=float(profile_data.get("temperature", 0.3)),
+                        max_tokens=int(profile_data.get("max_tokens", 2000)),
                     )
                     assistant = AssistantOrchestrator(
-                        provider, registry, settings.llm.system_prompt, settings.llm.max_tool_rounds
+                        provider, registry,
+                        build_system_prompt(
+                            settings.llm.system_prompt,
+                            str(profile_data.get("reply_style") or "normal"),
+                        ),
+                        settings.llm.max_tool_rounds,
                     )
             else:
                 provider = OpenAICompatibleProvider(
@@ -235,9 +245,16 @@ def build_runtime(settings: Settings):
                     settings.llm.api_key,
                     settings.llm.timeout_seconds,
                     settings.allow_remote_llm,
+                    temperature=float(profile_data.get("temperature", 0.3)),
+                    max_tokens=int(profile_data.get("max_tokens", 2000)),
                 )
                 assistant = AssistantOrchestrator(
-                    provider, registry, settings.llm.system_prompt, settings.llm.max_tool_rounds
+                    provider, registry,
+                    build_system_prompt(
+                        settings.llm.system_prompt,
+                        str(profile_data.get("reply_style") or "normal"),
+                    ),
+                    settings.llm.max_tool_rounds,
                 )
         except (ProviderError, SecureStoreError, ValueError) as exc:
             logging.warning("The active AI profile could not be initialized: %s", exc)
@@ -263,6 +280,7 @@ def main() -> int:
             QApplication,
             QCheckBox,
             QComboBox,
+            QDoubleSpinBox,
             QFileDialog,
             QFrame,
             QHBoxLayout,
@@ -275,6 +293,7 @@ def main() -> int:
             QPlainTextEdit,
             QScrollArea,
             QPushButton,
+            QSpinBox,
             QSplitter,
             QStackedLayout,
             QStackedWidget,
@@ -305,6 +324,7 @@ def main() -> int:
             VoiceTestWorker,
             WakeListenerDispatcher,
             WakeListenerWorker,
+            ToolConfirmationBridge,
         )
     except ImportError:
         print("PySide6 is missing. Run: pip install -e .")
@@ -696,6 +716,23 @@ def main() -> int:
     model_row.addWidget(ai_enabled_check)
     profile_layout.addLayout(model_row)
 
+    generation_row = QHBoxLayout()
+    generation_row.addWidget(QLabel("Творческость"))
+    temperature_spin = QDoubleSpinBox()
+    temperature_spin.setRange(0.0, 1.0)
+    temperature_spin.setSingleStep(0.1)
+    temperature_spin.setDecimals(1)
+    temperature_spin.setValue(0.3)
+    generation_row.addWidget(temperature_spin)
+    generation_row.addSpacing(12)
+    generation_row.addWidget(QLabel("Максимальная длина ответа"))
+    max_tokens_spin = QSpinBox()
+    max_tokens_spin.setRange(200, 4000)
+    max_tokens_spin.setSingleStep(100)
+    max_tokens_spin.setValue(2000)
+    generation_row.addWidget(max_tokens_spin)
+    profile_layout.addLayout(generation_row)
+
     provider_health_row = QHBoxLayout()
     provider_health_button = QPushButton("Проверить соединение и модели")
     model_candidates_combo = QComboBox()
@@ -795,6 +832,8 @@ def main() -> int:
         endpoint_edit.setText(saved_profile["base_url"])
         model_edit.setText(saved_profile["model"])
         ai_enabled_check.setChecked(saved_profile["enabled"])
+        temperature_spin.setValue(float(saved_profile.get("temperature", 0.3)))
+        max_tokens_spin.setValue(int(saved_profile.get("max_tokens", 2000)))
         named_profile_name.setText(saved_profile["name"])
         provider_changed()
         if saved_profile["provider"] == "gigachat":
@@ -821,6 +860,8 @@ def main() -> int:
     endpoint_edit.setText(str(profile_data.get("base_url") or settings.llm.base_url))
     model_edit.setText(str(profile_data.get("model") or settings.llm.model))
     ai_enabled_check.setChecked(bool(profile_data.get("enabled", settings.llm.enabled)))
+    temperature_spin.setValue(float(profile_data.get("temperature", 0.3)))
+    max_tokens_spin.setValue(int(profile_data.get("max_tokens", 2000)))
     speak_toggle.setChecked(bool(profile_data.get("auto_speak", settings.speech.auto_speak)))
 
     provider_selection_state = {
@@ -871,6 +912,8 @@ def main() -> int:
                     model_edit.text().strip() or "GigaChat",
                     base_url=endpoint_edit.text().strip() or GigaChatProvider.DEFAULT_BASE_URL,
                     timeout_seconds=settings.llm.timeout_seconds,
+                    temperature=temperature_spin.value(),
+                    max_tokens=max_tokens_spin.value(),
                 )
             else:
                 provider = OpenAICompatibleProvider(
@@ -879,6 +922,8 @@ def main() -> int:
                     settings.llm.api_key,
                     settings.llm.timeout_seconds,
                     settings.allow_remote_llm,
+                    temperature=temperature_spin.value(),
+                    max_tokens=max_tokens_spin.value(),
                 )
         except Exception as exc:
             profile_status.setText(f"Проверка не запущена: {exc}")
@@ -1020,7 +1065,13 @@ def main() -> int:
                         settings.allow_remote_llm,
                     )
                 new_assistant = AssistantOrchestrator(
-                    provider, registry, settings.llm.system_prompt, settings.llm.max_tool_rounds
+                    provider,
+                    registry,
+                    build_system_prompt(
+                        settings.llm.system_prompt,
+                        str(profile_data.get("reply_style") or "normal"),
+                    ),
+                    settings.llm.max_tool_rounds,
                 )
                 new_assistant.history = store.recent_messages()
             except Exception as exc:
@@ -1033,6 +1084,8 @@ def main() -> int:
             "base_url": endpoint or settings.llm.base_url,
             "model": model or settings.llm.model,
             "enabled": enabled,
+            "temperature": temperature_spin.value(),
+            "max_tokens": max_tokens_spin.value(),
         }
         try:
             updated_store = upsert_profile(provider_profile_store, provider_profile, activate=True)
@@ -1066,13 +1119,7 @@ def main() -> int:
         })
         profile_path = settings.workflows_path.parent / "ai_profile.json"
         try:
-            profile_path.parent.mkdir(parents=True, exist_ok=True)
-            temporary = profile_path.with_suffix(".json.tmp")
-            temporary.write_text(
-                json.dumps(profile_data, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
-            temporary.replace(profile_path)
+            save_ai_profile(profile_path, profile_data)
             profile_status.setText(f"Профиль «{profile_name}» сохранён. Настройки применены.")
         except OSError as exc:
             profile_status.setText(f"AI-профиль сохранён, но голосовые настройки не сохранены: {exc}")
