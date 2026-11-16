@@ -728,20 +728,26 @@ class WorkflowStudioPage(QWidget):
         technical_tab = QWidget()
         technical_layout = QVBoxLayout(technical_tab)
         technical_hint = QLabel(
-            "Техническое представление доступно только для диагностики. "
-            "Обычное создание и изменение сценариев не требует работы с этим текстом."
+            "Режим для разработчиков. Здесь можно просматривать и изменять полный граф "
+            "сценария. Перед сохранением схема проходит тот же валидатор, что и обычные сценарии."
         )
         technical_hint.setObjectName("secondaryText")
         technical_hint.setWordWrap(True)
         technical_layout.addWidget(technical_hint)
         self.technical_json = QPlainTextEdit()
-        self.technical_json.setReadOnly(True)
         self.technical_json.setPlaceholderText("Схема появится после создания или выбора сценария.")
+        self.technical_json.setFont(__import__("PySide6.QtGui", fromlist=["QFont"]).QFont("Consolas", 9))
         technical_layout.addWidget(self.technical_json, 1)
+        technical_buttons = QHBoxLayout()
+        self.apply_json_button = QPushButton("Проверить и сохранить JSON")
+        self.apply_json_button.setObjectName("primaryButton")
+        self.apply_json_button.clicked.connect(self._apply_technical_schema)
         copy_json_button = QPushButton("Скопировать схему")
         copy_json_button.clicked.connect(self._copy_technical_schema)
-        technical_layout.addWidget(copy_json_button)
-        self.detail_tabs.addTab(technical_tab, "Технические детали")
+        technical_buttons.addWidget(self.apply_json_button)
+        technical_buttons.addWidget(copy_json_button)
+        technical_layout.addLayout(technical_buttons)
+        self.detail_tabs.addTab(technical_tab, "Для разработчиков")
 
         splitter.addWidget(self.detail_tabs)
         splitter.setStretchFactor(0, 1)
@@ -769,10 +775,105 @@ class WorkflowStudioPage(QWidget):
         self.scenario_list.itemSelectionChanged.connect(self.load_selected)
         self.fit_button.clicked.connect(self.graph_view.fit_graph)
         self.reset_layout_button.clicked.connect(self._reset_canvas_layout)
+        self.graph_view.node_double_clicked.connect(self._edit_graph_node)
 
     def _copy_technical_schema(self) -> None:
         self.technical_json.selectAll()
         self.technical_json.copy()
+
+    def _edit_graph_node(self, node_id: str) -> None:
+        graph = self._selected_graph
+        if graph is None:
+            try:
+                graph = self._build_current_graph()
+            except (ValueError, TypeError, KeyError):
+                return
+        node = next((item for item in graph.nodes if item.id == node_id), None)
+        if node is None:
+            return
+        if not self._editable:
+            self.detail_tabs.setCurrentIndex(2)
+            self.technical_json.setFocus()
+            self.status_label.setText(
+                "Этот сложный блок редактируется в режиме «Для разработчиков»."
+            )
+            return
+        self.detail_tabs.setCurrentIndex(0)
+        if node.kind.startswith("trigger."):
+            self.trigger_combo.setFocus()
+            self.status_label.setText("Измени способ запуска в первом блоке конструктора.")
+            return
+        if node.kind.startswith("condition."):
+            self.condition_group.setFocus()
+            self.status_label.setText("Измени условие в разделе «Условие».")
+            return
+        if node.id.startswith("true_"):
+            branch = "true"
+            suffix = node.id.removeprefix("true_")
+        elif node.id.startswith("false_"):
+            branch = "false"
+            suffix = node.id.removeprefix("false_")
+        elif node.id.startswith("action_"):
+            branch = "main"
+            suffix = node.id.removeprefix("action_")
+        else:
+            self.detail_tabs.setCurrentIndex(2)
+            self.technical_json.setFocus()
+            self.status_label.setText(
+                "Для этого блока открылся режим «Для разработчиков»."
+            )
+            return
+        try:
+            index = int(suffix) - 1
+        except ValueError:
+            self.detail_tabs.setCurrentIndex(2)
+            self.technical_json.setFocus()
+            return
+        self.edit_action(branch, index)
+
+    def _apply_technical_schema(self) -> None:
+        try:
+            graph = WorkflowGraph.from_dict(json.loads(self.technical_json.toPlainText()))
+            for node in graph.nodes:
+                if node.kind not in {"action.tool", "action.repeat"}:
+                    continue
+                result = self.registry.validate_arguments(
+                    node.config["name"], node.config.get("arguments", {})
+                )
+                if not result.ok:
+                    raise ValueError(result.output)
+            workflow_id = self._workflow_id or f"scenario-{uuid.uuid4().hex[:8]}"
+            positions = (
+                self.graph_view.export_layout()
+                if self._workflow_id == workflow_id else {}
+            )
+            self.workflow_library.save(workflow_id, graph)
+            self.graph_view.set_graph(graph, positions)
+            self.workflow_library.save_layout(workflow_id, self.graph_view.export_layout())
+        except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
+            self.status_label.setText(f"JSON не прошёл проверку: {exc}")
+            return
+
+        self._workflow_id = workflow_id
+        self._selected_graph = graph
+        try:
+            draft = workflow_to_draft(graph)
+        except ValueError as exc:
+            self._set_read_only_graph(
+                graph,
+                f"Схема сохранена. У неё есть расширенная логика: {exc} "
+                "Для дальнейшего редактирования используй режим «Для разработчиков».",
+            )
+        else:
+            self._set_draft(draft)
+            self._selected_graph = graph
+            self._dirty = False
+            self._update_preview(graph)
+        self._refresh_library(select_id=workflow_id)
+        self.detail_tabs.setCurrentIndex(2)
+        self.status_label.setText(
+            f"Сценарий «{graph.name}» проверен и сохранён. Структура графа корректна."
+        )
 
     def _build_trigger_section(self) -> None:
         group = QGroupBox("1. Когда запускать сценарий?")
@@ -1142,8 +1243,10 @@ class WorkflowStudioPage(QWidget):
         self.run_button.setEnabled(True)
         self.delete_button.setEnabled(True)
         self._update_preview(graph)
-        self.detail_tabs.setCurrentIndex(1)
-        self.status_label.setText("Сценарий можно просмотреть и запустить. Простое редактирование недоступно.")
+        self.detail_tabs.setCurrentIndex(2)
+        self.status_label.setText(
+            "Сложный сценарий можно редактировать в режиме «Для разработчиков» и запускать."
+        )
 
     def _refresh_library(self, *_args, select_id: str | None = None) -> None:
         query = self.search_edit.text().casefold().strip()
