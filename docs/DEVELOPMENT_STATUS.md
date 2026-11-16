@@ -1,11 +1,11 @@
 # Состояние разработки — Hellsaiz PC AI
 
-Срез: 15 ноября 2026 года  
+Срез: 16 ноября 2026 года  
 Рабочая ветка: `dev/bootstrap`  
-Коммит кода на момент аудита: `eb4600b162d08a8c790d52183ba90fa75578bdc3`  
+Релизный коммит: `4711ba24e84ee922cc6e528695c1c2b79d4ccf26`  
 Версия в исходниках: `0.1.5`
 
-Этот документ описывает состояние кода и этапов реализации. Он не является подтверждением успешной сборки, тестирования или готовности к публикации.
+Релиз `v0.1.5` опубликован. Документ описывает состояние реализации и оставшиеся интеграционные проверки, которые не входили в выпускной acceptance pipeline.
 
 ## Общая оценка
 
@@ -20,7 +20,7 @@
 | P2 — язык и intents | 80% | Русская детерминированная маршрутизация intent/slots, wake aliases, app aliases, Unicode NFKC/casefold и нормализация ё/е, отказ от неоднозначного выбора приложения/окна | Расширение фраз, noisy-ASR набор для каждого intent, более полный редактируемый каталог сущностей |
 | P3 — AI и голосовые движки | 70% | LM Studio, Ollama, llama.cpp profiles; отдельный GigaChat OAuth/function-calling adapter; discovery моделей и health checks | Живые тесты настроенных провайдеров; проверка primary/fallback и запрета повторного выполнения действий после неопределённого timeout |
 | P4 — управление Windows | 80% | Инвентаризация процессов/окон, focus/minimize/maximize/restore/close, UI Automation inspect/click/type с operation-local snapshots и повторной проверкой доступности, ограниченные hotkeys, scoped file operations, optional local Russian OCR | Реальные тесты в Notepad, Explorer, Settings и браузере; custom/protected UI; OCR на разных DPI и нескольких мониторах |
-| P5 — упаковка и обновление | 55% | В исходниках есть PyInstaller pipeline, stable Launcher/Updater, Inno Setup script, signed manifest, проверка SHA-256, staged update, rollback и разделение пользовательских данных | Реальная Windows-сборка, self-tests EXE, silent install/uninstall, обновление существующей 0.1.3, health marker, сохранность данных и failure-path rollback |
+| P5 — упаковка и обновление | 100% | Windows PyInstaller build, Launcher/Updater self-tests, signed manifest verification, ZIP validation, Inno Setup, silent install/uninstall, реальный update 0.1.3 → 0.1.5, health marker, сохранность LocalAppData и rollback прошли в release workflow | Дальнейшие проверки на пользовательских конфигурациях Windows и длительная эксплуатация |
 | P6 — сеть и Telegram | 70% | Выбор/запуск v2RayTun EXE, проверка локального HTTP proxy без глобального изменения сети; отдельный Telegram worker, DPAPI token, user/chat allowlists и read-only tool permissions | Живой тест настроенного proxy/client и отдельного Telegram test chat; проверка остановки/повторного старта и отказа при недоступном proxy |
 | P7 — companion foundation | 100% | Renderer-neutral mode/emotion/viseme contracts, thread-safe controller, renderer protocol и безопасная проверка model manifest | Сам renderer намеренно отложен: avatar, overlay host, Live2D/VRM не входят в текущую основу 0.1.5 |
 
@@ -54,7 +54,7 @@
 ### Инфраструктура обновления
 - Подготовлены manifest/signature verification, Launcher/Updater, проверка содержимого архива, staged activation и rollback.
 - Подготовлены scripts/workflows для Windows x64, portable ZIP, full update ZIP и Inno Setup.
-- Подготовлены тесты для updater, launcher, packaging, install layout, UI Automation snapshots, bounded tool arguments, Unicode command normalization и theme focus states. Новые тесты добавлены, но не исполнены из-за недоступного GitHub Runner.
+- Подготовлены тесты для updater, launcher, packaging, install layout, UI Automation snapshots, bounded tool arguments, Unicode command normalization и theme focus states. Тесты и release acceptance checks исполнены на GitHub Windows/Linux runners; см. `docs/RELEASE_READINESS_0.1.5.md`.
 
 ## Объём кода и тестовой базы
 
@@ -63,15 +63,14 @@
 - 54 Python-файла в `tests`;
 - 11 документов в `docs`.
 
-Количество файлов не равно покрытию тестами. Этот срез не подтверждает, что тесты успешно прошли: CI не смог выделить Runner и ни один шаг актуального workflow не стартовал.
+Количество файлов не равно покрытию тестами. На релизном коммите CI и Windows release workflow завершились успешно; результаты не означают, что все необязательные внешние интеграции проверены.
 
 ## Блокеры и границы текущего результата
 
-1. **Windows CI:** актуальные задания GitHub Actions завершаются до старта первого шага. В последнем доступном запуске у matrix jobs `runner_id = 0`, пустое имя runner и `steps = []`. GitHub показывал ограничение по оплате/лимиту расходов. Это не результат тестирования исходного кода.
-2. **Реальный Windows runtime:** без выделенного Windows runner нельзя заявить, что зависимости, PyInstaller bundle, Inno Setup installer, UAC, Task Scheduler и устройства работают на чистой системе.
-3. **Внешние секреты:** наличие и корректность Actions secret `HELLSAIZ_UPDATE_SIGNING_KEY` не подтверждены. Ключ нельзя помещать в source code, commit или чат; workflow должен сам проверить соответствие встроенному public key.
-4. **Провайдеры и сеть:** реальные LM Studio/Ollama/llama.cpp/GigaChat, v2RayTun proxy и Telegram bot test chat не подтверждены интеграционными тестами.
-5. **Компаньон:** renderer не входит в текущую цель; есть только контракт и безопасный фундамент.
+1. **Windows acceptance:** релизный runner подтвердил PyInstaller build, self-tests, Inno Setup, silent install/uninstall и обновление с 0.1.3. Дополнительное тестирование на физическом ПК пользователя всё ещё полезно.
+2. **Внешние провайдеры и сеть:** реальные LM Studio/Ollama/llama.cpp/GigaChat, v2RayTun proxy и Telegram bot test chat не подтверждены интеграционными тестами.
+3. **Голос и устройства:** микрофоны, аудиодрайверы, локальные модели и разные конфигурации устройств требуют проверки на реальных машинах.
+4. **Компаньон:** renderer не входит в текущую цель; есть только контракт и безопасный фундамент.
 
 ## Последние инженерные улучшения
 
@@ -98,8 +97,8 @@
 
 ## Что не делать в этом цикле
 
-- Не создавать и не публиковать новый release.
-- Существующий тег `v0.1.5` указывает на более ранний коммит, чем текущая подготовка релиза. После прохождения всех acceptance checks тег и существующую запись релиза нужно привязать к точному проверенному коммиту; не публиковать пустой релиз.
+- Не перезаписывать опубликованный `v0.1.5` и не удалять его assets.
+- Следующие изменения выпускать отдельным номером версии только после отдельного согласования.
 - Не менять установленную пользователем версию и не удалять данные.
 - Не считать source implementation эквивалентом проверенному Windows build.
 - Не включать по умолчанию удалённую LLM, Telegram, OCR или hands-free микрофон.
