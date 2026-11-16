@@ -30,6 +30,8 @@ class GigaChatProvider:
         scope: str = "GIGACHAT_API_PERS",
         timeout_seconds: int = 60,
         urlopen_func: Callable[..., Any] = urlopen,
+        temperature: float = 0.3,
+        max_tokens: int = 2000,
     ) -> None:
         key = authorization_key.strip()
         if key.lower().startswith("basic "):
@@ -57,6 +59,16 @@ class GigaChatProvider:
         self.base_url = self.DEFAULT_BASE_URL
         self.model = model.strip()
         self.scope = scope
+        if (
+            isinstance(temperature, bool)
+            or not isinstance(temperature, (int, float))
+            or not 0.0 <= float(temperature) <= 1.0
+        ):
+            raise ValueError("Творческость GigaChat должна быть от 0.0 до 1.0.")
+        if isinstance(max_tokens, bool) or not isinstance(max_tokens, int) or not 200 <= max_tokens <= 4000:
+            raise ValueError("Максимальная длина ответа GigaChat должна быть от 200 до 4000 токенов.")
+        self.temperature = float(temperature)
+        self.max_tokens = max_tokens
         self.timeout_seconds = timeout_seconds
         self._urlopen = urlopen_func
         self._token = ""
@@ -226,7 +238,8 @@ class GigaChatProvider:
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": self._map_messages(messages),
-            "temperature": 0.3,
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens,
         }
         if functions:
             payload["functions"] = functions
