@@ -157,7 +157,7 @@ def test_repeat_block_keeps_repeat_count_in_simple_editor_round_trip():
     studio = WorkflowStudioPage(library, registry)
     try:
         studio.name_edit.setText("Повтор громкости")
-        studio.phrase_edit.setText("повтори громкость")
+        studio.phrase_edit.setPlainText("повтори громкость")
         studio._actions["main"] = [
             {
                 "kind": "repeat",
@@ -279,11 +279,9 @@ def test_legacy_tool_not_in_registry_survives_simple_editor_save(tmp_path):
     }
 
 
-def test_run_rejection_message_is_not_overwritten_by_studio():
+def test_run_rejection_message_is_not_overwritten_by_studio(tmp_path):
     _application()
-    from pathlib import Path
-
-    studio = WorkflowStudioPage(WorkflowLibrary(Path.cwd() / ".tmp-run-rejection"), _registry())
+    studio = WorkflowStudioPage(WorkflowLibrary(tmp_path / "run-rejection"), _registry())
     studio.name_edit.setText("Занятый сценарий")
     studio.phrase_edit.setPlainText("проверка")
     studio._actions["main"] = [{"kind": "wait", "seconds": 1}]
@@ -296,7 +294,6 @@ def test_run_rejection_message_is_not_overwritten_by_studio():
     assert studio.status_label.text() == (
         "Сейчас выполняется другая задача. Повтори позже."
     )
-    studio.workflow_library.directory.rmdir()
 
 
 def test_action_picker_refreshes_after_first_app_is_registered(tmp_path):
