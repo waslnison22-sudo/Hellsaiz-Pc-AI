@@ -606,8 +606,9 @@ class WorkflowStudioPage(QWidget):
         super().__init__(parent)
         self.workflow_library = workflow_library
         self.registry = registry
-        self.allowed_apps = allowed_apps or {}
-        self.allowed_processes = allowed_processes or {}
+        # Keep mutable allowlists by reference so app registrations take effect immediately.
+        self.allowed_apps = allowed_apps if allowed_apps is not None else {}
+        self.allowed_processes = allowed_processes if allowed_processes is not None else {}
         self._workflow_id: str | None = None
         self._selected_graph: WorkflowGraph | None = None
         self._editable = True
