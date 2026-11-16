@@ -366,7 +366,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = $env:GITHUB_REF_NAME
+          $tag = "${{ steps.release.outputs.tag }}"
+          if ($env:GITHUB_REF -eq "refs/heads/dev/bootstrap") {
+            gh api --method PATCH "repos/$env:GITHUB_REPOSITORY/git/refs/tags/$tag" -f sha="$env:GITHUB_SHA" -F force=true
+            if ($LASTEXITCODE -ne 0) { throw "Could not move $tag to the fully tested release commit." }
+          }
           $assets = @(
             Get-ChildItem "dist/release-assets/*" -File |
               Where-Object { $_.Extension -in @(".zip", ".json", ".sig", ".exe") } |
