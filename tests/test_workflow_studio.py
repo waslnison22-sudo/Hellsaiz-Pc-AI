@@ -4,9 +4,10 @@ import os
 import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-pytest.importorskip("PySide6.QtWidgets")
-
-from PySide6.QtWidgets import QApplication
+try:
+    from PySide6.QtWidgets import QApplication
+except ImportError as exc:
+    pytest.skip(f"Qt widgets are unavailable in this environment: {exc}", allow_module_level=True)
 
 from hellsaiz_pc_ai.app.workflow_studio import (
     ToolActionDialog,
