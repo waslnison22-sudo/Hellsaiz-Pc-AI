@@ -1,0 +1,14 @@
+# Патч этапа 1c: убрать мёртвые импорты после интеграции WorkflowStudio.
+--- a/src/hellsaiz_pc_ai/app/desktop.py
++++ b/src/hellsaiz_pc_ai/app/desktop.py
+@@ -71,2 +71,1 @@
+-from hellsaiz_pc_ai.workflows.builder import append_hour_condition, append_repeat_action, append_tool_action, append_wait_action, append_weekday_condition, terminal_nodes
+-from hellsaiz_pc_ai.workflows.graph import WorkflowGraph, WorkflowGraphRunner, WorkflowTrigger
++from hellsaiz_pc_ai.workflows.graph import WorkflowGraphRunner, WorkflowTrigger
+@@ -250,1 +249,1 @@
+-        from PySide6.QtGui import QDesktopServices, QFont, QMovie, QPixmap
++        from PySide6.QtGui import QDesktopServices, QMovie, QPixmap
+@@ -264,1 +263,0 @@
+-            QPlainTextEdit,
+@@ -267,1 +265,0 @@
+-            QSplitter,
