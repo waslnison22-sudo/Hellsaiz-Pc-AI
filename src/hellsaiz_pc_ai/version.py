@@ -1,3 +1,3 @@
 """Version embedded into Windows builds; release workflow rewrites this file before packaging."""
 
-APP_VERSION = "0.1.4"
+APP_VERSION = "0.1.5"
