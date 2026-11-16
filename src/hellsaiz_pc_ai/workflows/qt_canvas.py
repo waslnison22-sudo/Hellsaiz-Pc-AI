@@ -15,16 +15,19 @@ from PySide6.QtWidgets import (
 )
 
 from hellsaiz_pc_ai.workflows.graph import GraphEdge, GraphNode, WorkflowGraph
+from hellsaiz_pc_ai.workflows.studio_model import describe_action, describe_trigger
 
 
 class WorkflowNodeItem(QGraphicsObject):
     moved = Signal(str, float, float)
+    double_clicked = Signal(str)
     WIDTH = 224.0
     HEIGHT = 86.0
 
-    def __init__(self, node: GraphNode, x: float, y: float) -> None:
+    def __init__(self, node: GraphNode, x: float, y: float, summary: str = "") -> None:
         super().__init__()
         self.node = node
+        self.summary = summary
         self.setFlags(
             QGraphicsItem.GraphicsItemFlag.ItemIsMovable
             | QGraphicsItem.GraphicsItemFlag.ItemIsSelectable
@@ -37,22 +40,28 @@ class WorkflowNodeItem(QGraphicsObject):
         return QRectF(0.0, 0.0, self.WIDTH, self.HEIGHT)
 
     def _summary(self) -> str:
-        cfg = self.node.config
-        if self.node.kind == "trigger.text":
-            return str(cfg.get("phrase", ""))
-        if self.node.kind == "trigger.hotkey":
-            return str(cfg.get("hotkey", ""))
-        if self.node.kind == "condition.hour":
-            return f"hour {cfg.get('operator')} {cfg.get('value')}"
-        if self.node.kind == "condition.weekday":
-            return f"ISO weekday = {cfg.get('value')}"
-        if self.node.kind == "action.tool":
-            return str(cfg.get("name", ""))
-        if self.node.kind == "action.repeat":
-            return f"{cfg.get('name', '')} × {cfg.get('count', 1)}"
-        if self.node.kind == "action.wait":
-            return f"wait {cfg.get('seconds')} sec"
-        return ""
+        return self.summary
+
+    def _title(self) -> str:
+        if self.node.kind.startswith("trigger."):
+            return "НАЧАЛО"
+        if self.node.kind.startswith("condition."):
+            return "УСЛОВИЕ"
+        return "ДЕЙСТВИЕ"
+
+    def _kind_label(self) -> str:
+        labels = {
+            "trigger.text": "Запуск по фразе",
+            "trigger.hotkey": "Запуск по клавишам",
+            "trigger.schedule": "Запуск по расписанию",
+            "trigger.startup": "При запуске приложения",
+            "condition.hour": "Проверка времени",
+            "condition.weekday": "Проверка дня недели",
+            "action.tool": "Системное действие",
+            "action.repeat": "Повтор действия",
+            "action.wait": "Пауза",
+        }
+        return labels.get(self.node.kind, "Блок")
 
     def paint(self, painter: QPainter, option: Any, widget: Any = None) -> None:
         del option, widget
@@ -76,26 +85,30 @@ class WorkflowNodeItem(QGraphicsObject):
         painter.drawText(
             QRectF(14, 10, self.WIDTH - 28, 24),
             Qt.AlignmentFlag.AlignLeft,
-            self.node.id,
+            self._title(),
         )
         painter.setPen(QColor("#b7bec8"))
         painter.setFont(QFont("Segoe UI", 8, QFont.Weight.Medium))
         painter.drawText(
             QRectF(14, 37, self.WIDTH - 28, 18),
             Qt.AlignmentFlag.AlignLeft,
-            self.node.kind.upper(),
+            self._kind_label(),
         )
         painter.setPen(QColor("#8f98a5"))
         painter.setFont(QFont("Segoe UI", 8))
         painter.drawText(
             QRectF(14, 59, self.WIDTH - 28, 18),
             Qt.AlignmentFlag.AlignLeft,
-            self._summary()[:38],
+            self._summary()[:42],
         )
         painter.setPen(QPen(QColor("#bbc1ca"), 1.0))
         painter.setBrush(QColor("#0c0e12"))
         painter.drawEllipse(QPointF(0, self.HEIGHT / 2), 4.5, 4.5)
         painter.drawEllipse(QPointF(self.WIDTH, self.HEIGHT / 2), 4.5, 4.5)
+
+    def mouseDoubleClickEvent(self, event: Any) -> None:
+        self.double_clicked.emit(self.node.id)
+        super().mouseDoubleClickEvent(event)
 
     def input_port(self) -> QPointF:
         return self.mapToScene(QPointF(0.0, self.HEIGHT / 2))
@@ -113,6 +126,8 @@ class WorkflowNodeItem(QGraphicsObject):
 
 class WorkflowCanvas(QGraphicsView):
     """Monochrome draggable workflow graph canvas with persisted node positions."""
+
+    node_double_clicked = Signal(str)
 
     def __init__(self, parent: Any = None) -> None:
         scene = QGraphicsScene()
@@ -152,7 +167,13 @@ class WorkflowCanvas(QGraphicsView):
                     raise ValueError
             except (AttributeError, TypeError, ValueError):
                 x, y = (index % 3) * 300.0, (index // 3) * 150.0
-            item = WorkflowNodeItem(node, x, y)
+            summary = (
+                describe_trigger(graph)
+                if node.kind.startswith("trigger.")
+                else describe_action(node)
+            )
+            item = WorkflowNodeItem(node, x, y, summary)
+            item.double_clicked.connect(self.node_double_clicked.emit)
             self._scene_graph.addItem(item)
             self._nodes[node.id] = item
 

@@ -19,14 +19,13 @@
 -)
 +from hellsaiz_pc_ai.speech.voice_library import list_installed_voices
  from hellsaiz_pc_ai.speech.piper import PiperSynthesizer
-@@ -77,6 +69,3 @@
+@@ -77,5 +69,2 @@
  )
 -from hellsaiz_pc_ai.tools.ocr_models import (
 -    check_russian_ocr_models,
 -    download_russian_ocr_models,
 -)
 +from hellsaiz_pc_ai.tools.ocr_models import check_russian_ocr_models
- from hellsaiz_pc_ai.workflows.builder import append_hour_condition, append_repeat_action, append_tool_action, append_wait_action, append_weekday_condition, terminal_nodes
 @@ -258,3 +247,3 @@
      try:
 -        from PySide6.QtCore import QObject, QEasingCurve, QPropertyAnimation, Qt, QThread, QTimer, Signal, Slot
