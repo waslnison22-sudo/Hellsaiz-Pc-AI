@@ -20,13 +20,13 @@ This is the single release gate for the first usable Hellsaiz PC AI 0.1.5 build.
 - [x] Frozen desktop, launcher and updater self-tests pass.
 - [x] Inno Setup installer compiles.
 - [x] Silent install, installed executable self-tests and silent uninstall pass.
-- [ ] Release package is signed with the repository Actions secret `HELLSAIZ_UPDATE_SIGNING_KEY`.
-- [ ] Signed manifest verifies against the updater's embedded public key.
-- [ ] Full and portable ZIPs validate against the generated manifest.
-- [ ] Actual 0.1.3 portable installation updates to 0.1.5 using the existing updater.
-- [ ] Update writes the 0.1.5 health marker, retains the 0.1.3 rollback copy and preserves LocalAppData byte-for-byte.
-- [ ] Failure-path integration test restores 0.1.3 and removes the failed staged version.
-- [ ] GitHub Release `v0.1.5` contains all required downloadable assets.
+- [x] Release package is signed with the repository Actions secret `HELLSAIZ_UPDATE_SIGNING_KEY`.
+- [x] Signed manifest verifies against the updater's embedded public key.
+- [x] Full, delta and portable ZIPs validate against the generated manifest.
+- [x] Actual 0.1.3 portable installation updates to 0.1.5 using the existing updater.
+- [x] Update writes the 0.1.5 health marker, retains the 0.1.3 rollback copy and preserves LocalAppData byte-for-byte.
+- [x] Failure-path integration test restores 0.1.3 and removes the failed staged version.
+- [x] GitHub Release `v0.1.5` contains all required downloadable assets.
 
 ## CI evidence
 
@@ -39,7 +39,7 @@ The development CI run for commit `7a6ec31734937ed66795f1848c36447bc5c0f917` com
 - Desktop, launcher and updater frozen self-tests: passed.
 - Inno Setup compilation and silent install/uninstall smoke tests: passed.
 
-Important: this was the Windows preview workflow, not the signed release workflow. Its log explicitly identifies the output as an unsigned test artifact. It does not prove the signing secret is configured, does not prove the signed manifest matches the updater key, and does not perform the real 0.1.3 → 0.1.5 updater acceptance test.
+Release acceptance completed successfully on 2026-11-16. The Windows release workflow built the app and installer, validated the signed manifest against the embedded public key, installed and uninstalled the setup silently, and completed the real 0.1.3 → 0.1.5 update test including health marker, user-data preservation and rollback checks.
 
 ## Previous stable baseline
 
@@ -63,4 +63,4 @@ The workflow requires the GitHub Actions secret `HELLSAIZ_UPDATE_SIGNING_KEY`. T
 - `HellsaizPC_AI-windows-x64-portable.zip`
 - `HellsaizPC_AI_Setup.exe`
 
-Do not tell the user to download or install 0.1.5 until these assets are visible on the GitHub Release and the signed update acceptance checks have passed.
+All five required asset classes were uploaded to the published `v0.1.5` release. The release workflow completed successfully on 2026-11-16.
