@@ -27,7 +27,7 @@ jobs:
           if ($env:GITHUB_REF -eq "refs/heads/dev/bootstrap") {
             $tag = "v0.1.5"
           } else {
-            $tag = "${{ steps.release.outputs.tag }}"
+            $tag = $env:GITHUB_REF_NAME
           }
           if ($tag -ne "v0.1.5") {
             throw "This workflow is configured for the v0.1.5 release only."
@@ -78,7 +78,7 @@ jobs:
         env:
           HELLSAIZ_UPDATE_SIGNING_KEY: ${{ secrets.HELLSAIZ_UPDATE_SIGNING_KEY }}
         run: |
-          $version = ${{ steps.release.outputs.version }}
+          $version = "${{ steps.release.outputs.version }}"
           python scripts/set_version.py $version
           if ($LASTEXITCODE -ne 0) { throw "Version setup failed." }
 
@@ -178,7 +178,7 @@ jobs:
         env:
           HELLSAIZ_UPDATE_SIGNING_KEY: ${{ secrets.HELLSAIZ_UPDATE_SIGNING_KEY }}
         run: |
-          $version = ${{ steps.release.outputs.version }}
+          $version = "${{ steps.release.outputs.version }}"
           $arguments = @(
             "scripts/package_release.py",
             "--version", $version,
@@ -206,7 +206,7 @@ jobs:
       - name: Compile Windows setup installer
         shell: pwsh
         run: |
-          $version = ${{ steps.release.outputs.version }}
+          $version = "${{ steps.release.outputs.version }}"
           $compiler = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6/ISCC.exe"
           if (-not (Test-Path $compiler)) {
             choco install innosetup --yes --no-progress
@@ -236,7 +236,7 @@ jobs:
           $activePath = Join-Path $smokeRoot "active.json"
           if (-not (Test-Path $activePath -PathType Leaf)) { throw "Installer did not create active.json." }
           $installed = Get-Content $activePath -Raw | ConvertFrom-Json
-          if ($installed.active_version -ne ${{ steps.release.outputs.version }}) {
+          if ($installed.active_version -ne "${{ steps.release.outputs.version }}") {
             throw "Installer selected an unexpected application version."
           }
           foreach ($required in @("HellsaizLauncher.exe", "HellsaizUpdater.exe")) {
@@ -290,7 +290,7 @@ jobs:
           $activePath = Join-Path $stage "active.json"
           $active = Get-Content $activePath -Raw | ConvertFrom-Json
           $previousVersion = "${{ steps.previous.outputs.version }}"
-          $version = ${{ steps.release.outputs.version }}
+          $version = "${{ steps.release.outputs.version }}"
           if ($active.active_version -ne $previousVersion) {
             throw "Previous portable package version mismatch. Expected $previousVersion, found $($active.active_version)."
           }
