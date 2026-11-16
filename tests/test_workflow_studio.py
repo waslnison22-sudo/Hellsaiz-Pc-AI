@@ -196,7 +196,7 @@ def test_legacy_complex_graph_can_be_edited_in_developer_json_mode(tmp_path):
             {"id": "hour", "type": "condition.hour", "config": {"operator": "gte", "value": 22}},
             {"id": "weekday", "type": "condition.weekday", "config": {"value": 1}},
             {"id": "night", "type": "action.wait", "config": {"seconds": 1}},
-            {"id": "late", "type": "action.wait", "config": {"seconds": 2}},
+            {"id": "late", "type": "action.tool", "config": {"name": "legacy_tool_removed_from_registry", "arguments": {"legacy_flag": True}}},
             {"id": "day", "type": "action.wait", "config": {"seconds": 3}},
         ],
         "edges": [
@@ -215,12 +215,12 @@ def test_legacy_complex_graph_can_be_edited_in_developer_json_mode(tmp_path):
     assert not studio.technical_json.isReadOnly()
     edited = json.loads(studio.technical_json.toPlainText())
     edited["name"] = "Старый сценарий — исправлен"
-    edited["nodes"][-1]["config"]["seconds"] = 4
+    edited["nodes"][-1]["config"]["arguments"]["legacy_flag"] = False
     studio.technical_json.setPlainText(json.dumps(edited, ensure_ascii=False, indent=2))
     studio._apply_technical_schema()
     saved = library.load("legacy")
     assert saved.name == "Старый сценарий — исправлен"
-    assert saved.nodes[-1].config["seconds"] == 4
+    assert saved.nodes[-1].config["arguments"]["legacy_flag"] is False
 
 
 def test_canvas_uses_friendly_labels_and_emits_double_click():
