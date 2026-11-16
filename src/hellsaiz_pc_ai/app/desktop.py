@@ -3120,6 +3120,7 @@ def main() -> int:
         start_worker(
             workflow_trigger=WorkflowTrigger(trigger_kind, trigger_value, workflow_id)
         )
+        scenario_status.setText("Сценарий передан на выполнение.")
 
     scenario_page.run_requested.connect(run_scenario_from_studio)
 
@@ -3191,6 +3192,7 @@ def main() -> int:
             logging.exception("Global hotkey service failed to start")
             scenario_status.setText("Не удалось включить глобальные горячие клавиши.")
 
+    scenario_page.workflows_changed.connect(refresh_hotkey_service)
     refresh_hotkey_service()
 
     app.aboutToQuit.connect(
