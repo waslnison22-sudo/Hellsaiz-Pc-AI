@@ -286,12 +286,13 @@ def main() -> int:
             QWidget,
         )
         from hellsaiz_pc_ai.workflows.qt_canvas import WorkflowCanvas
-        from hellsaiz_pc_ai.app.workflow_studio import WorkflowStudioPage
         from hellsaiz_pc_ai.telegram.config import TelegramSettings, load_settings as load_telegram_settings, save_settings as save_telegram_settings
         from hellsaiz_pc_ai.telegram.worker import TelegramBotWorker
     except ImportError:
         print("PySide6 is missing. Run: pip install -e .")
         return 2
+
+    from hellsaiz_pc_ai.app.workflow_studio import WorkflowStudioPage
 
     logging.basicConfig(
         level=logging.INFO,
