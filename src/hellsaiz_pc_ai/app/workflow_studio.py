@@ -835,15 +835,10 @@ class WorkflowStudioPage(QWidget):
 
     def _apply_technical_schema(self) -> None:
         try:
+            # The graph validator is the source of truth for the developer editor.
+            # Legacy tool names may no longer be registered, but their graph must remain
+            # editable and round-trippable rather than being silently discarded.
             graph = WorkflowGraph.from_dict(json.loads(self.technical_json.toPlainText()))
-            for node in graph.nodes:
-                if node.kind not in {"action.tool", "action.repeat"}:
-                    continue
-                result = self.registry.validate_arguments(
-                    node.config["name"], node.config.get("arguments", {})
-                )
-                if not result.ok:
-                    raise ValueError(result.output)
             workflow_id = self._workflow_id or f"scenario-{uuid.uuid4().hex[:8]}"
             positions = (
                 self.graph_view.export_layout()
