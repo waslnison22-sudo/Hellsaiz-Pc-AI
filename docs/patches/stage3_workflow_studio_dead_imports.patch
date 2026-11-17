@@ -1,14 +1,34 @@
-# Патч этапа 3: удалить импорты, ставшие неиспользуемыми после WorkflowStudio и stage2.
+# Патч этапа 3 (очистка импортов после WorkflowStudio и stage2).
+# Правка 17.11.2026: пересобран против фактической базы (пост stage1b + stage2 + stage3_hud_wave1).
+# Builder-импорт и WorkflowGraph теперь мёртвые после слияния студии (PR #23) — удаляются;
+# QFont удалён из QtGui (не используется); QSplitter перенесён волной 1 на алфавитное место
+# и подтверждён неиспользуемым — удаляется. Порядок: stage1b, stage2, stage3_hud_wave1, ЭТОТ.
 --- a/src/hellsaiz_pc_ai/app/desktop.py
 +++ b/src/hellsaiz_pc_ai/app/desktop.py
-@@ -67,2 +67,1 @@
+@@ -62,8 +62,7 @@
+     register_screen_ocr_tools,
+ )
+ from hellsaiz_pc_ai.tools.ocr_models import check_russian_ocr_models
 -from hellsaiz_pc_ai.workflows.builder import append_hour_condition, append_repeat_action, append_tool_action, append_wait_action, append_weekday_condition, terminal_nodes
 -from hellsaiz_pc_ai.workflows.graph import WorkflowGraph, WorkflowGraphRunner, WorkflowTrigger
 +from hellsaiz_pc_ai.workflows.graph import WorkflowGraphRunner, WorkflowTrigger
-@@ -270,1 +269,1 @@
--        from PySide6.QtGui import QDesktopServices, QFont, QMovie, QPixmap
-+        from PySide6.QtGui import QDesktopServices, QMovie, QPixmap
-@@ -284,1 +283,0 @@
--            QPlainTextEdit,
-@@ -287,1 +285,0 @@
+ from hellsaiz_pc_ai.workflows.library import WorkflowLibrary
+ from hellsaiz_pc_ai.tools.typing import register_typing_tools
+ from hellsaiz_pc_ai.tools.vpn import register_vpn_tools
+@@ -277,7 +276,7 @@
+             Signal,
+         )
+         from PySide6.QtCore import QUrl
+-        from PySide6.QtGui import QDesktopServices, QFont, QImageReader, QMovie, QPixmap
++        from PySide6.QtGui import QDesktopServices, QImageReader, QMovie, QPixmap
+         from PySide6.QtWidgets import (
+             QApplication,
+             QCheckBox,
+@@ -295,7 +294,6 @@
+             QPushButton,
+             QStackedLayout,
+             QStackedWidget,
 -            QSplitter,
+             QStyle,
+             QSystemTrayIcon,
+             QTabWidget,
