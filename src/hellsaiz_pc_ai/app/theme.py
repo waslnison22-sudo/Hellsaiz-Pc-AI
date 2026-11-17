@@ -103,7 +103,7 @@ QPushButton {
     border: 1px solid rgba(211, 225, 244, 46);
     border-radius: 10px;
     padding: 9px 16px;
-    min-height: 30px;
+    min-height: 36px;
     font-weight: 600;
 }
 QPushButton:hover {
@@ -243,6 +243,51 @@ QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
 }
 QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
     background: transparent;
+}
+QTabBar::tab {
+    background: transparent;
+    color: #b6bfcc;
+    padding: 8px 14px;
+    border-radius: 9px;
+    margin: 2px 4px 2px 0;
+    font-weight: 600;
+}
+QTabBar::tab:hover {
+    background: rgba(109, 93, 246, 42);
+    color: #f4f7fb;
+}
+QTabBar::tab:selected {
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
+        stop:0 rgba(109,93,246,235), stop:1 rgba(153,102,255,200));
+    color: #ffffff;
+    border: 0;
+}
+QTabWidget::pane > QWidget {
+    background: transparent;
+}
+QFrame#dashboardCard {
+    background: rgba(12, 16, 25, 150);
+    border: 1px solid rgba(215, 228, 245, 45);
+    border-radius: 16px;
+}
+QLabel#dashboardCardTitle {
+    color: #b9c2cf;
+    font-size: 11px;
+    letter-spacing: 1.2px;
+    font-weight: 600;
+}
+QLabel#dashboardCardValue {
+    color: #f4f7fb;
+    font-size: 19px;
+    font-weight: 700;
+}
+QLabel#dashboardCardNote {
+    color: #9aa4b2;
+    font-size: 12px;
+}
+QPushButton#secondaryButton {
+    background: rgba(28, 34, 46, 208);
+    color: #d5deea;
 }
 QToolTip {
     background: #161c26;
