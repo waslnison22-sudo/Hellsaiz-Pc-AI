@@ -1,0 +1,72 @@
+# Патч этапа 7: стартовый опрос SAPI5 переводится в фоновый worker.
+# Диагностика (run 20) показала: приложение 0.1.6 зависало при построении UI
+# сразу после генерации comtypes.gen.SpeechLib — синхронный вызов
+# Sapi5Synthesizer().list_voices() (pyttsx3.init "sapi5") в главном потоке
+# из refresh_voices() блокировал построение интерфейса, поэтому health-маркер
+# не записывался, и updater откатывал обновление.
+# Фикс: refresh_voices() теперь использует существующий SapiVoiceListWorker
+# (QThread) — тот же паттерн, что refresh_system_voice_list(). COM-вызов
+# уходит из главного потока, UI строится полностью, маркер записывается.
+# На живых машинах поведение то же: список голосов заполняется чуть позже,
+# после готовности окна. Добавлены опорные логи для диагностики старта.
+--- a/src/hellsaiz_pc_ai/app/desktop.py
++++ b/src/hellsaiz_pc_ai/app/desktop.py
+@@ -942,18 +1065,28 @@
+     def refresh_voices() -> None:
+-        try:
+-            from hellsaiz_pc_ai.speech.sapi5 import Sapi5Synthesizer
+-
+-            selected = active_voice["name"]
+-            voices = Sapi5Synthesizer().list_voices()
+-            voice_combo.clear()
+-            for voice in voices:
+-                voice_combo.addItem(voice.name, voice.id)
+-            index = voice_combo.findText(selected)
+-            if index >= 0:
+-                voice_combo.setCurrentIndex(index)
+-            voice_status_text = f"Найдено голосов Windows: {len(voices)}."
+-            if not voices:
+-                voice_status_text = "В Windows пока не найдено доступных голосов SAPI5."
+-            profile_status.setText(voice_status_text)
+-        except Exception as exc:
+-            profile_status.setText(f"Не удалось получить список SAPI5: {exc}")
++        def _apply_voices(voices: Any) -> None:
++            selected = active_voice["name"]
++            voice_combo.clear()
++            for voice in voices:
++                voice_combo.addItem(voice.name, voice.id)
++            index = voice_combo.findText(selected)
++            if index >= 0:
++                voice_combo.setCurrentIndex(index)
++            if voices:
++                profile_status.setText(f"Найдено голосов Windows: {len(voices)}.")
++            else:
++                profile_status.setText(
++                    "В Windows пока не найдено доступных голосов SAPI5."
++                )
++
++        def _voices_failed(message: str) -> None:
++            profile_status.setText(f"Не удалось получить список SAPI5: {message}")
++
++        worker = SapiVoiceListWorker(active_tts["rate"], active_tts["volume"])
++        _BACKGROUND_VOICE_WORKERS["sapi_inventory"].append(worker)
++        worker.completed.connect(_apply_voices)
++        worker.failed.connect(_voices_failed)
++        worker.finished.connect(
++            lambda: _BACKGROUND_VOICE_WORKERS["sapi_inventory"].remove(worker)
++            if worker in _BACKGROUND_VOICE_WORKERS["sapi_inventory"] else None
++        )
++        worker.start()
+@@ -1080,2 +1216,5 @@
+     profile_apply_button.clicked.connect(apply_profile)
+     refresh_voices()
++    logging.info(
++        "Desktop startup: assistant voice list refresh dispatched to background worker."
++    )
+@@ -1651,3 +1875,6 @@
+     refresh_voice_library()
+     tabs.addTab(voices_page, "Голоса")
+     refresh_system_voice_list()
++    logging.info(
++        "Desktop startup: voice library tab built; system voice refresh dispatched."
++    )
