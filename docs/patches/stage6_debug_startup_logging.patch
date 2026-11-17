@@ -1,0 +1,38 @@
+# Патч этапа 6 (диагностика): файловое логирование старта desktop-приложения.
+# Проблема: у --windowed сборки stderr теряется, поэтому при зависании приложения
+# на CI не видно ни одного сообщения. Патч добавляет FileHandler в %TEMP%
+# (HellsaizPC_AI-app-startup.log) и три опорные точки лога в main():
+# вход в main(), после build_runtime(), перед app.exec(). Формат: контекстные
+# хунки — git apply находит их со смещением, конвейер применяет последним (алфавит).
+# Лог пишется и на живых машинах — безвредно, это файл во временном каталоге.
+--- a/src/hellsaiz_pc_ai/app/desktop.py
++++ b/src/hellsaiz_pc_ai/app/desktop.py
+@@ -313,4 +313,14 @@
+     logging.basicConfig(
+         level=logging.INFO,
+         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+     )
++    try:
++        _startup_log_path = Path(tempfile.gettempdir()) / "HellsaizPC_AI-app-startup.log"
++        _startup_handler = logging.FileHandler(_startup_log_path, encoding="utf-8")
++        _startup_handler.setFormatter(
++            logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
++        )
++        logging.getLogger().addHandler(_startup_handler)
++    except OSError:
++        pass
++    logging.info("Desktop startup: main() entered, file logging is active.")
+@@ -332,5 +332,6 @@
+     (
+         router, assistant, store, workflow_library, workflow_runner, registry,
+         reminder_store, allowed_apps, profile_data, file_access_settings,
+         vision_settings
+     ) = build_runtime(settings)
++    logging.info("Desktop startup: runtime built.")
+@@ -3365,5 +3376,6 @@
+     if auto_update_check.isChecked():
+         QTimer.singleShot(1400, lambda: check_for_updates(True))
++    logging.info("Desktop startup: timers scheduled, calling app.exec().")
+     workflow_timer.start()
+     reminder_timer.start()
+     return app.exec()
