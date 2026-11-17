@@ -339,11 +339,31 @@ jobs:
             "--parent-pid", "0"
           )
           $process = Start-Process -FilePath $updater -ArgumentList $arguments -WorkingDirectory $stage -PassThru
+          $updaterLog = Join-Path $stage "updates/updater.log"
           if (-not $process.WaitForExit(180000)) {
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            Write-Host "=== updater timed out; diagnostics follow ==="
+            if (Test-Path $updaterLog -PathType Leaf) {
+              Get-Content $updaterLog -Tail 150
+            } else {
+              Write-Host "updater.log not found at: $updaterLog"
+              Get-ChildItem (Join-Path $stage "updates") -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName }
+            }
+            Write-Host "=== active.json after timeout ==="
+            if (Test-Path $activePath -PathType Leaf) { Get-Content $activePath -Raw } else { Write-Host "active.json missing" }
+            Write-Host "=== versions/ directories after timeout ==="
+            Get-ChildItem (Join-Path $stage "versions") -Directory -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.Name }
+            Write-Host "=== health/ files after timeout ==="
+            Get-ChildItem (Join-Path $stage "health") -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.Name }
             throw "The real $previousVersion -> $version updater smoke test timed out."
           }
           if ($process.ExitCode -ne 0) {
+            Write-Host "=== updater exited with code $($process.ExitCode); updater.log follows ==="
+            if (Test-Path $updaterLog -PathType Leaf) {
+              Get-Content $updaterLog -Tail 150
+            } else {
+              Write-Host "updater.log not found at: $updaterLog"
+            }
             throw "The real $previousVersion -> $version updater smoke test failed with exit code $($process.ExitCode)."
           }
 
