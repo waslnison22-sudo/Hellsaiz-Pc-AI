@@ -9,6 +9,15 @@ def test_dark_theme_has_visible_keyboard_focus_states():
     assert "QLineEdit:focus" in stylesheet
 
 
+def test_theme_keeps_buttons_readable():
+    stylesheet = build_dark_stylesheet()
+
+    assert "min-height: 36px" in stylesheet
+    assert "QTabBar::tab:selected" in stylesheet
+    assert "QFrame#dashboardCard" in stylesheet
+    assert "QLabel#dashboardCardValue" in stylesheet
+
+
 def test_dark_theme_uses_accent_glass_over_the_wallpaper():
     stylesheet = build_dark_stylesheet()
 

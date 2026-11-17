@@ -1,0 +1,420 @@
+# Патч волны 2 по issue #24 (CH-10, полный редизайн):
+# - Настройки разбиты на вкладки: «Речь» (STT/микрофон/hands-free), «Оформление» (обои),
+#   «Сеть и Telegram», «Файлы и автозапуск», «Обновления», «Диагностика» (здоровье + OCR + пути хранилищ).
+# - Страница «Главная»: дашборд из карточек (приветствие по времени суток с манерой ассистента,
+#   погода фоновым запросом open-meteo, напоминания, система/диагностика, быстрые команды).
+# - Стартовый экран чата: сворачиваемое «Что я умею?» с чипами-примерами (клик — подстановка в поле ввода).
+# - Сайдбар-футер: одна строка «Версия X» вместо «Локальный режим + версия».
+# - Диагностика: человеческие метки с цветом (ok зелёный, warning жёлтый, error красный).
+# - Библиотека голосов: метки качества (dmitri/ruslan — высокое, irina — среднее, denis — низкое).
+# Новый модуль app/dashboard_page.py (Qt) и app/dashboard_texts.py (чистые функции для тестов).
+# Конвейер: этот патч применяется ПОСЛЕ stage3_hud_wave1 и stage3_workflow_studio_dead_imports.
+--- a/src/hellsaiz_pc_ai/app/desktop.py
++++ b/src/hellsaiz_pc_ai/app/desktop.py
+@@ -630,2 +630,60 @@
+     home_layout.addWidget(header)
++    capabilities_panel = QFrame()
++    capabilities_panel.setObjectName("profilePanel")
++    capabilities_layout = QVBoxLayout(capabilities_panel)
++    capabilities_layout.setContentsMargins(14, 10, 14, 10)
++    capabilities_layout.setSpacing(6)
++    capabilities_hint = QLabel("Нажми на пример — он подставится в поле ввода:")
++    capabilities_hint.setStyleSheet("color:#aab3c0; font-size:12px;")
++    capabilities_layout.addWidget(capabilities_hint)
++    capabilities_examples = (
++        "помощь",
++        "открой блокнот",
++        "включи музыку",
++        "сколько сейчас времени",
++        "напомни в 22:00 проверить чайник",
++        "громче на 20",
++        "погода",
++        "проверь впн",
++    )
++    capabilities_examples_row = QHBoxLayout()
++    capabilities_examples_row.setSpacing(6)
++    for example_command in capabilities_examples:
++        example_button = QPushButton(example_command)
++        example_button.setToolTip("Подставить в поле ввода")
++        example_button.clicked.connect(
++            lambda _=False, cmd=example_command: (input_box.setText(cmd), input_box.setFocus())
++        )
++        capabilities_examples_row.addWidget(example_button)
++    capabilities_layout.addLayout(capabilities_examples_row)
++    home_layout.addWidget(capabilities_panel)
++    capabilities_panel.setMaximumHeight(0)
++    capabilities_panel.setVisible(False)
++    capabilities_toggle = QPushButton("Что я умею?")
++    capabilities_toggle.setObjectName("secondaryButton")
++    capabilities_toggle.setToolTip("Показать примеры команд")
++    capabilities_open = {"state": False}
++    capabilities_animation = QPropertyAnimation(capabilities_panel, b"maximumHeight", window)
++    capabilities_animation.setDuration(190)
++    capabilities_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
++
++    def toggle_capabilities() -> None:
++        capabilities_animation.stop()
++        opening = not capabilities_panel.isVisible() or capabilities_panel.maximumHeight() <= 1
++        capabilities_open["state"] = opening
++        if opening:
++            capabilities_panel.setVisible(True)
++            capabilities_panel.setMaximumHeight(0)
++            capabilities_panel.adjustSize()
++            target = max(64, capabilities_panel.sizeHint().height() + 12)
++            capabilities_animation.setStartValue(0)
++            capabilities_animation.setEndValue(target)
++        else:
++            capabilities_animation.setStartValue(max(capabilities_panel.height(), 1))
++            capabilities_animation.setEndValue(0)
++        capabilities_animation.start()
++        capabilities_toggle.setText("Свернуть примеры" if opening else "Что я умею?")
++
++    capabilities_toggle.clicked.connect(toggle_capabilities)
++    home_layout.addWidget(capabilities_toggle, 0, Qt.AlignmentFlag.AlignLeft)
+ 
+@@ -1140,2 +1198,22 @@
+ 
++    from hellsaiz_pc_ai.app.dashboard_page import DashboardPage
++
++    def send_command_from_dashboard(command: str) -> None:
++        input_box.setText(command)
++        send()
++
++    def open_settings_diagnostics() -> None:
++        settings_row = page_titles.index("Настройки") if "Настройки" in page_titles else 0
++        navigation.setCurrentRow(settings_row)
++
++    dashboard_page = DashboardPage(
++        reminder_store=reminder_store,
++        assistant_persona=str(profile_data.get("persona") or "хеллсайз"),
++        version=current_app_version,
++        city=str(profile_data.get("weather_city") or "Ставрополь"),
++        on_send=send_command_from_dashboard,
++        on_open_diagnostics=open_settings_diagnostics,
++        parent=window,
++    )
++    tabs.addTab(dashboard_page, "Главная")
+     tabs.addTab(home_page, "Чат")
+@@ -1539,5 +1617,15 @@
+         installed_voices_list.clear()
++        voice_quality_hints = {
++            "dmitri": "высокое",
++            "ruslan": "высокое",
++            "irina": "среднее",
++            "denis": "низкое",
++        }
+         for voice in list_installed_voices(voice_library_dir):
++            quality = next(
++                (hint for token, hint in voice_quality_hints.items() if token in voice.voice_id.casefold()),
++                "неизвестно",
++            )
+             item = QListWidgetItem(
+-                f"{voice.voice_id}  ·  {voice.language}  ·  лицензия: {voice.license}"
++                f"{voice.voice_id}  ·  {voice.language}  ·  качество: {quality}  ·  лицензия: {voice.license}"
+             )
+@@ -1763,8 +1851,29 @@
+     settings_layout.setSpacing(12)
++    settings_tabs = QTabWidget()
++
++    def _settings_tab(name: str) -> tuple[QWidget, QVBoxLayout]:
++        tab_page = QWidget()
++        tab_layout = QVBoxLayout(tab_page)
++        tab_layout.setContentsMargins(4, 8, 4, 8)
++        tab_layout.setSpacing(10)
++        tab_scroll = QScrollArea()
++        tab_scroll.setWidgetResizable(True)
++        tab_scroll.setFrameShape(QFrame.Shape.NoFrame)
++        tab_scroll.setWidget(tab_page)
++        settings_tabs.addTab(tab_scroll, name)
++        return tab_page, tab_layout
++
++    speech_tab_page, speech_tab_layout = _settings_tab("Речь")
++    appearance_tab_page, appearance_tab_layout = _settings_tab("Оформление")
++    network_tab_page, network_tab_layout = _settings_tab("Сеть и Telegram")
++    files_tab_page, files_tab_layout = _settings_tab("Файлы и автозапуск")
++    updates_tab_page, updates_tab_layout = _settings_tab("Обновления")
++    diagnostics_tab_page, diagnostics_tab_layout = _settings_tab("Диагностика")
++    settings_layout.addWidget(settings_tabs, 1)
+     settings_title = QLabel("Настройки")
+     settings_title.setStyleSheet("font-size:20px; font-weight:650; color:#f1f2f4;")
+-    settings_layout.addWidget(settings_title)
+-    settings_layout.addWidget(wallpaper_page)
+-    settings_layout.addWidget(QLabel(f"История: {settings.database_path}"))
+-    settings_layout.addWidget(QLabel(f"Сценарии: {settings.workflows_path}"))
++    speech_tab_layout.addWidget(settings_title)
++    appearance_tab_layout.addWidget(wallpaper_page)
++    diagnostics_tab_layout.addWidget(QLabel(f"История: {settings.database_path}"))
++    diagnostics_tab_layout.addWidget(QLabel(f"Сценарии: {settings.workflows_path}"))
+ 
+@@ -1772,3 +1881,3 @@
+     speech_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
+-    settings_layout.addWidget(speech_title)
++    speech_tab_layout.addWidget(speech_title)
+ 
+@@ -1786,3 +1895,3 @@
+     stt_engine_row.addWidget(stt_fallback_combo, 1)
+-    settings_layout.addLayout(stt_engine_row)
++    speech_tab_layout.addLayout(stt_engine_row)
+ 
+@@ -1805,3 +1914,3 @@
+     vosk_model_row.addWidget(download_vosk_model_button)
+-    settings_layout.addLayout(vosk_model_row)
++    speech_tab_layout.addLayout(vosk_model_row)
+ 
+@@ -1814,3 +1923,3 @@
+     whisper_executable_row.addWidget(choose_whisper_executable_button)
+-    settings_layout.addLayout(whisper_executable_row)
++    speech_tab_layout.addLayout(whisper_executable_row)
+ 
+@@ -1823,3 +1932,3 @@
+     whisper_model_row.addWidget(choose_whisper_model_button)
+-    settings_layout.addLayout(whisper_model_row)
++    speech_tab_layout.addLayout(whisper_model_row)
+ 
+@@ -1836,3 +1945,3 @@
+     recording_row.addWidget(save_stt_button)
+-    settings_layout.addLayout(recording_row)
++    speech_tab_layout.addLayout(recording_row)
+ 
+@@ -1845,3 +1954,3 @@
+     microphone_row.addWidget(refresh_microphones_button)
+-    settings_layout.addLayout(microphone_row)
++    speech_tab_layout.addLayout(microphone_row)
+     microphone_status = QLabel("Входное устройство по умолчанию.")
+@@ -1849,3 +1958,3 @@
+     microphone_status.setStyleSheet("color:#929aa6;")
+-    settings_layout.addWidget(microphone_status)
++    speech_tab_layout.addWidget(microphone_status)
+ 
+@@ -1856,3 +1965,3 @@
+     stt_status.setStyleSheet("color:#929aa6;")
+-    settings_layout.addWidget(stt_status)
++    speech_tab_layout.addWidget(stt_status)
+ 
+@@ -1862,3 +1971,3 @@
+     always_listen_check.setChecked(bool(profile_data.get("always_listen", False)))
+-    settings_layout.addWidget(always_listen_check)
++    speech_tab_layout.addWidget(always_listen_check)
+     wake_listener_status = QLabel("Фоновое прослушивание выключено.")
+@@ -1866,3 +1975,3 @@
+     wake_listener_status.setStyleSheet("color:#929aa6;")
+-    settings_layout.addWidget(wake_listener_status)
++    speech_tab_layout.addWidget(wake_listener_status)
+     speech_health_button = QPushButton("Проверить состояние приложения")
+@@ -1871,3 +1980,3 @@
+     )
+-    settings_layout.addWidget(speech_health_button)
++    diagnostics_tab_layout.addWidget(speech_health_button)
+     health_summary_status = QLabel("Диагностика ещё не запускалась.")
+@@ -1875,3 +1984,3 @@
+     health_summary_status.setStyleSheet("font-weight:650; color:#d7e0eb;")
+-    settings_layout.addWidget(health_summary_status)
++    diagnostics_tab_layout.addWidget(health_summary_status)
+     speech_health_status = QLabel(
+@@ -1887,3 +1996,3 @@
+     speech_health_status.setStyleSheet("color:#929aa6;")
+-    settings_layout.addWidget(speech_health_status)
++    diagnostics_tab_layout.addWidget(speech_health_status)
+     system_health_workers: list[QThread] = []
+@@ -2032,4 +2141,6 @@
+         level, summary = summarize_health(checks)
+-        labels = {"ok": "ВСЁ В ПОРЯДКЕ", "warning": "ЕСТЬ ПРЕДУПРЕЖДЕНИЯ", "error": "ОБНАРУЖЕНЫ ОШИБКИ"}
++        labels = {"ok": "Всё в порядке", "warning": "Есть предупреждения", "error": "Обнаружены ошибки"}
++        colors = {"ok": "#7dd487", "warning": "#f5c04a", "error": "#ff7b72"}
+         health_summary_status.setText(f"{labels[level]} · {summary}")
++        health_summary_status.setStyleSheet(f"font-weight:650; color:{colors[level]};")
+         detail_labels = {"ok": "OK", "warning": "WARN", "error": "ERROR"}
+@@ -2046,3 +2157,3 @@
+         speech_health_button.setEnabled(False)
+-        health_summary_status.setText("ВЫПОЛНЯЕТСЯ ДИАГНОСТИКА…")
++        health_summary_status.setText("Выполняю диагностику…")
+         speech_health_status.setText("Проверка не открывает микрофон и не изменяет историю или сценарии.")
+@@ -2189,3 +2300,3 @@
+     ocr_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
+-    settings_layout.addWidget(ocr_title)
++    diagnostics_tab_layout.addWidget(ocr_title)
+     ocr_help = QLabel(
+@@ -2196,3 +2307,3 @@
+     ocr_help.setStyleSheet("color:#929aa6;")
+-    settings_layout.addWidget(ocr_help)
++    diagnostics_tab_layout.addWidget(ocr_help)
+ 
+@@ -2201,3 +2312,3 @@
+     ocr_enabled_check.setEnabled(False)
+-    settings_layout.addWidget(ocr_enabled_check)
++    diagnostics_tab_layout.addWidget(ocr_enabled_check)
+ 
+@@ -2208,3 +2319,3 @@
+     ocr_buttons.addWidget(download_ocr_models_button)
+-    settings_layout.addLayout(ocr_buttons)
++    diagnostics_tab_layout.addLayout(ocr_buttons)
+ 
+@@ -2213,3 +2324,3 @@
+     ocr_status.setStyleSheet("color:#929aa6;")
+-    settings_layout.addWidget(ocr_status)
++    diagnostics_tab_layout.addWidget(ocr_status)
+ 
+@@ -2326,3 +2437,3 @@
+     file_access_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
+-    settings_layout.addWidget(file_access_title)
++    files_tab_layout.addWidget(file_access_title)
+     file_access_help = QLabel(
+@@ -2334,3 +2445,3 @@
+     file_access_help.setStyleSheet("color:#929aa6;")
+-    settings_layout.addWidget(file_access_help)
++    files_tab_layout.addWidget(file_access_help)
+ 
+@@ -2340,3 +2451,3 @@
+         file_roots_list.addItem(str(root_path))
+-    settings_layout.addWidget(file_roots_list)
++    files_tab_layout.addWidget(file_roots_list)
+ 
+@@ -2347,3 +2458,3 @@
+     file_root_buttons.addWidget(remove_file_root_button)
+-    settings_layout.addLayout(file_root_buttons)
++    files_tab_layout.addLayout(file_root_buttons)
+ 
+@@ -2351,3 +2462,3 @@
+     allow_file_writes_check.setChecked(file_access_settings.allow_writes)
+-    settings_layout.addWidget(allow_file_writes_check)
++    files_tab_layout.addWidget(allow_file_writes_check)
+     file_access_status = QLabel("Папки доступа хранятся локально.")
+@@ -2355,3 +2466,3 @@
+     file_access_status.setStyleSheet("color:#929aa6;")
+-    settings_layout.addWidget(file_access_status)
++    files_tab_layout.addWidget(file_access_status)
+ 
+@@ -2427,3 +2538,3 @@
+     network_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
+-    settings_layout.addWidget(network_title)
++    network_tab_layout.addWidget(network_title)
+     network_help = QLabel(
+@@ -2435,3 +2546,3 @@
+     network_help.setStyleSheet("color:#929aa6;")
+-    settings_layout.addWidget(network_help)
++    network_tab_layout.addWidget(network_help)
+ 
+@@ -2443,3 +2554,3 @@
+     v2raytun_exe_row.addWidget(choose_v2raytun_button)
+-    settings_layout.addLayout(v2raytun_exe_row)
++    network_tab_layout.addLayout(v2raytun_exe_row)
+ 
+@@ -2449,3 +2560,3 @@
+     network_proxy_row.addWidget(network_proxy_edit, 1)
+-    settings_layout.addLayout(network_proxy_row)
++    network_tab_layout.addLayout(network_proxy_row)
+ 
+@@ -2455,3 +2566,3 @@
+     network_health_row.addWidget(network_health_edit, 1)
+-    settings_layout.addLayout(network_health_row)
++    network_tab_layout.addLayout(network_health_row)
+ 
+@@ -2461,4 +2572,4 @@
+     launch_v2raytun_check.setChecked(bool(network_settings.get("launch_on_start", False)))
+-    settings_layout.addWidget(require_proxy_check)
+-    settings_layout.addWidget(launch_v2raytun_check)
++    network_tab_layout.addWidget(require_proxy_check)
++    network_tab_layout.addWidget(launch_v2raytun_check)
+ 
+@@ -2471,3 +2582,3 @@
+     network_buttons.addWidget(save_network_button)
+-    settings_layout.addLayout(network_buttons)
++    network_tab_layout.addLayout(network_buttons)
+ 
+@@ -2476,3 +2587,3 @@
+     network_status.setStyleSheet("color:#929aa6;")
+-    settings_layout.addWidget(network_status)
++    network_tab_layout.addWidget(network_status)
+ 
+@@ -2562,3 +2673,3 @@
+     telegram_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
+-    settings_layout.addWidget(telegram_title)
++    network_tab_layout.addWidget(telegram_title)
+     telegram_help = QLabel(
+@@ -2570,3 +2681,3 @@
+     telegram_help.setStyleSheet("color:#929aa6;")
+-    settings_layout.addWidget(telegram_help)
++    network_tab_layout.addWidget(telegram_help)
+ 
+@@ -2579,3 +2690,3 @@
+     telegram_token_row.addWidget(save_telegram_token_button)
+-    settings_layout.addLayout(telegram_token_row)
++    network_tab_layout.addLayout(telegram_token_row)
+ 
+@@ -2586,3 +2697,3 @@
+     telegram_token_status.setStyleSheet("color:#929aa6;")
+-    settings_layout.addWidget(telegram_token_status)
++    network_tab_layout.addWidget(telegram_token_status)
+ 
+@@ -2596,4 +2707,4 @@
+     telegram_chats_input.setPlaceholderText("Разрешённые Telegram chat ID через запятую")
+-    settings_layout.addWidget(telegram_users_input)
+-    settings_layout.addWidget(telegram_chats_input)
++    network_tab_layout.addWidget(telegram_users_input)
++    network_tab_layout.addWidget(telegram_chats_input)
+ 
+@@ -2608,3 +2719,3 @@
+         telegram_permission_checks[tool_name] = check
+-        settings_layout.addWidget(check)
++    network_tab_layout.addWidget(check)
+ 
+@@ -2616,3 +2727,3 @@
+     telegram_settings_row.addWidget(telegram_enable_check)
+-    settings_layout.addLayout(telegram_settings_row)
++    network_tab_layout.addLayout(telegram_settings_row)
+ 
+@@ -2621,3 +2732,3 @@
+     telegram_status.setStyleSheet("color:#929aa6;")
+-    settings_layout.addWidget(telegram_status)
++    network_tab_layout.addWidget(telegram_status)
+ 
+@@ -2784,3 +2895,3 @@
+     startup_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
+-    settings_layout.addWidget(startup_title)
++    files_tab_layout.addWidget(startup_title)
+     startup_check = QCheckBox("Запускать помощника при входе в Windows")
+@@ -2789,4 +2900,4 @@
+     startup_status.setStyleSheet("color:#929aa6;")
+-    settings_layout.addWidget(startup_check)
+-    settings_layout.addWidget(startup_status)
++    files_tab_layout.addWidget(startup_check)
++    files_tab_layout.addWidget(startup_status)
+     launcher_path = install_root / "HellsaizLauncher.exe" if install_root is not None else None
+@@ -2840,3 +2951,3 @@
+     update_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
+-    settings_layout.addWidget(update_title)
++    updates_tab_layout.addWidget(update_title)
+     update_preferences_path = settings.workflows_path.parent / "updates.json"
+@@ -2858,3 +2969,3 @@
+     update_help.setStyleSheet("color:#929aa6;")
+-    settings_layout.addWidget(update_help)
++    updates_tab_layout.addWidget(update_help)
+ 
+@@ -2862,3 +2973,3 @@
+     auto_update_check.setChecked(bool(update_preferences.get("auto_check", True)))
+-    settings_layout.addWidget(auto_update_check)
++    updates_tab_layout.addWidget(auto_update_check)
+ 
+@@ -2871,3 +2982,3 @@
+     update_key_row.addWidget(save_update_key_button)
+-    settings_layout.addLayout(update_key_row)
++    updates_tab_layout.addLayout(update_key_row)
+ 
+@@ -2876,3 +2987,3 @@
+     update_status.setStyleSheet("color:#929aa6;")
+-    settings_layout.addWidget(update_status)
++    updates_tab_layout.addWidget(update_status)
+     update_buttons = QHBoxLayout()
+@@ -2886,3 +2997,3 @@
+     update_buttons.addWidget(open_release_button)
+-    settings_layout.addLayout(update_buttons)
++    updates_tab_layout.addLayout(update_buttons)
+     if install_root is None:
+@@ -2892,3 +3003,2 @@
+         )
+-    settings_layout.addStretch(1)
+     settings_scroll = QScrollArea()
+@@ -3114,2 +3224,3 @@
+     sidebar_footer.setStyleSheet("font-size:11px; color:#9ba5b2;")
++    sidebar_footer.setText("Версия " + current_app_version)
+     sidebar_layout.addWidget(sidebar_footer)
