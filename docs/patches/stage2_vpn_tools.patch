@@ -6,6 +6,9 @@
 # Проверка времени в тесте — платформонезависимая (%Z даёт «UTC» на Linux и полное название на Windows).
 # Правка 16.11.2026: хунки ACKNOWLEDGMENTS-импорта и замены time-ассерта в test_desktop_runtime
 # удалены — контракт уже в ветке (инлайновый пул подтверждений), иначе патч не применяется.
+# Правка 17.11.2026: desktop-секция пересобрана против фактической базы (пост stage1b): номера строк
+# теперь соответствуют текущему состоянию ветки, а не исходному 4109-строчному файлу. Без этого
+# патч падал на stage-apply после слияния stage1 как реального кода (PR #22) и волны 1 (PR #25).
 --- a/src/hellsaiz_pc_ai/core/orchestrator.py
 +++ b/src/hellsaiz_pc_ai/core/orchestrator.py
 @@ -6,1 +5,0 @@
@@ -32,7 +35,7 @@
 -    load_settings as load_telegram_settings,
 -    save_settings as save_telegram_settings,
 -)
-@@ -61,0 +56,2 @@
+@@ -73,0 +68,2 @@
 +from hellsaiz_pc_ai.tools.typing import register_typing_tools
 +from hellsaiz_pc_ai.tools.vpn import register_vpn_tools
 @@ -116,0 +113,2 @@
@@ -62,7 +65,7 @@
 +        persona=router_persona,
 +        volume_step=router_volume_step,
 +        followup_enabled=router_followup_enabled,
-@@ -707,0 +728,30 @@
+@@ -711,0 +732,29 @@
 +    persona_row = QHBoxLayout()
 +    persona_label = QLabel("Манера ответов")
 +    persona_combo = QComboBox()
@@ -92,12 +95,11 @@
 +    followup_check.setChecked(bool(profile_data.get("followup_enabled", True)))
 +    persona_row.addWidget(followup_check)
 +    profile_layout.addLayout(persona_row)
-+
-@@ -1051,0 +1102,3 @@
+@@ -1052,0 +1102,3 @@
 +            "persona": str(persona_combo.currentData() or "хеллсайз"),
 +            "volume_step": int(volume_step_combo.currentData() or 10),
 +            "followup_enabled": followup_check.isChecked(),
-@@ -3537,1 +3590,4 @@
+@@ -3081 +3133,4 @@
 -                transcript.append(f"<p><b>Распознано:</b> {escape(recognized)}</p>")
 +                transcript.append(
 +                    "<p style='color:#8a93a1; font-size:11px;'>"
