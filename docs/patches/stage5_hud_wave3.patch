@@ -1,0 +1,64 @@
+# Патч волны 3 HUD (интеграция готовых модулей):
+# - Навигация: заголовки секций «Основное»/«Настройки», карта строк -> страниц стека,
+#   переход из дашборда в «Настройки» по фактической строке навигации.
+# - QStackedWidget заменён на PageFader (мягкий фейд страниц, без мигания при старте).
+# - Новая страница «Навыки» (SkillsPage) из реальных возможностей HELP_TEXT.
+# - Пузыри чата: chat_bubble_html для «Вы», «Распознано» и ответа ассистента.
+# - Неиспользуемый импорт QStackedWidget удалён (страница стека теперь PageFader).
+# Конвейер: этот патч применяется ПОСЛЕ stage4_hud_wave2 (алфавитный порядок, последний).
+--- a/src/hellsaiz_pc_ai/app/desktop.py
++++ b/src/hellsaiz_pc_ai/app/desktop.py
+@@ -296 +295,0 @@
+-            QStackedWidget,
+@@ -1198,0 +1198,3 @@
++    from hellsaiz_pc_ai.app.chat_style import chat_bubble_html
++    from hellsaiz_pc_ai.app.skills_page import SkillsPage
++    from hellsaiz_pc_ai.app.hud_components import PageFader
+@@ -1206,2 +1208,4 @@
+-        settings_row = page_titles.index("Настройки") if "Настройки" in page_titles else 0
+-        navigation.setCurrentRow(settings_row)
++        target_stack = page_titles.index("Настройки") if "Настройки" in page_titles else 0
++        nav_rows = [row for row, stack_index in nav_row_to_stack.items()
++                    if stack_index == target_stack]
++        navigation.setCurrentRow(nav_rows[0] if nav_rows else 0)
+@@ -1217,0 +1222,3 @@
++    skills_page = SkillsPage()
++    skills_page.setToolTip("Что умеет Hellsaiz: команды, сценарии, голос")
++    tabs.addTab(skills_page, "Навыки")
+@@ -3161 +3168 @@
+-    page_stack = QStackedWidget()
++    page_stack = PageFader()
+@@ -3178 +3185,8 @@
+-    for title in page_titles:
++    nav_section_before = {"Главная": "Основное", "Настройки": "Настройки"}
++    nav_row_to_stack: dict[int, int] = {}
++    for stack_index, title in enumerate(page_titles):
++        section_caption = nav_section_before.get(title)
++        if section_caption is not None:
++            section_item = QListWidgetItem(section_caption)
++            section_item.setFlags(Qt.ItemFlag.NoItemFlags)
++            navigation.addItem(section_item)
+@@ -3180,2 +3194,9 @@
+-    navigation.currentRowChanged.connect(page_stack.setCurrentIndex)
+-    navigation.setCurrentRow(0)
++        nav_row_to_stack[navigation.count() - 1] = stack_index
++
++    def switch_page_from_navigation(row: int) -> None:
++        stack_index = nav_row_to_stack.get(row)
++        if stack_index is not None:
++            page_stack.setCurrentIndex(stack_index)
++
++    navigation.currentRowChanged.connect(switch_page_from_navigation)
++    navigation.setCurrentRow(min(nav_row_to_stack) if nav_row_to_stack else 0)
+@@ -3359 +3380 @@
+-            transcript.append(f"<p><b>Вы:</b> {escape(prompt)}</p>")
++            transcript.append(chat_bubble_html("user", prompt))
+@@ -3380,6 +3401,2 @@
+-                transcript.append(
+-                    "<p style='color:#8a93a1; font-size:11px;'>"
+-                    f"<b>Распознано:</b> {escape(recognized)}</p>"
+-                )
+-            safe_answer = escape(answer).replace("\n", "<br>")
+-            transcript.append(f"<p><b>Hellsaiz:</b> {safe_answer}</p>")
++                transcript.append(chat_bubble_html("recognized", recognized))
++            transcript.append(chat_bubble_html("assistant", answer))
