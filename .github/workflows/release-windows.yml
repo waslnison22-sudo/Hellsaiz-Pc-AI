@@ -25,12 +25,12 @@ jobs:
         shell: pwsh
         run: |
           if ($env:GITHUB_REF -eq "refs/heads/dev/bootstrap") {
-            $tag = "v0.1.5"
+            $tag = "v0.1.6"
           } else {
             $tag = $env:GITHUB_REF_NAME
           }
-          if ($tag -ne "v0.1.5") {
-            throw "This workflow is configured for the v0.1.5 release only."
+          if ($tag -ne "v0.1.6") {
+            throw "This workflow is configured for the v0.1.6 release only."
           }
           $version = $tag.TrimStart("v")
           "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
