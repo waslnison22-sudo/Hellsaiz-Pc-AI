@@ -9,6 +9,9 @@
 # Правка 17.11.2026: desktop-секция пересобрана против фактической базы (пост stage1b): номера строк
 # теперь соответствуют текущему состоянию ветки, а не исходному 4109-строчному файлу. Без этого
 # патч падал на stage-apply после слияния stage1 как реального кода (PR #22) и волны 1 (PR #25).
+# Правка 17.11.2026b: хунок test_desktop_runtime сделан контекстным (n=1) — git apply для
+# zero-old вставок позиционирует их по new_start, а не по old_start, что сдвинуло вставку
+# за закрывающую скобку Settings() и сломало импорт теста в CI.
 --- a/src/hellsaiz_pc_ai/core/orchestrator.py
 +++ b/src/hellsaiz_pc_ai/core/orchestrator.py
 @@ -6,1 +5,0 @@
@@ -112,7 +115,8 @@
 +    assert "не являются корректным JSON" in result
 --- a/tests/test_desktop_runtime.py
 +++ b/tests/test_desktop_runtime.py
-@@ -14,0 +16,1 @@
+@@ -14,1 +15,2 @@
+         workflows_path=tmp_path / "workflows",
 +        allowed_apps={"notepad": ("notepad.exe",)},
 --- a/tests/test_screen_ocr_commands.py
 +++ b/tests/test_screen_ocr_commands.py
