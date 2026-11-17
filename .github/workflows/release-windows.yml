@@ -7,7 +7,7 @@ on:
     tags:
       - "v*"
     paths:
-      - ".release-v0.1.5"
+      - ".release-v0.1.6"
 
 permissions:
   contents: write
