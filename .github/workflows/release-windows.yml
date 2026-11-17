@@ -355,6 +355,13 @@ jobs:
             Get-ChildItem (Join-Path $stage "versions") -Directory -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.Name }
             Write-Host "=== health/ files after timeout ==="
             Get-ChildItem (Join-Path $stage "health") -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.Name }
+            $appLog = Join-Path $env:TEMP "HellsaizPC_AI-app-startup.log"
+            if (Test-Path $appLog -PathType Leaf) {
+              Write-Host "=== app startup log ($appLog) follows ==="
+              Get-Content $appLog -Tail 200
+            } else {
+              Write-Host "app startup log not found at: $appLog"
+            }
             throw "The real $previousVersion -> $version updater smoke test timed out."
           }
           if ($process.ExitCode -ne 0) {
@@ -363,6 +370,13 @@ jobs:
               Get-Content $updaterLog -Tail 150
             } else {
               Write-Host "updater.log not found at: $updaterLog"
+            }
+            $appLog = Join-Path $env:TEMP "HellsaizPC_AI-app-startup.log"
+            if (Test-Path $appLog -PathType Leaf) {
+              Write-Host "=== app startup log ($appLog) follows ==="
+              Get-Content $appLog -Tail 200
+            } else {
+              Write-Host "app startup log not found at: $appLog"
             }
             throw "The real $previousVersion -> $version updater smoke test failed with exit code $($process.ExitCode)."
           }
