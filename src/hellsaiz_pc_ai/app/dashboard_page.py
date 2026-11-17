@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Callable
 
-from PySide6.QtCore import Qt, QThread, QTimer, Signal
+from PySide6.QtCore import QThread, QTimer, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QListWidget,
     QPushButton,
+    QStackedLayout,
     QVBoxLayout,
     QWidget,
 )
@@ -23,6 +24,7 @@ from hellsaiz_pc_ai.app.dashboard_texts import (
     greeting_note,
     preview_reminders,
 )
+from hellsaiz_pc_ai.app.hud_components import EmptyState
 
 class WeatherWorker(QThread):
     """Fetches one open-meteo weather line for the dashboard card."""
@@ -83,33 +85,50 @@ class DashboardPage(QWidget):
         grid.setSpacing(12)
         layout.addLayout(grid, 1)
 
-        weather_value = self._make_card(grid, 0, 0, "Погода", self._city, "Нажми «Обновить».")
+        # Weather card: value, note and the refresh action live inside the card.
+        weather_card = self._make_card_frame(grid, 0, 0, "Погода")
+        weather_value = QLabel(f"Загружаю погоду для {city}…")
+        weather_value.setObjectName("dashboardCardValue")
+        weather_value.setWordWrap(True)
+        weather_card.layout().addWidget(weather_value)
         self._weather_text = weather_value
         refresh_weather_button = QPushButton("Обновить")
+        refresh_weather_button.setObjectName("secondaryButton")
         refresh_weather_button.setToolTip("Запросить погоду ещё раз")
         refresh_weather_button.clicked.connect(self._start_weather_fetch)
-        grid.addWidget(refresh_weather_button, 0, 0, 2, 1, Qt.AlignmentFlag.AlignBottom)
+        weather_card.layout().addWidget(refresh_weather_button)
 
-        self._reminders_list = self._make_card_list(grid, 0, 1, "Напоминания")
+        self._make_reminders_card(grid, 0, 1, "Напоминания")
         self.refresh_reminders()
 
-        self._make_card(grid, 1, 0, "Система", f"Версия {version or '-'}", "")
+        # System card: version + the privacy line — the product's core promise.
+        system_card = self._make_card_frame(grid, 1, 0, "Система")
+        system_value = QLabel(f"Версия {version or '-'}")
+        system_value.setObjectName("dashboardCardValue")
+        system_card.layout().addWidget(system_value)
+        privacy_label = QLabel("🔒  Всё локально. Ничего не уходит в сеть.")
+        privacy_label.setObjectName("privacyNote")
+        privacy_label.setWordWrap(True)
+        system_card.layout().addWidget(privacy_label)
         diagnostics_button = QPushButton("Диагностика")
         diagnostics_button.setObjectName("secondaryButton")
         diagnostics_button.setToolTip("Проверка голоса, базы, сценариев и хранилища")
         diagnostics_button.clicked.connect(lambda: self._on_open_diagnostics())
-        grid.addWidget(diagnostics_button, 1, 0, 2, 1, Qt.AlignmentFlag.AlignBottom)
+        system_card.layout().addWidget(diagnostics_button)
 
         commands_panel = self._make_card_frame(grid, 1, 1, "Быстрые команды")
-        commands_layout = commands_panel.layout()
+        commands_hint = QLabel("Нажми на пример — он подставится в поле ввода.")
+        commands_hint.setObjectName("dashboardCardNote")
+        commands_panel.layout().addWidget(commands_hint)
         commands_row = QHBoxLayout()
         commands_row.setSpacing(6)
         for command in QUICK_COMMANDS:
             button = QPushButton(command)
+            button.setObjectName("chipButton")
             button.setToolTip("Запустить команду сразу")
             button.clicked.connect(lambda _=False, cmd=command: self._on_send(cmd))
             commands_row.addWidget(button)
-        commands_layout.addLayout(commands_row, 1)
+        commands_panel.layout().addLayout(commands_row, 1)
 
     def _make_card_frame(self, grid: QGridLayout, row: int, column: int, title: str) -> QFrame:
         card = QFrame()
@@ -123,32 +142,21 @@ class DashboardPage(QWidget):
         grid.addWidget(card, row, column)
         return card
 
-    def _make_card(
-        self,
-        grid: QGridLayout,
-        row: int,
-        column: int,
-        title: str,
-        value: str,
-        note: str,
-    ) -> QLabel:
+    def _make_reminders_card(self, grid: QGridLayout, row: int, column: int, title: str) -> None:
         card = self._make_card_frame(grid, row, column, title)
-        value_label = QLabel(value)
-        value_label.setObjectName("dashboardCardValue")
-        value_label.setWordWrap(True)
-        card.layout().addWidget(value_label, 1)
-        if note:
-            note_label = QLabel(note)
-            note_label.setObjectName("dashboardCardNote")
-            note_label.setWordWrap(True)
-            card.layout().addWidget(note_label)
-        return value_label
-
-    def _make_card_list(self, grid: QGridLayout, row: int, column: int, title: str) -> QListWidget:
-        card = self._make_card_frame(grid, row, column, title)
-        list_widget = QListWidget()
-        card.layout().addWidget(list_widget, 1)
-        return list_widget
+        self._reminders_list = QListWidget()
+        self._reminders_empty = EmptyState(
+            "Активных напоминаний нет",
+            "Скажи: «напомни в 22:00 проверить чайник» — и я добавлю.",
+            glyph="🔔",
+        )
+        container = QWidget()
+        stack = QStackedLayout(container)
+        stack.setStackingMode(QStackedLayout.StackingMode.StackOne)
+        stack.addWidget(self._reminders_list)
+        stack.addWidget(self._reminders_empty)
+        card.layout().addWidget(stack, 1)
+        self._reminders_stack = stack
 
     def refresh_reminders(self) -> None:
         self._reminders_list.clear()
@@ -156,12 +164,15 @@ class DashboardPage(QWidget):
             entries = self._reminder_store.list_pending()
         except (OSError, ValueError):
             self._reminders_list.addItem("Не удалось загрузить напоминания.")
+            self._reminders_stack.setCurrentWidget(self._reminders_list)
             return
         lines = preview_reminders(list(entries))
-        if not lines:
-            self._reminders_list.addItem("Активных напоминаний нет.")
-        for line in lines:
-            self._reminders_list.addItem(line)
+        if lines:
+            for line in lines:
+                self._reminders_list.addItem(line)
+            self._reminders_stack.setCurrentWidget(self._reminders_list)
+        else:
+            self._reminders_stack.setCurrentWidget(self._reminders_empty)
 
     def _start_weather_fetch(self) -> None:
         if self._weather_worker is not None and self._weather_worker.isRunning():

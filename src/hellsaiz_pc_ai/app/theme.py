@@ -67,6 +67,13 @@ QListWidget#mainNavigation::item:selected {
     font-weight: 600;
     border: 0;
 }
+QListWidget#mainNavigation::item:disabled {
+    background: transparent;
+    color: #8e98a6;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 10px 14px 2px 14px;
+}
 QListWidget#mainNavigation:focus {
     border: 1px solid rgba(139, 118, 255, 110);
     border-radius: 13px;
@@ -252,6 +259,9 @@ QTabBar::tab {
     margin: 2px 4px 2px 0;
     font-weight: 600;
 }
+QTabBar::tab:!selected {
+    background: rgba(12, 16, 25, 90);
+}
 QTabBar::tab:hover {
     background: rgba(109, 93, 246, 42);
     color: #f4f7fb;
@@ -284,6 +294,87 @@ QLabel#dashboardCardValue {
 QLabel#dashboardCardNote {
     color: #9aa4b2;
     font-size: 12px;
+}
+QLabel#privacyNote {
+    color: #bfe8c7;
+    background: rgba(125, 212, 135, 20);
+    border: 1px solid rgba(125, 212, 135, 45);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 12px;
+}
+QLabel#statChipOk {
+    color: #7dd487;
+    background: rgba(125, 212, 135, 20);
+    border: 1px solid rgba(125, 212, 135, 60);
+    border-radius: 9px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 600;
+}
+QLabel#statChipWarn {
+    color: #f5c04a;
+    background: rgba(245, 192, 74, 20);
+    border: 1px solid rgba(245, 192, 74, 60);
+    border-radius: 9px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 600;
+}
+QLabel#statChipErr {
+    color: #ff7b72;
+    background: rgba(255, 123, 114, 20);
+    border: 1px solid rgba(255, 123, 114, 60);
+    border-radius: 9px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 600;
+}
+QFrame#skillCard {
+    background: rgba(12, 16, 25, 150);
+    border: 1px solid rgba(215, 228, 245, 45);
+    border-radius: 16px;
+}
+QLabel#skillCardTitle {
+    color: #f4f7fb;
+    font-size: 14px;
+    font-weight: 650;
+}
+QLabel#skillCardNote {
+    color: #aab3c0;
+    font-size: 12px;
+}
+QFrame#emptyState {
+    background: transparent;
+    border: 0;
+}
+QLabel#emptyStateGlyph {
+    color: #8e98a6;
+    font-size: 28px;
+}
+QLabel#emptyStateTitle {
+    color: #f4f7fb;
+    font-size: 14px;
+    font-weight: 600;
+}
+QLabel#emptyStateHint {
+    color: #8e98a6;
+    font-size: 12px;
+}
+QPushButton#chipButton {
+    background: rgba(109, 93, 246, 22);
+    border: 1px solid rgba(109, 93, 246, 56);
+    color: #d8cdff;
+    font-size: 12px;
+    padding: 6px 12px;
+    min-height: 30px;
+}
+QPushButton#chipButton:hover {
+    background: rgba(109, 93, 246, 46);
+    border-color: rgba(153, 102, 255, 100);
+}
+QPushButton#chipButton:pressed {
+    background: rgba(109, 93, 246, 70);
 }
 QPushButton#secondaryButton {
     background: rgba(28, 34, 46, 208);
