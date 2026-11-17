@@ -1,5 +1,10 @@
-from hellsaiz_pc_ai.app import hud_components
-from hellsaiz_pc_ai.app.theme import build_dark_stylesheet
+import pytest
+
+try:
+    from hellsaiz_pc_ai.app import hud_components
+    from hellsaiz_pc_ai.app.theme import build_dark_stylesheet
+except ImportError as exc:  # Linux CI runners lack Qt native libs (libEGL); full run on Windows.
+    pytest.skip(f"Qt native libraries unavailable: {exc}", allow_module_level=True)
 
 
 def test_hud_module_exposes_expected_widgets():

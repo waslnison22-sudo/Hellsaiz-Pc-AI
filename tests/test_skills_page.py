@@ -1,4 +1,9 @@
-from hellsaiz_pc_ai.app.skills_page import SKILL_CARDS
+import pytest
+
+try:
+    from hellsaiz_pc_ai.app.skills_page import SKILL_CARDS
+except ImportError as exc:  # Linux CI runners lack Qt native libs (libEGL); full run on Windows.
+    pytest.skip(f"Qt native libraries unavailable: {exc}", allow_module_level=True)
 
 
 def test_skill_cards_exist_and_cover_real_capabilities():
