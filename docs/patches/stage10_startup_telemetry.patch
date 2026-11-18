@@ -1,0 +1,64 @@
+# Патч этапа 10: плотная телеметрия старта desktop-приложения.
+# Проблема: на CI-раннере приложение зависает в построении UI между логом
+# «assistant voice list refresh dispatched» и «voice library tab built»
+# (run 21-23: ни health-маркера, ни «timers scheduled», воркер SAPI даже не
+# стартовал из-за отложенного запуска). Точного места зависания нет.
+# Решение: девять опорных логов на вызовах построения UI. После прогона лог
+# покажет последний напечатанный маркер — это и есть место зависания.
+# На живых машинах логи безвредны.
+--- a/src/hellsaiz_pc_ai/app/desktop.py
++++ b/src/hellsaiz_pc_ai/app/desktop.py
+@@ -1252,4 +1252,5 @@
+     tabs.addTab(dashboard_page, "Главная")
+     tabs.addTab(home_page, "Чат")
++    logging.info("Desktop startup: tabs: core pages added.")
+
+     reminder_page = QWidget()
+@@ -1308,4 +1309,5 @@
+     dismiss_reminder_button.clicked.connect(dismiss_selected_reminder)
+     refresh_reminder_list()
++    logging.info("Desktop startup: reminders refreshed.")
+     tabs.addTab(reminder_page, "Напоминания")
+
+@@ -1319,4 +1321,5 @@
+     scenario_status = scenario_page.status_label
+     tabs.addTab(scenario_page, "Сценарии")
++    logging.info("Desktop startup: scenarios tab added.")
+
+     apps_page = QWidget()
+@@ -1442,4 +1445,5 @@
+     add_executable_button.clicked.connect(browse_app)
+     refresh_apps_list()
++    logging.info("Desktop startup: apps refreshed.")
+     tabs.addTab(apps_page, "Приложения")
+
+@@ -1540,4 +1544,5 @@
+     clear_wallpaper_button.clicked.connect(clear_wallpaper)
+     persist_wallpaper_status()
++    logging.info("Desktop startup: wallpaper status persisted.")
+     def change_wallpaper_fit() -> None:
+         wallpaper_store.set_fit_mode(str(wallpaper_fit_combo.currentData() or "fill"))
+@@ -1878,4 +1883,5 @@
+     save_sapi_options_button.clicked.connect(save_sapi_options)
+     refresh_voice_library()
++    logging.info("Desktop startup: voices tab built, library refreshed.")
+     tabs.addTab(voices_page, "Голоса")
+     refresh_system_voice_list()
+@@ -2223,4 +2229,5 @@
+     speech_health_button.clicked.connect(refresh_system_health)
+     refresh_system_health()
++    logging.info("Desktop startup: system health refreshed.")
+
+     def stop_wake_listener() -> None:
+@@ -2329,4 +2336,5 @@
+     always_listen_check.toggled.connect(lambda _checked: save_stt_profile())
+     refresh_microphone_devices()
++    logging.info("Desktop startup: microphones refreshed.")
+
+     ocr_models_root = settings.workflows_path.parent / "models" / "ocr_ru"
+@@ -3668,4 +3676,5 @@
+     # Restore overdue reminders and startup workflows after the main window enters the event loop.
+     window.show()
++    logging.info("Desktop startup: window shown.")
+     if network_settings.get("launch_on_start") and network_settings.get("executable_path"):
+         def start_network_client_on_launch() -> None:
