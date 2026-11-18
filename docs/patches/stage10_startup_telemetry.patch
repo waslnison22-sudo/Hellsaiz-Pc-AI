@@ -6,59 +6,50 @@
 # Решение: девять опорных логов на вызовах построения UI. После прогона лог
 # покажет последний напечатанный маркер — это и есть место зависания.
 # На живых машинах логи безвредны.
+# Файл намеренно собран без пустых контекстных строк и без строк из одного
+# пробела: такие строки теряют пробел при копировании через мессенджеры.
 --- a/src/hellsaiz_pc_ai/app/desktop.py
 +++ b/src/hellsaiz_pc_ai/app/desktop.py
-@@ -1252,4 +1252,5 @@
+@@ -1251,3 +1251,4 @@
+     tabs.addTab(skills_page, "Навыки")
      tabs.addTab(dashboard_page, "Главная")
      tabs.addTab(home_page, "Чат")
 +    logging.info("Desktop startup: tabs: core pages added.")
-
-     reminder_page = QWidget()
-@@ -1308,4 +1309,5 @@
+@@ -1307,3 +1308,4 @@
+     refresh_reminders_button.clicked.connect(refresh_reminder_list)
      dismiss_reminder_button.clicked.connect(dismiss_selected_reminder)
      refresh_reminder_list()
 +    logging.info("Desktop startup: reminders refreshed.")
-     tabs.addTab(reminder_page, "Напоминания")
-
-@@ -1319,4 +1321,5 @@
+@@ -1318,3 +1320,4 @@
+     )
      scenario_status = scenario_page.status_label
      tabs.addTab(scenario_page, "Сценарии")
 +    logging.info("Desktop startup: scenarios tab added.")
-
-     apps_page = QWidget()
-@@ -1442,4 +1445,5 @@
+@@ -1441,3 +1444,4 @@
+     register_app_button.clicked.connect(add_selected_app)
      add_executable_button.clicked.connect(browse_app)
      refresh_apps_list()
 +    logging.info("Desktop startup: apps refreshed.")
-     tabs.addTab(apps_page, "Приложения")
-
-@@ -1540,4 +1544,5 @@
+@@ -1539,3 +1543,4 @@
+     choose_wallpaper_button.clicked.connect(choose_wallpaper)
      clear_wallpaper_button.clicked.connect(clear_wallpaper)
      persist_wallpaper_status()
 +    logging.info("Desktop startup: wallpaper status persisted.")
-     def change_wallpaper_fit() -> None:
-         wallpaper_store.set_fit_mode(str(wallpaper_fit_combo.currentData() or "fill"))
-@@ -1878,4 +1883,5 @@
+@@ -1877,3 +1882,4 @@
+     refresh_system_voices_button.clicked.connect(refresh_system_voice_list)
      save_sapi_options_button.clicked.connect(save_sapi_options)
      refresh_voice_library()
 +    logging.info("Desktop startup: voices tab built, library refreshed.")
-     tabs.addTab(voices_page, "Голоса")
-     refresh_system_voice_list()
-@@ -2223,4 +2229,5 @@
+@@ -2223,2 +2229,3 @@
      speech_health_button.clicked.connect(refresh_system_health)
      refresh_system_health()
 +    logging.info("Desktop startup: system health refreshed.")
-
-     def stop_wake_listener() -> None:
-@@ -2329,4 +2336,5 @@
+@@ -2328,3 +2335,4 @@
+     refresh_microphones_button.clicked.connect(refresh_microphone_devices)
      always_listen_check.toggled.connect(lambda _checked: save_stt_profile())
      refresh_microphone_devices()
 +    logging.info("Desktop startup: microphones refreshed.")
-
-     ocr_models_root = settings.workflows_path.parent / "models" / "ocr_ru"
-@@ -3668,4 +3676,5 @@
+@@ -3668,2 +3676,3 @@
      # Restore overdue reminders and startup workflows after the main window enters the event loop.
      window.show()
 +    logging.info("Desktop startup: window shown.")
-     if network_settings.get("launch_on_start") and network_settings.get("executable_path"):
-         def start_network_client_on_launch() -> None:
