@@ -12,6 +12,29 @@ _SPEC.loader.exec_module(_MODULE)
 _load_workflow_state = _MODULE._load_workflow_state
 _save_workflow_state = _MODULE._save_workflow_state
 _workflow_state_path = _MODULE._workflow_state_path
+_patch_sort_key = _MODULE._patch_sort_key
+
+
+def test_stage_patches_sort_by_numeric_stage(tmp_path):
+    names = (
+        "stage10_startup_telemetry.patch",
+        "stage1_desktop_ui_workers.patch",
+        "stage1b_dead_imports.patch",
+        "stage2_vpn_tools.patch",
+        "stage9_sapi5_delayed_start.patch",
+    )
+    for name in names:
+        (tmp_path / name).write_text("", encoding="utf-8")
+
+    ordered = [patch.name for patch in sorted(tmp_path.glob("*.patch"), key=_patch_sort_key)]
+
+    assert ordered == [
+        "stage1_desktop_ui_workers.patch",
+        "stage1b_dead_imports.patch",
+        "stage2_vpn_tools.patch",
+        "stage9_sapi5_delayed_start.patch",
+        "stage10_startup_telemetry.patch",
+    ]
 
 
 def test_patch_state_is_scoped_to_github_run(monkeypatch, tmp_path):

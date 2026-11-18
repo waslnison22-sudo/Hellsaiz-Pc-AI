@@ -15,6 +15,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -22,6 +23,20 @@ from pathlib import Path
 
 
 
+
+
+def _patch_sort_key(patch: Path) -> tuple[int, str, str]:
+    """Order patches by numeric stage, not by plain filename text.
+
+    ``sorted()`` puts ``stage10_*.patch`` before ``stage1_*.patch`` because
+    ``"0" < "_"``, which would break every stage ten and later patch. Sorting
+    on the parsed stage number keeps stage1, stage1b, ..., stage9, stage10 in
+    the order the pipeline actually needs.
+    """
+    match = re.match(r"stage(\d+)([a-z]*)", patch.name)
+    if match is None:
+        return (10**6, "", patch.name)
+    return (int(match.group(1)), match.group(2), patch.name)
 
 
 def _workflow_state_path() -> Path | None:
@@ -89,7 +104,7 @@ def main() -> int:
     failures = 0
     state_path = _workflow_state_path()
     applied_state = _load_workflow_state(state_path)
-    for patch in sorted(patch_dir.glob("*.patch")):
+    for patch in sorted(patch_dir.glob("*.patch"), key=_patch_sort_key):
         patch_hash = hashlib.sha256(patch.read_bytes()).hexdigest()
         if applied_state.get(patch.name) == patch_hash:
             print(f"SKIP (уже применён в этом workflow run): {patch.name}")
