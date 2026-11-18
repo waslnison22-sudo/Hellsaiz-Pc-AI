@@ -1,0 +1,34 @@
+# Патч этапа 9: отложенный SAPI5-опрос голосов (обход зависания COM на headless).
+# Проблема: шаг 15 updater-теста зависал: воркер SapiVoiceListWorker стартовал при
+# построении UI, и CoCreateInstance("SAPI.SpVoice") на headless-раннере не отвечал
+# (CoInitialize не помогает), зависал и основной поток до записи health-маркера.
+# Решение: оба SAPI5-воркера запускаются через QTimer.singleShot(12s) —
+# health-маркер «timers scheduled» пишется раньше первого обращения к COM.
+# На обычных машинах поведение то же, список голосов появляется на ~12 секунд позже.
+--- a/src/hellsaiz_pc_ai/app/desktop.py
++++ b/src/hellsaiz_pc_ai/app/desktop.py
+@@ -1084,9 +1084,12 @@
+         worker = SapiVoiceListWorker(active_tts["rate"], active_tts["volume"])
+         _BACKGROUND_VOICE_WORKERS["sapi_inventory"].append(worker)
+         worker.completed.connect(_apply_voices)
+         worker.failed.connect(_voices_failed)
+         worker.finished.connect(
+             lambda: _BACKGROUND_VOICE_WORKERS["sapi_inventory"].remove(worker)
+             if worker in _BACKGROUND_VOICE_WORKERS["sapi_inventory"] else None
+         )
+-        worker.start()
++        # Отложенный SAPI5-опрос: health-маркер должен быть записан до первого
++        # создания COM-объекта; на headless-системах SAPI.SpVoice может
++        # зависнуть и заморозить весь процесс.
++        QTimer.singleShot(12000, worker.start)
+@@ -1785,8 +1788,9 @@
+         worker.completed.connect(loaded)
+         worker.failed.connect(failed)
+         worker.finished.connect(lambda: refresh_system_voices_button.setEnabled(True))
+         worker.finished.connect(
+             lambda: _BACKGROUND_VOICE_WORKERS["sapi_inventory"].remove(worker)
+             if worker in _BACKGROUND_VOICE_WORKERS["sapi_inventory"] else None
+         )
+-        worker.start()
++        # Такой же отложенный старт, как и в refresh_voices (см. выше).
++        QTimer.singleShot(12000, worker.start)
