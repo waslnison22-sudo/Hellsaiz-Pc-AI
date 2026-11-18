@@ -1,0 +1,29 @@
+# Патч этапа 11: телеметрия построения страниц (сегмент dispatch -> вкладки).
+# Run 25: зависание между логом «assistant voice list refresh dispatched» и
+# первым маркером stage10 («tabs: core pages added») — то есть в блоке
+# локальных импортов, конструкторах DashboardPage/SkillsPage и addTab.
+# Пять опорных логов внутри сегмента; последний напечатанный маркер укажет точку.
+# В телах хунков нет пустых строк — устойчиво к обрезке пробелов.
+--- a/src/hellsaiz_pc_ai/app/desktop.py
++++ b/src/hellsaiz_pc_ai/app/desktop.py
+@@ -1222,2 +1222,3 @@
+         "Desktop startup: assistant voice list refresh dispatched to background worker."
+     )
++    logging.info("Desktop startup: pages: building pages block started.")
+@@ -1240,1 +1240,2 @@
++    logging.info("Desktop startup: pages: before DashboardPage constructor.")
+     dashboard_page = DashboardPage(
+@@ -1247,3 +1247,4 @@
+         on_open_diagnostics=open_settings_diagnostics,
+         parent=window,
+     )
++    logging.info("Desktop startup: pages: DashboardPage constructor done.")
+@@ -1249,1 +1249,2 @@
++    logging.info("Desktop startup: pages: before SkillsPage constructor.")
+     skills_page = SkillsPage()
+@@ -1251,3 +1251,5 @@
+     tabs.addTab(skills_page, "Навыки")
++    logging.info("Desktop startup: pages: skills tab ready.")
+     tabs.addTab(dashboard_page, "Главная")
++    logging.info("Desktop startup: pages: dashboard tab ready.")
+     tabs.addTab(home_page, "Чат")
