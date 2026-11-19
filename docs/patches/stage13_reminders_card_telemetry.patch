@@ -1,0 +1,48 @@
+# Патч этапа 13: микромаркеры внутри _make_reminders_card и EmptyState.
+# Run 27 (f8ebff5, job 135069851907): hang локализован внутри
+# self._make_reminders_card(...): «DashboardPage ctor: weather card done.»
+# напечатан (19:32:24,047), «reminders card built» — нет. SQLite-гипотеза
+# снята: refresh_reminders() вызывается уже после _make_reminders_card.
+# Внутри _make_reminders_card только QListWidget, EmptyState (hud_components)
+# и QStackedLayout. Маркеры на каждый вызов локализуют виновника:
+# frame -> list -> empty state -> stack -> stacking mode -> list added ->
+# empty added -> mounted; плюс три маркера внутри EmptyState.__init__.
+# Контексты дословно из репозиторных версий файлов; пустых контекстных строк нет.
+--- a/src/hellsaiz_pc_ai/app/dashboard_page.py
++++ b/src/hellsaiz_pc_ai/app/dashboard_page.py
+@@ -110,3 +110,5 @@
+         card = self._make_card_frame(grid, row, column, title)
++        logging.info("DashboardPage ctor: reminders card frame created.")
+         self._reminders_list = QListWidget()
++        logging.info("DashboardPage ctor: reminders list created.")
+         self._reminders_empty = EmptyState(
+@@ -114,9 +115,15 @@
+             glyph="🔔",
+         )
++        logging.info("DashboardPage ctor: empty state created.")
+         container = QWidget()
+         stack = QStackedLayout(container)
++        logging.info("DashboardPage ctor: reminders stack created.")
+         stack.setStackingMode(QStackedLayout.StackingMode.StackOne)
++        logging.info("DashboardPage ctor: reminders stacking mode set.")
+         stack.addWidget(self._reminders_list)
++        logging.info("DashboardPage ctor: list added to stack.")
+         stack.addWidget(self._reminders_empty)
++        logging.info("DashboardPage ctor: empty state added to stack.")
+         card.layout().addWidget(stack, 1)
++        logging.info("DashboardPage ctor: reminders stack mounted.")
+         self._reminders_stack = stack
+--- a/src/hellsaiz_pc_ai/app/hud_components.py
++++ b/src/hellsaiz_pc_ai/app/hud_components.py
+@@ -6,1 +6,2 @@
+ from __future__ import annotations
++import logging
+@@ -27,2 +28,3 @@
+         self.setObjectName("emptyState")
++        logging.info("EmptyState ctor: entered.")
+@@ -34,1 +35,2 @@
+         layout.addWidget(glyph_label)
++        logging.info("EmptyState ctor: glyph label added.")
+@@ -44,1 +45,2 @@
+             layout.addWidget(self.action_button, 0, Qt.AlignmentFlag.AlignCenter)
++        logging.info("EmptyState ctor: done.")
