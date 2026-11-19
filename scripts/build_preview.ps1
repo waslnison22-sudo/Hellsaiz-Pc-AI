@@ -1,8 +1,8 @@
 $ErrorActionPreference = "Stop"
 Set-Location (Join-Path $PSScriptRoot "..")
 
-python scripts/apply_pending_patches.py
-if ($LASTEXITCODE -ne 0) { throw "Pending patches failed to apply; check docs/patches/." }
+# NOTE (wave 4): the docs/patches pipeline was removed; sources are committed
+# directly. The apply_pending_patches call that used to live here is gone.
 
 python -m pip install --upgrade pip
 if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed." }
