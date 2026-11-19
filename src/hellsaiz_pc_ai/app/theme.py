@@ -296,6 +296,11 @@ QLabel#dashboardCardNote {
     color: #A6A29C;
     font-size: 12px;
 }
+QLabel#dashboardGreeting {
+    color: #F2EFEA;
+    font-size: 28px;
+    font-weight: 600;
+}
 QLabel#privacyNote {
     color: #bfe8c7;
     background: rgba(125, 212, 135, 20);
