@@ -167,6 +167,10 @@ class ChatTranscript(QScrollArea):
     """Scrollable message list with sticky-to-bottom behaviour."""
 
     copied = Signal(str)
+    # Hard cap on visible bubbles: beyond this, oldest bubbles are dropped so a
+    # long session cannot grow the widget tree without bound. Persisted history
+    # is unaffected (ChatStore keeps the full log).
+    MAX_VISIBLE_MESSAGES = 300
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -209,9 +213,16 @@ class ChatTranscript(QScrollArea):
         self._bubbles.append(bubble)
         self._layout.addWidget(bubble)
         self._layout.addWidget(self._typing)
+        self._trim_overflow()
         if stick:
             QTimer.singleShot(0, self.scroll_to_bottom)
         return bubble
+
+    def _trim_overflow(self) -> None:
+        while len(self._bubbles) > self.MAX_VISIBLE_MESSAGES:
+            bubble = self._bubbles.pop(0)
+            self._layout.removeWidget(bubble)
+            bubble.deleteLater()
 
     def show_typing(self) -> None:
         stick = self._is_at_bottom()
