@@ -70,8 +70,16 @@ def test_portable_zip_validator_rejects_wrong_active_version(tmp_path: Path):
     version, files = _install_tree(install_root)
     package = tmp_path / "portable.zip"
     make_portable_zip(install_root, package, version, files)
-    with zipfile.ZipFile(package, "a") as archive:
-        archive.writestr("active.json", '{"schema_version":1,"active_version":"9.9.9"}')
+
+    # Rewrite the archive with a tampered active_version instead of appending a
+    # duplicate entry: duplicate zip names raise a UserWarning on every run.
+    with zipfile.ZipFile(package) as archive:
+        names = archive.namelist()
+        payload = {name: archive.read(name) for name in names}
+    payload["active.json"] = b'{"schema_version":1,"active_version":"9.9.9"}'
+    with zipfile.ZipFile(package, "w", zipfile.ZIP_DEFLATED) as archive:
+        for name in names:
+            archive.writestr(name, payload[name])
 
     with pytest.raises(ValueError, match="contents"):
         validate_portable_zip(package, version, files)

@@ -3,15 +3,6 @@ from __future__ import annotations
 from typing import Any
 
 
-QUICK_COMMANDS = (
-    "помощь",
-    "открой блокнот",
-    "сколько сейчас времени",
-    "напомни в 22:00 проверить чайник",
-    "погода",
-)
-
-
 def greeting_for_hour(hour: int) -> str:
     """Map a clock hour to a natural Russian greeting."""
     if 5 <= hour < 12:
