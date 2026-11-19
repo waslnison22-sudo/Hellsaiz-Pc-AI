@@ -1,0 +1,17 @@
+# Патч этапа 15: интерфейс больше не закрыт слоем затемнения обоев.
+# Регрессия из stage3_hud_wave1: wallpaper_dim добавляется в QStackedLayout
+# (режим StackAll) после shell, а setCurrentIndex(2) поднимает затемнение
+# на самый верх. Затемнение — QLabel с background:rgba(4,6,10,128), оно
+# накрывает весь интерфейс и перехватывает клики: окно выглядит «зависшим»,
+# хотя процесс жив, event loop работает и health-маркер записан.
+# Фикс: вернуть индекс 1 (shell), не меняя порядок слоёв — тогда затемнение
+# остаётся между обоями и оболочкой и не перекрывает UI.
+--- a/src/hellsaiz_pc_ai/app/desktop.py
++++ b/src/hellsaiz_pc_ai/app/desktop.py
+@@ -3301,5 +3301,5 @@
+     root_layout.addWidget(wallpaper_layer)
+     root_layout.addWidget(shell)
+     root_layout.addWidget(wallpaper_dim)
+-    root_layout.setCurrentIndex(2)
++    root_layout.setCurrentIndex(1)
+     window.setCentralWidget(root)
