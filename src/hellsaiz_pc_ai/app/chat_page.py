@@ -12,7 +12,6 @@ from PySide6.QtCore import (
     QTimer,
     Signal,
 )
-from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QFrame,
     QGraphicsOpacityEffect,
@@ -115,6 +114,8 @@ class MessageBubble(QWidget):
         row.addLayout(column, 1)
 
     def _copy(self) -> None:
+        from PySide6.QtGui import QGuiApplication
+
         QGuiApplication.clipboard().setText(self._text)
         self.copied.emit(self._text)
 
@@ -307,7 +308,10 @@ class ChatInput(QTextEdit):
             if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
                 super().keyPressEvent(event)
                 return
-            self.submitted.emit(self.text().strip())
+            text = self.text().strip()
+            if not text:
+                return
+            self.submitted.emit(text)
             return
         super().keyPressEvent(event)
 
@@ -391,7 +395,6 @@ class Toast(QFrame):
         self._fade.stop()
         self._fade.setStartValue(1.0)
         self._fade.setEndValue(0.0)
-        self._fade.finished.connect(self.hide)
         self._fade.start()
 
     def _reposition(self) -> None:
