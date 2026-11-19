@@ -31,7 +31,7 @@ def test_legacy_helper_still_escapes_html_and_newlines():
 
     assert "&lt;b&gt;first&lt;/b&gt;" not in html
     assert "&amp;lt;b&amp;gt;first&amp;lt;/b&amp;gt;" in html
-    assert "&lt;br&gt;" in html
+    assert "<br>" in html
 
 
 def test_legacy_user_and_recognized_roles():
