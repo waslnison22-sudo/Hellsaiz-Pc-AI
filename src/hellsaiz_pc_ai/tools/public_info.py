@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
@@ -10,16 +11,21 @@ from urllib.request import Request, urlopen
 
 from hellsaiz_pc_ai.core.models import RiskLevel, ToolResult
 from hellsaiz_pc_ai.core.registry import ToolRegistry, ToolSpec
+from hellsaiz_pc_ai.version import APP_VERSION
 
 
-USER_AGENT = "Hellsaiz-PC-AI/0.1.4 (personal desktop assistant)"
+USER_AGENT = f"Hellsaiz-PC-AI/{APP_VERSION} (personal desktop assistant)"
 WEATHER_CODES = {
     0: "ясно", 1: "преимущественно ясно", 2: "переменная облачность",
     3: "пасмурно", 45: "туман", 48: "изморозевый туман",
     51: "небольшая морось", 53: "морось", 55: "сильная морось",
+    56: "ледяная морось", 57: "сильная ледяная морось",
     61: "небольшой дождь", 63: "дождь", 65: "сильный дождь",
+    66: "ледяной дождь", 67: "сильный ледяной дождь",
     71: "небольшой снег", 73: "снег", 75: "сильный снег",
+    77: "снежные зёрна",
     80: "ливневый дождь", 81: "сильные ливни", 82: "очень сильные ливни",
+    85: "снежные ливни", 86: "сильные снежные ливни",
     95: "гроза", 96: "гроза с градом", 99: "сильная гроза с градом",
 }
 
@@ -114,7 +120,9 @@ WEATHER_ICONS = {
 
 WEEKDAYS_SHORT_RU = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
 WEATHER_CACHE_TTL = timedelta(minutes=10)
+WEATHER_CACHE_LIMIT = 64
 _WEATHER_CACHE: dict[str, tuple[datetime, "WeatherReport"]] = {}
+_WEATHER_LOCK = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -204,10 +212,12 @@ def get_weather_report(city: str) -> WeatherReport:
     if not 2 <= len(city) <= 100:
         raise ValueError("Укажи название города.")
 
-    cached = _WEATHER_CACHE.get(city.casefold())
+    key = city.casefold()
     now = datetime.now(timezone.utc)
-    if cached is not None and now - cached[0] < WEATHER_CACHE_TTL:
-        return cached[1]
+    with _WEATHER_LOCK:
+        cached = _WEATHER_CACHE.get(key)
+        if cached is not None and now - cached[0] < WEATHER_CACHE_TTL:
+            return cached[1]
 
     place = _geocode(city)
     query = (
@@ -275,7 +285,11 @@ def get_weather_report(city: str) -> WeatherReport:
         daily=tuple(days),
         fetched_at=now,
     )
-    _WEATHER_CACHE[city.casefold()] = (now, report)
+    with _WEATHER_LOCK:
+        _WEATHER_CACHE[key] = (now, report)
+        while len(_WEATHER_CACHE) > WEATHER_CACHE_LIMIT:
+            oldest = min(_WEATHER_CACHE, key=lambda name: _WEATHER_CACHE[name][0])
+            del _WEATHER_CACHE[oldest]
     return report
 
 
