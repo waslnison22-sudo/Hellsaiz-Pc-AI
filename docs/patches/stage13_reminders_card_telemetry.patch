@@ -8,6 +8,8 @@
 # frame -> list -> empty state -> stack -> stacking mode -> list added ->
 # empty added -> mounted; плюс три маркера внутри EmptyState.__init__.
 # Контексты дословно из репозиторных версий файлов; пустых контекстных строк нет.
+# v2: исправлен заголовок хунка EmptyState (old=1, new=2; run 28 падал с
+# "corrupt patch at line 43" из-за неверного счётчика строк).
 --- a/src/hellsaiz_pc_ai/app/dashboard_page.py
 +++ b/src/hellsaiz_pc_ai/app/dashboard_page.py
 @@ -110,3 +110,5 @@
@@ -37,7 +39,7 @@
 @@ -6,1 +6,2 @@
  from __future__ import annotations
 +import logging
-@@ -27,2 +28,3 @@
+@@ -27,1 +28,2 @@
          self.setObjectName("emptyState")
 +        logging.info("EmptyState ctor: entered.")
 @@ -34,1 +35,2 @@
