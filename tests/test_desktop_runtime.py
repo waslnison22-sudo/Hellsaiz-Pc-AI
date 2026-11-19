@@ -2,10 +2,22 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from hellsaiz_pc_ai.app.desktop import build_runtime
+import pytest
+
 from hellsaiz_pc_ai.config import LLMSettings, Settings
 
+try:  # desktop imports chat_page, which needs PySide6 GUI (libEGL), absent on headless Linux.
+    from hellsaiz_pc_ai.app.desktop import build_runtime
 
+    _DESKTOP_AVAILABLE = True
+except ImportError:  # pragma: no cover - runner-specific
+    _DESKTOP_AVAILABLE = False
+
+
+@pytest.mark.skipif(
+    not _DESKTOP_AVAILABLE,
+    reason="PySide6 GUI libraries are not available on this runner",
+)
 def test_runtime_works_without_any_ai_provider(tmp_path: Path):
     settings = Settings(
         llm=LLMSettings(enabled=False),

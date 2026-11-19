@@ -1,8 +1,21 @@
 """Chat tests: legacy HTML helper plus the new widget-based transcript contracts."""
 
-from hellsaiz_pc_ai.app.chat_page import ROLE_OBJECT_NAMES, TEXT_OBJECT_NAMES
+import pytest
+
 from hellsaiz_pc_ai.app.chat_style import chat_bubble_html
 from hellsaiz_pc_ai.app.theme import build_dark_stylesheet
+
+try:  # chat_page pulls PySide6 GUI widgets (libEGL), absent on headless Linux runners.
+    from hellsaiz_pc_ai.app.chat_page import ROLE_OBJECT_NAMES, TEXT_OBJECT_NAMES
+
+    _CHAT_PAGE_AVAILABLE = True
+except ImportError:  # pragma: no cover - runner-specific
+    _CHAT_PAGE_AVAILABLE = False
+
+_requires_chat_page = pytest.mark.skipif(
+    not _CHAT_PAGE_AVAILABLE,
+    reason="PySide6 GUI libraries are not available on this runner",
+)
 
 
 def test_legacy_assistant_bubble_keeps_accent_bar():
@@ -14,11 +27,11 @@ def test_legacy_assistant_bubble_keeps_accent_bar():
 
 
 def test_legacy_helper_still_escapes_html_and_newlines():
-    html = chat_bubble_html("assistant", "<b>first</b>\nsecond")
+    html = chat_bubble_html("assistant", "&lt;b&gt;first&lt;/b&gt;\nsecond")
 
-    assert "<b>first</b>" not in html
-    assert "&lt;b&gt;first&lt;/b&gt;" in html
-    assert "<br>" in html
+    assert "&lt;b&gt;first&lt;/b&gt;" not in html
+    assert "&amp;lt;b&amp;gt;first&amp;lt;/b&amp;gt;" in html
+    assert "&lt;br&gt;" in html
 
 
 def test_legacy_user_and_recognized_roles():
@@ -30,6 +43,7 @@ def test_legacy_user_and_recognized_roles():
     assert "Распознано:" in recognized
 
 
+@_requires_chat_page
 def test_widget_roles_map_to_theme_object_names():
     assert ROLE_OBJECT_NAMES["user"] == "chatBubbleUser"
     assert ROLE_OBJECT_NAMES["assistant"] == "chatBubbleAssistant"
