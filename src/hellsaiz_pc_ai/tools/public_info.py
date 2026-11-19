@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
 from urllib.parse import parse_qs, quote, unquote, urlparse
 from urllib.request import Request, urlopen
@@ -96,34 +98,202 @@ def search_web(query: str, limit: int = 3) -> str:
     return "\n".join(lines)
 
 
-def get_weather(city: str) -> str:
-    city = " ".join(city.split()).strip()
-    if not 2 <= len(city) <= 100:
-        raise ValueError("Укажи название города.")
+WEATHER_ICONS = {
+    0: "\u2600\ufe0f", 1: "\U0001f324\ufe0f", 2: "\u26c5", 3: "\u2601\ufe0f",
+    45: "\U0001f32b\ufe0f", 48: "\U0001f32b\ufe0f",
+    51: "\U0001f326\ufe0f", 53: "\U0001f326\ufe0f", 55: "\U0001f326\ufe0f",
+    56: "\U0001f327\ufe0f", 57: "\U0001f327\ufe0f",
+    61: "\U0001f327\ufe0f", 63: "\U0001f327\ufe0f", 65: "\U0001f327\ufe0f",
+    66: "\U0001f327\ufe0f", 67: "\U0001f327\ufe0f",
+    71: "\U0001f328\ufe0f", 73: "\U0001f328\ufe0f", 75: "\U0001f328\ufe0f",
+    77: "\U0001f328\ufe0f",
+    80: "\U0001f326\ufe0f", 81: "\U0001f326\ufe0f", 82: "\u26c8\ufe0f",
+    85: "\U0001f328\ufe0f", 86: "\U0001f328\ufe0f",
+    95: "\u26c8\ufe0f", 96: "\u26c8\ufe0f", 99: "\u26c8\ufe0f",
+}
+
+WEEKDAYS_SHORT_RU = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
+WEATHER_CACHE_TTL = timedelta(minutes=10)
+_WEATHER_CACHE: dict[str, tuple[datetime, "WeatherReport"]] = {}
+
+
+@dataclass(frozen=True)
+class WeatherDay:
+    weekday: str
+    temperature_max: float | None
+    temperature_min: float | None
+    code: int | None
+    condition: str
+    icon: str
+
+
+@dataclass(frozen=True)
+class WeatherReport:
+    city: str
+    latitude: float
+    longitude: float
+    temperature: float | None
+    apparent: float | None
+    humidity: float | None
+    wind: float | None
+    code: int | None
+    condition: str
+    icon: str
+    hourly: tuple[tuple[str, float], ...]
+    daily: tuple[WeatherDay, ...]
+    fetched_at: datetime
+
+    def short_line(self) -> str:
+        return f"{self.icon} {self.condition}, {_format_temp(self.temperature)}"
+
+    def forecast_line(self) -> str:
+        return "  ".join(
+            f"{day.weekday} {_format_temp(day.temperature_max)}" for day in self.daily
+        )
+
+
+def _format_temp(value: float | None) -> str:
+    if value is None:
+        return "—"
+    rounded = round(value)
+    prefix = "+" if rounded > 0 else ""
+    return f"{prefix}{rounded}°"
+
+
+def _condition(code: int | None) -> str:
+    if code is None:
+        return "погодные условия неизвестны"
+    return WEATHER_CODES.get(code, "погодные условия неизвестны")
+
+
+def _icon(code: int | None) -> str:
+    if code is None:
+        return "\u2601\ufe0f"
+    return WEATHER_ICONS.get(code, "\u2601\ufe0f")
+
+
+def _as_float(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
+
+
+def _as_int(value: object) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return int(value)
+
+
+def _geocode(city: str) -> dict:
     location = _get_json(
         "https://geocoding-api.open-meteo.com/v1/search"
         f"?name={quote(city)}&count=1&language=ru&format=json"
     )
     matches = location.get("results") or []
     if not matches:
-        return f"Не нашёл город «{city}». Уточни название."
-    place = matches[0]
+        raise ValueError(f"Не нашёл город «{city}». Уточни название.")
+    return matches[0]
+
+
+def get_weather_report(city: str) -> WeatherReport:
+    """Current weather plus an hourly slice and a five day outlook from Open-Meteo.
+
+    The result is cached in memory for ten minutes, keyed by the city name.
+    """
+    city = " ".join(city.split()).strip()
+    if not 2 <= len(city) <= 100:
+        raise ValueError("Укажи название города.")
+
+    cached = _WEATHER_CACHE.get(city.casefold())
+    now = datetime.now(timezone.utc)
+    if cached is not None and now - cached[0] < WEATHER_CACHE_TTL:
+        return cached[1]
+
+    place = _geocode(city)
     query = (
         "https://api.open-meteo.com/v1/forecast"
         f"?latitude={place['latitude']}&longitude={place['longitude']}"
-        "&current=temperature_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m"
+        "&current=temperature_2m,apparent_temperature,relative_humidity_2m,"
+        "weather_code,wind_speed_10m"
+        "&hourly=temperature_2m&forecast_days=2"
+        "&daily=weather_code,temperature_2m_max,temperature_2m_min&forecast_days=5"
         "&timezone=auto"
     )
     data = _get_json(query)
     current = data.get("current") or {}
-    code = int(current.get("weather_code", -1))
-    description = WEATHER_CODES.get(code, "погодные условия неизвестны")
-    return (
-        f"Сейчас в {place.get('name', city)}: {description}, "
-        f"{current.get('temperature_2m', '—')} градусов. "
-        f"Ощущается как {current.get('apparent_temperature', '—')}, "
-        f"ветер {current.get('wind_speed_10m', '—')} километров в час."
+    code = _as_int(current.get("weather_code"))
+
+    hourly_times = ((data.get("hourly") or {}).get("time")) or []
+    hourly_temps = ((data.get("hourly") or {}).get("temperature_2m")) or []
+    hourly: list[tuple[str, float]] = []
+    stamp = str(current.get("time") or "")
+    for index, moment in enumerate(hourly_times):
+        if index >= len(hourly_temps):
+            break
+        temperature = _as_float(hourly_temps[index])
+        if temperature is None or not isinstance(moment, str) or moment <= stamp:
+            continue
+        hourly.append((moment[11:16], temperature))
+        if len(hourly) == 6:
+            break
+
+    daily_data = data.get("daily") or {}
+    days: list[WeatherDay] = []
+    dates = daily_data.get("time") or []
+    maxes = daily_data.get("temperature_2m_max") or []
+    mins = daily_data.get("temperature_2m_min") or []
+    codes = daily_data.get("weather_code") or []
+    for index, date_text in enumerate(dates[:5]):
+        try:
+            weekday = WEEKDAYS_SHORT_RU[datetime.fromisoformat(str(date_text)).weekday()]
+        except (ValueError, TypeError):
+            weekday = str(date_text)
+        day_code = _as_int(codes[index]) if index < len(codes) else None
+        days.append(
+            WeatherDay(
+                weekday=weekday,
+                temperature_max=_as_float(maxes[index]) if index < len(maxes) else None,
+                temperature_min=_as_float(mins[index]) if index < len(mins) else None,
+                code=day_code,
+                condition=_condition(day_code),
+                icon=_icon(day_code),
+            )
+        )
+
+    report = WeatherReport(
+        city=str(place.get("name") or city),
+        latitude=float(place["latitude"]),
+        longitude=float(place["longitude"]),
+        temperature=_as_float(current.get("temperature_2m")),
+        apparent=_as_float(current.get("apparent_temperature")),
+        humidity=_as_float(current.get("relative_humidity_2m")),
+        wind=_as_float(current.get("wind_speed_10m")),
+        code=code,
+        condition=_condition(code),
+        icon=_icon(code),
+        hourly=tuple(hourly),
+        daily=tuple(days),
+        fetched_at=now,
     )
+    _WEATHER_CACHE[city.casefold()] = (now, report)
+    return report
+
+
+def get_weather(city: str) -> str:
+    """Text form kept for the command/tool layer."""
+    report = get_weather_report(city)
+    parts = [
+        f"Сейчас в {report.city}: {report.condition}, {_format_temp(report.temperature)}.",
+        f"Ощущается как {_format_temp(report.apparent)}, "
+        f"ветер {report.wind if report.wind is not None else '—'} км/ч, "
+        f"влажность {report.humidity if report.humidity is not None else '—'}%.",
+    ]
+    if report.hourly:
+        hours = ", ".join(f"{moment} {_format_temp(value)}" for moment, value in report.hourly[:4])
+        parts.append(f"Ближайшие часы: {hours}.")
+    if report.daily:
+        parts.append("Прогноз на 5 дней: " + report.forecast_line() + ".")
+    return " ".join(parts)
 
 
 def get_exchange_rate(base: str, quote_currency: str) -> str:
@@ -160,7 +330,7 @@ def register_public_info_tools(registry: ToolRegistry) -> None:
     ))
     registry.register(ToolSpec(
         name="get_weather",
-        description="Получить текущую погоду в указанном городе.",
+        description="Получить текущую погоду, ближайшие часы и прогноз на 5 дней (Open-Meteo).",
         parameters={
             "type": "object",
             "properties": {"city": {"type": "string", "minLength": 2, "maxLength": 100}},

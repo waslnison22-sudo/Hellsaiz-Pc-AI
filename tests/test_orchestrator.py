@@ -77,7 +77,7 @@ def test_orchestrator_validates_the_entire_batch_before_execution():
 
     result = assistant.reply("выполни действия")
 
-    assert "некорректным JSON" in result
+    assert "не являются корректным JSON" in result
     assert calls == []
 
 

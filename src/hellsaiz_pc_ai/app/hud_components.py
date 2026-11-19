@@ -4,6 +4,7 @@ All widgets stay presentation-only: no business logic, no threads, no I/O.
 """
 
 from __future__ import annotations
+import logging
 
 from PySide6.QtCore import (
     Property,
@@ -72,13 +73,13 @@ class ToggleSwitch(QAbstractButton):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         checked = self.isChecked()
-        track = QColor("rgba(109, 93, 246, 235)") if checked else QColor("rgba(215, 228, 245, 30)")
-        border = QColor("rgba(153, 102, 255, 150)") if checked else QColor("rgba(215, 228, 245, 60)")
+        track = QColor("#E8C29E") if checked else QColor("#1F1F1D")
+        border = QColor("#D9A87C") if checked else QColor("rgba(255, 255, 255, 40)")
         painter.setPen(QPen(border, 1))
         painter.setBrush(track)
         painter.drawRoundedRect(1, 1, 40, 22, 11, 11)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor("#ffffff") if checked else QColor("#aab3c0"))
+        painter.setBrush(QColor("#1A140F") if checked else QColor("#A6A29C"))
         painter.drawEllipse(int(self._knob_position), 4, 16, 16)
 
     def get_knob_position(self) -> float:
@@ -119,6 +120,7 @@ class EmptyState(QFrame):
     ) -> None:
         super().__init__(parent)
         self.setObjectName("emptyState")
+        logging.info("EmptyState ctor: entered.")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(22, 16, 22, 16)
         layout.setSpacing(4)
@@ -127,6 +129,7 @@ class EmptyState(QFrame):
         glyph_label.setObjectName("emptyStateGlyph")
         glyph_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(glyph_label)
+        logging.info("EmptyState ctor: glyph label added.")
         title_label = QLabel(title)
         title_label.setObjectName("emptyStateTitle")
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -141,6 +144,7 @@ class EmptyState(QFrame):
             self.action_button = QPushButton(action_text)
             self.action_button.setObjectName("primaryButton")
             layout.addWidget(self.action_button, 0, Qt.AlignmentFlag.AlignCenter)
+        logging.info("EmptyState ctor: done.")
 
 
 class PageFader(QStackedWidget):

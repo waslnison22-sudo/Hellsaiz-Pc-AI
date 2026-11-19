@@ -58,10 +58,10 @@ class SkillsPage(QWidget):
 
         greeting = QLabel("Что я умею")
         greeting.setObjectName("dashboardGreeting")
-        greeting.setStyleSheet("font-size:26px; font-weight:700; color:#f4f7fb;")
+        greeting.setStyleSheet("font-size:26px; font-weight:700; color:#F2EFEA;")
         layout.addWidget(greeting)
         note = QLabel("Полный список возможностей — без воды и лишних слов.")
-        note.setStyleSheet("color:#aab3c0; font-size:13px;")
+        note.setStyleSheet("color:#A6A29C; font-size:13px;")
         layout.addWidget(note)
 
         scroll = QScrollArea()

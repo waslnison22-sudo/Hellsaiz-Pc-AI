@@ -12,6 +12,7 @@ def test_runtime_works_without_any_ai_provider(tmp_path: Path):
         allow_remote_llm=False,
         database_path=tmp_path / "history.sqlite3",
         workflows_path=tmp_path / "workflows",
+        allowed_apps={"notepad": ("notepad.exe",)},
     )
 
     (

@@ -91,7 +91,7 @@ def detect_v2raytun_running() -> bool:
     try:
         import psutil
     except ImportError:
-        raise NetworkDependencyError("Для проверки процессов нужен пакет psutil.")
+        raise NetworkDependencyError("Для проверки процессов нужен пакет psutil.") from None
     for process in psutil.process_iter(["name"]):
         try:
             name = str(process.info.get("name") or "").casefold()

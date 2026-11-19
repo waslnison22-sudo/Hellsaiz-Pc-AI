@@ -28,7 +28,8 @@ def _sounddevice():
         import sounddevice as sd
     except ImportError as exc:
         raise AudioCaptureError(
-            'Microphone support is not installed. Run: pip install -e ".[voice]"'
+            "Микрофон недоступен: не установлены аудио-компоненты. "
+            "Нажми «Проверить голос» в настройках — там подскажем, что сделать."
         ) from exc
     return sd
 

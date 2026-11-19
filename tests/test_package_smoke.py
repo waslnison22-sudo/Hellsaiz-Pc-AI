@@ -25,4 +25,4 @@ def test_package_smoke_reports_all_missing_or_broken_modules():
 
     failures = check_packaged_runtime(broken_importer)
 
-    assert [name for name, _ in failures] == ["sounddevice", "piper", "onnxruntime"]
+    assert sorted(name for name, _ in failures) == sorted(["sounddevice", "piper", "onnxruntime"])

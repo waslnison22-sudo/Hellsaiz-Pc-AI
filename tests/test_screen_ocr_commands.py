@@ -1,4 +1,4 @@
-from hellsaiz_pc_ai.core.commands import CommandRouter
+from hellsaiz_pc_ai.core.commands import ACKNOWLEDGMENTS, CommandRouter
 from hellsaiz_pc_ai.core.models import RiskLevel, ToolResult
 from hellsaiz_pc_ai.core.registry import ToolRegistry, ToolSpec
 
@@ -15,6 +15,8 @@ def test_screen_ocr_phrases_route_to_explicit_local_tool():
     ))
     router = CommandRouter(registry, {}, {}, {})
 
-    assert router.route("прочитай текст на экране") == "Готово. Recognized text"
-    assert router.route("что написано на экране") == "Готово. Recognized text"
+    for _phrase in ("прочитай текст на экране", "что написано на экране"):
+        reply = router.route(_phrase)
+        assert any(reply.startswith(ack) for ack in ACKNOWLEDGMENTS)
+        assert reply.endswith("Recognized text")
     assert calls == ["ocr", "ocr"]

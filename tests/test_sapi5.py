@@ -45,7 +45,7 @@ class FakeSapiEngine:
         self.stopped = True
 
 
-def test_sapi5_lists_installed_voices_and_stops_engine(monkeypatch):
+def test_sapi5_lists_installed_voices(monkeypatch):
     voices = [
         FakeSapiVoice("voice-id-1", "RHVoice Irina", ["ru-RU"]),
         FakeSapiVoice("voice-id-2", "Microsoft David", ["en-US"]),
@@ -62,7 +62,8 @@ def test_sapi5_lists_installed_voices_and_stops_engine(monkeypatch):
         ("voice-id-1", "RHVoice Irina"),
         ("voice-id-2", "Microsoft David"),
     ]
-    assert engine.stopped is True
+    # Кэш движка (CO-4): движок остаётся живым и переиспользуется.
+    assert engine.stopped is False
 
 
 def test_sapi5_selects_voice_by_id_and_applies_rate_and_volume(monkeypatch):
@@ -80,7 +81,8 @@ def test_sapi5_selects_voice_by_id_and_applies_rate_and_volume(monkeypatch):
         "volume": 0.65,
     }
     assert engine.spoken == ["Проверка."]
-    assert engine.stopped is True
+    # Кэш движка (CO-4): движок остаётся живым для повторных фраз.
+    assert engine.stopped is False
 
 
 def test_sapi5_reports_missing_selected_voice(monkeypatch):
@@ -93,7 +95,7 @@ def test_sapi5_reports_missing_selected_voice(monkeypatch):
     with pytest.raises(RuntimeError, match="не найден"):
         Sapi5Synthesizer("missing voice").speak("Проверка")
 
-    assert engine.stopped is True
+    assert engine.stopped is False
 
 
 def test_sapi5_rejects_non_windows_voice_discovery(monkeypatch):

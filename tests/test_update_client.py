@@ -33,6 +33,12 @@ def test_latest_release_without_signed_manifest_is_reported_as_incomplete(monkey
 
     monkeypatch.setattr(urllib.request, "urlopen", lambda *_args, **_kwargs: FakeResponse())
 
-    with pytest.raises(UpdateCheckError, match=r"v0\.1\.4.*без подписанного update-манифеста"):
+    class FakeOpener:
+        def open(self, *_a, **_k):
+            return FakeResponse()
+
+    monkeypatch.setattr(urllib.request, "build_opener", lambda *_a, **_k: FakeOpener())
+
+    with pytest.raises(UpdateCheckError, match="Релиз не содержит подписанный update-манифест"):
         check_latest_release("0.1.3", access_token="test-token")
 

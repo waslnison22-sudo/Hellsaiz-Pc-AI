@@ -230,13 +230,29 @@ class SapiVoiceListWorker(QThread):
         self.volume = volume
 
     def run(self) -> None:
+        com_module = None
         try:
+            import pythoncom as com_module
+        except ImportError:
+            com_module = None
+        try:
+            if com_module is not None:
+                com_module.CoInitialize()
+            logging.info(
+                "SapiVoiceListWorker: run() entered; thread COM initialized."
+            )
             from hellsaiz_pc_ai.speech.sapi5 import Sapi5Synthesizer
-
             voices = Sapi5Synthesizer("", self.rate, self.volume).list_voices()
+            logging.info(
+                "SapiVoiceListWorker: enumerated %d SAPI5 voices.", len(voices)
+            )
             self.completed.emit(voices)
         except Exception as exc:
+            logging.info("SapiVoiceListWorker: voice enumeration failed: %s", exc)
             self.failed.emit(str(exc))
+        finally:
+            if com_module is not None:
+                com_module.CoUninitialize()
 
 
 class SystemHealthWorker(QThread):

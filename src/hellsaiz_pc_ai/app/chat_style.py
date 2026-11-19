@@ -1,5 +1,7 @@
-"""Chat bubble rendering for the transcript QTextEdit.
+"""Legacy HTML bubble rendering for the old QTextEdit transcript.
 
+Kept for compatibility (tests and any HTML export); the live chat now renders
+widgets from :mod:`hellsaiz_pc_ai.app.chat_page` (MessageBubble).
 Pure data: no Qt imports here so tests can run without a QApplication.
 """
 
@@ -26,19 +28,19 @@ def chat_bubble_html(role: str, text: str) -> str:
     safe = _escape(text).replace("\n", "<br>")
     if role == "assistant":
         return (
-            '<div style="border-left:3px solid #6d5df6; background:rgba(12,16,25,140);'
+            '<div style="border-left:3px solid #E8C29E; background:#171716;'
             ' padding:8px 12px; border-radius:10px; margin-top:6px;">'
-            f'<span style="color:#9966ff;"><b>{ASSISTANT_NAME}:</b></span> {safe}</div>'
+            f'<span style="color:#E8C29E;"><b>{ASSISTANT_NAME}:</b></span> {safe}</div>'
         )
     if role == "user":
         return (
-            '<div style="background:rgba(215,228,245,22); border:1px solid rgba(215,228,245,60);'
+            '<div style="background:#171716; border:1px solid rgba(255,255,255,15);'
             ' padding:8px 12px; border-radius:10px; margin-top:6px;">'
-            '<span style="color:#8e98a6;"><b>Вы:</b></span> ' f"{safe}</div>"
+            '<span style="color:#A6A29C;"><b>Вы:</b></span> ' f"{safe}</div>"
         )
     if role == "recognized":
         return (
-            '<p style="color:#8a93a1; font-size:11px; margin-top:4px;">'
+            '<p style="color:#A6A29C; font-size:11px; margin-top:4px;">'
             f"<b>Распознано:</b> {safe}</p>"
         )
     return f"<p>{safe}</p>"

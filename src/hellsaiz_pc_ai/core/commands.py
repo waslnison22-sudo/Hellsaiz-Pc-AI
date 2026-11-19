@@ -82,7 +82,7 @@ def _evaluate_expression(expr: str) -> str | None:
         current = values[0]
         pending: list[float] = []
         pending_ops: list[str] = []
-        for op, value in zip(operators, values[1:]):
+        for op, value in zip(operators, values[1:], strict=False):
             if op in {"*", "/"}:
                 current = apply(current, op, value)
             else:
@@ -91,7 +91,7 @@ def _evaluate_expression(expr: str) -> str | None:
                 current = value
         pending.append(current)
         total = pending[0]
-        for op, value in zip(pending_ops, pending[1:]):
+        for op, value in zip(pending_ops, pending[1:], strict=False):
             total = apply(total, op, value)
         result = total
     except ZeroDivisionError:

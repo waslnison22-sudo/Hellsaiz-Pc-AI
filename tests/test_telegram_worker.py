@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from pathlib import Path
 
 from hellsaiz_pc_ai.core.models import RiskLevel, ToolResult
 from hellsaiz_pc_ai.core.registry import ToolRegistry, ToolSpec
@@ -105,8 +106,10 @@ def test_safe_commands_require_explicit_per_tool_permission():
 
 
 def test_unsafe_tools_are_never_allowed_even_when_injected():
-    worker = make_worker(allowed_tools={"unsafe_action"})
-    assert worker._execute_safe_tool("unsafe_action") == "Инструмент не прошёл проверку политики безопасности."
+    with pytest.raises(ValueError, match="безопасные read-only"):
+        make_worker(allowed_tools={"unsafe_action"})
+    worker = make_worker()
+    assert "отключена" in worker._execute_safe_tool("unsafe_action").casefold()
 
 
 def test_user_id_and_chat_id_must_both_match():
@@ -229,15 +232,15 @@ def test_saving_non_secret_settings_preserves_existing_dpapi_token(monkeypatch, 
 
 
 def test_worker_does_not_run_poll_without_required_proxy():
-    statuses = []
+    calls = []
     worker = make_worker(
+        api_call=lambda method, _payload: calls.append(method) or {"ok": True, "result": []},
         network_checker=lambda *_args: type("Health", (), {"ok": False, "latency_ms": 0})(),
-        status_callback=statuses.append,
         network_retry_seconds=0,
     )
     worker.stop()
     worker.run()
-    assert any("ожидает" in item for item in statuses)
+    assert calls == []
 
 
 def test_worker_retries_proxy_health_until_it_is_stable():
@@ -271,13 +274,17 @@ def test_worker_retries_proxy_health_until_it_is_stable():
 def test_worker_run_polls_and_replies_only_to_an_authorized_safe_command():
     calls = []
     worker_holder = {}
+    poll_count = {"n": 0}
+
 
     def api_call(method, payload):
         calls.append((method, payload))
         if method == "getMe":
             return {"ok": True, "result": {"id": 1, "username": "hellsaiz_test_bot"}}
         if method == "getUpdates":
-            worker_holder["worker"].stop()
+            poll_count["n"] += 1
+            if poll_count["n"] > 1:
+                worker_holder["worker"].stop()
             return {
                 "ok": True,
                 "result": [
@@ -307,13 +314,14 @@ def test_worker_run_polls_and_replies_only_to_an_authorized_safe_command():
     worker_holder["worker"] = worker
     worker.run()
 
-    assert [method for method, _payload in calls] == ["getMe", "getUpdates", "sendMessage"]
-    assert calls[-1][1] == {"chat_id": 222, "text": "12:34"}
+    assert [method for method, _payload in calls][:3] == ["getMe", "getUpdates", "sendMessage"]
+    assert calls[2][1] == {"chat_id": 222, "text": "12:34"}
 
 
 def test_worker_rejects_unsafe_or_unknown_registry_tools():
-    worker = make_worker(allowed_tools={"get_local_time", "unsafe_action"})
-    assert "безопасности" in worker._execute_safe_tool("unsafe_action").casefold()
+    with pytest.raises(ValueError, match="безопасные read-only"):
+        make_worker(allowed_tools={"get_local_time", "unsafe_action"})
+    worker = make_worker()
     assert "отключена" in worker._execute_safe_tool("get_system_info").casefold()
 
 

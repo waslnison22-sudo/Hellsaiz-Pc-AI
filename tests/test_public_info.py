@@ -43,20 +43,99 @@ def test_currency_rate_uses_reference_rate_endpoint(monkeypatch):
     assert "не биржевая котировка" in result
 
 
-def test_weather_resolves_city_then_current_conditions(monkeypatch):
-    responses = iter([
-        {"results": [{"name": "Москва", "latitude": 55.75, "longitude": 37.61}]},
-        {"current": {
-            "temperature_2m": -2,
-            "apparent_temperature": -5,
-            "precipitation": 0,
+def _weather_payloads():
+    geocoding = {"results": [{"name": "Москва", "latitude": 55.75, "longitude": 37.61}]}
+    forecast = {
+        "current": {
+            "time": "2026-11-19T20:00",
+            "temperature_2m": -2.4,
+            "apparent_temperature": -5.1,
+            "relative_humidity_2m": 81,
             "weather_code": 3,
-            "wind_speed_10m": 4,
-        }},
-    ])
-    monkeypatch.setattr(public_info, "_get_json", lambda *args, **kwargs: next(responses))
+            "wind_speed_10m": 4.3,
+        },
+        "hourly": {
+            "time": ["2026-11-19T20:00", "2026-11-19T21:00", "2026-11-19T22:00"],
+            "temperature_2m": [-2.4, -2.9, -3.4],
+        },
+        "daily": {
+            "time": ["2026-11-19", "2026-11-20", "2026-11-21", "2026-11-22", "2026-11-23"],
+            "weather_code": [3, 61, 0, 71, 2],
+            "temperature_2m_max": [3.2, 4.4, 1.1, -0.5, 2.0],
+            "temperature_2m_min": [-1.4, 0.2, -2.1, -4.4, -3.0],
+        },
+    }
+    return geocoding, forecast
+
+
+def test_weather_report_resolves_city_with_open_meteo(monkeypatch):
+    public_info._WEATHER_CACHE.clear()
+    geocoding, forecast = _weather_payloads()
+    responses = iter([geocoding, forecast])
+    calls: list[str] = []
+
+    def fake_get_json(url, timeout=12):
+        calls.append(url)
+        return next(responses)
+
+    monkeypatch.setattr(public_info, "_get_json", fake_get_json)
+
+    report = public_info.get_weather_report("Москва")
+
+    assert report.city == "Москва"
+    assert report.condition == "пасмурно"
+    assert report.code == 3
+    assert round(report.temperature) == -2
+    assert round(report.apparent) == -5
+    assert report.humidity == 81
+    assert len(report.hourly) == 2
+    assert report.hourly[0][0] == "21:00"
+    assert len(report.daily) == 5
+    assert report.daily[0].weekday == "Чт"
+    assert report.daily[1].condition == "небольшой дождь"
+    assert "Чт +3°" in report.forecast_line()
+    assert all("open-meteo.com" in url for url in calls)
+
+
+def test_weather_report_is_cached_for_ten_minutes(monkeypatch):
+    public_info._WEATHER_CACHE.clear()
+    geocoding, forecast = _weather_payloads()
+    calls: list[str] = []
+
+    def fake_get_json(url, timeout=12):
+        calls.append(url)
+        return geocoding if "geocoding" in url else forecast
+
+    monkeypatch.setattr(public_info, "_get_json", fake_get_json)
+
+    first = public_info.get_weather_report("Москва")
+    second = public_info.get_weather_report("Москва")
+
+    assert first is second
+    assert len(calls) == 2  # geocoding + forecast, no second network round trip
+
+
+def test_weather_text_mentions_hours_and_forecast(monkeypatch):
+    public_info._WEATHER_CACHE.clear()
+    geocoding, forecast = _weather_payloads()
+    monkeypatch.setattr(
+        public_info, "_get_json", lambda url, timeout=12: geocoding if "geocoding" in url else forecast
+    )
 
     result = public_info.get_weather("Москва")
 
-    assert "Москва" in result
     assert "пасмурно" in result
+    assert "Ближайшие часы" in result
+    assert "Прогноз на 5 дней" in result
+
+
+def test_weather_report_rejects_unknown_city(monkeypatch):
+    public_info._WEATHER_CACHE.clear()
+    monkeypatch.setattr(public_info, "_get_json", lambda *args, **kwargs: {"results": []})
+
+    try:
+        public_info.get_weather_report("Атлантида")
+    except ValueError as error:
+        assert "Не нашёл город" in str(error)
+    else:
+        raise AssertionError("expected ValueError for an unknown city")

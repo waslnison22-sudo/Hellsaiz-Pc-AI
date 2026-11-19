@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from typing import Any, Protocol
 
-from hellsaiz_pc_ai.core.models import ToolResult
 from hellsaiz_pc_ai.core.registry import ConfirmCallback, ToolRegistry
 
 

@@ -1,4 +1,4 @@
-from hellsaiz_pc_ai.core.commands import CommandRouter
+from hellsaiz_pc_ai.core.commands import ACKNOWLEDGMENTS, CommandRouter
 from hellsaiz_pc_ai.core.models import RiskLevel, ToolResult
 from hellsaiz_pc_ai.core.registry import ToolRegistry, ToolSpec
 
@@ -92,7 +92,8 @@ def test_active_window_phrases_map_to_registered_tools():
 
     for phrase, tool in expected.items():
         result = router.route(phrase)
-        assert result == f"Готово. {tool}"
+        assert any(result.startswith(ack) for ack in ACKNOWLEDGMENTS)
+        assert result.endswith(f"{tool}")
 
     assert [name for name, _ in called] == list(expected.values())
 
@@ -100,9 +101,15 @@ def test_active_window_phrases_map_to_registered_tools():
 def test_window_inventory_and_focus_phrases_extract_target():
     router, called = make_router()
 
-    assert router.route("покажи открытые окна") == "Готово. list_windows"
-    assert router.route("переключись на Steam") == "Готово. steam"
-    assert router.route("активируй окно браузер Google Chrome") == "Готово. браузер google chrome"
+    open_windows_reply = router.route("покажи открытые окна")
+    assert any(open_windows_reply.startswith(ack) for ack in ACKNOWLEDGMENTS)
+    assert open_windows_reply.endswith("list_windows")
+    steam_reply = router.route("переключись на Steam")
+    assert any(steam_reply.startswith(ack) for ack in ACKNOWLEDGMENTS)
+    assert steam_reply.endswith("steam")
+    focus_reply = router.route("активируй окно браузер Google Chrome")
+    assert any(focus_reply.startswith(ack) for ack in ACKNOWLEDGMENTS)
+    assert focus_reply.endswith("браузер google chrome")
 
     assert called == [
         ("list_windows", {}),

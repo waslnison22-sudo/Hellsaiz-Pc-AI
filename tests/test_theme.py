@@ -18,13 +18,25 @@ def test_theme_keeps_buttons_readable():
     assert "QLabel#dashboardCardValue" in stylesheet
 
 
-def test_dark_theme_uses_accent_glass_over_the_wallpaper():
+def test_dark_theme_uses_the_astra_palette():
     stylesheet = build_dark_stylesheet()
 
     assert "QFrame#sidebar" in stylesheet
-    assert "rgba(10, 13, 20, 168)" in stylesheet
-    assert "rgba(7, 10, 15, 122)" in stylesheet
+    assert "#0B0B0B" in stylesheet
+    assert "#171716" in stylesheet
     assert "QWidget#wallpaperDim" in stylesheet
-    assert "rgba(109, 93, 246" in stylesheet
+    assert "rgba(232, 194, 158" in stylesheet
+    assert "#E8C29E" in stylesheet
+    assert "#A6A29C" in stylesheet
     assert "QScrollBar::handle:vertical" in stylesheet
     assert "QLabel#statusError" in stylesheet
+
+
+def test_stage16_navigation_styles_are_present():
+    stylesheet = build_dark_stylesheet()
+
+    assert "QPushButton#navPill" in stylesheet
+    assert "QPushButton#navPill:checked" in stylesheet
+    assert "QFrame#drawerPanel" in stylesheet
+    assert "QListWidget#drawerNavigation" in stylesheet
+    assert "QPushButton#drawerScrim" in stylesheet
