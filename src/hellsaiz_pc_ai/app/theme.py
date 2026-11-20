@@ -12,11 +12,6 @@ QMainWindow, QWidget {
     color: #F2EFEA;
     font-family: "Segoe UI";
 }
-QFrame#sidebar {
-    background: #101010;
-    border: 0;
-    border-radius: 14px;
-}
 QFrame#contentFrame {
     background: transparent;
     border: 0;
@@ -43,40 +38,6 @@ QLabel#brandMark {
     border-radius: 12px;
     font-size: 23px;
     font-weight: 800;
-}
-QListWidget#mainNavigation {
-    background: transparent;
-    border: 1px solid transparent;
-    padding: 2px;
-    outline: 0;
-}
-QListWidget#mainNavigation::item {
-    color: #A6A29C;
-    padding: 11px 14px;
-    border-radius: 11px;
-    margin: 2px 0;
-}
-QListWidget#mainNavigation::item:hover {
-    background: rgba(232, 194, 158, 42);
-    color: #F2EFEA;
-}
-QListWidget#mainNavigation::item:selected {
-    background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
-        stop:0 #E8C29E, stop:1 #D9A87C);
-    color: #1A140F;
-    font-weight: 600;
-    border: 0;
-}
-QListWidget#mainNavigation::item:disabled {
-    background: transparent;
-    color: #A6A29C;
-    font-size: 10px;
-    font-weight: 600;
-    padding: 10px 14px 2px 14px;
-}
-QListWidget#mainNavigation:focus {
-    border: 1px solid rgba(232, 194, 158, 140);
-    border-radius: 13px;
 }
 QTextEdit, QLineEdit, QPlainTextEdit, QComboBox, QListWidget {
     background: #171716;
@@ -414,18 +375,6 @@ QPushButton#navPill:checked {
     background: #E8C29E;
     color: #1A140F;
 }
-QPushButton#hamburgerButton {
-    background: transparent;
-    border: 0;
-    border-radius: 12px;
-    color: #F2EFEA;
-    font-size: 17px;
-    padding: 0;
-    min-height: 0;
-}
-QPushButton#hamburgerButton:hover {
-    background: rgba(255, 255, 255, 12);
-}
 QPushButton#ghostButton {
     background: transparent;
     border: 0;
@@ -443,47 +392,6 @@ QLabel#topBarMeta {
     color: #A6A29C;
     font-size: 12px;
     padding: 0 4px 0 8px;
-}
-QPushButton#drawerScrim {
-    background: rgba(0, 0, 0, 130);
-    border: 0;
-    border-radius: 0;
-}
-QFrame#drawerPanel {
-    background: #141413;
-    border: 0;
-    border-right: 1px solid rgba(255, 255, 255, 10);
-    border-radius: 0;
-}
-QLabel#drawerTitle {
-    color: #F2EFEA;
-    font-size: 14px;
-    font-weight: 650;
-}
-QLabel#drawerFooter {
-    color: #A6A29C;
-    font-size: 11px;
-}
-QListWidget#drawerNavigation {
-    background: transparent;
-    border: 0;
-    color: #A6A29C;
-    padding: 2px;
-}
-QListWidget#drawerNavigation::item {
-    color: #A6A29C;
-    padding: 10px 12px;
-    border-radius: 10px;
-    margin: 1px 0;
-}
-QListWidget#drawerNavigation::item:hover {
-    background: rgba(255, 255, 255, 12);
-    color: #F2EFEA;
-}
-QListWidget#drawerNavigation::item:selected {
-    background: #E8C29E;
-    color: #1A140F;
-    font-weight: 600;
 }
 
 QLabel#weatherTemperature {

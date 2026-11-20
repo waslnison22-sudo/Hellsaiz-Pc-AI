@@ -5,7 +5,7 @@ def test_dark_theme_has_visible_keyboard_focus_states():
     stylesheet = build_dark_stylesheet()
 
     assert "QPushButton:focus" in stylesheet
-    assert "QListWidget#mainNavigation:focus" in stylesheet
+    assert "QTabBar::tab:selected" in stylesheet
     assert "QLineEdit:focus" in stylesheet
 
 
@@ -21,7 +21,6 @@ def test_theme_keeps_buttons_readable():
 def test_dark_theme_uses_the_astra_palette():
     stylesheet = build_dark_stylesheet()
 
-    assert "QFrame#sidebar" in stylesheet
     assert "#0B0B0B" in stylesheet
     assert "#171716" in stylesheet
     assert "QWidget#wallpaperDim" in stylesheet
@@ -32,11 +31,10 @@ def test_dark_theme_uses_the_astra_palette():
     assert "QLabel#statusError" in stylesheet
 
 
-def test_stage16_navigation_styles_are_present():
+def test_top_bar_navigation_styles_are_present():
     stylesheet = build_dark_stylesheet()
 
     assert "QPushButton#navPill" in stylesheet
     assert "QPushButton#navPill:checked" in stylesheet
-    assert "QFrame#drawerPanel" in stylesheet
-    assert "QListWidget#drawerNavigation" in stylesheet
-    assert "QPushButton#drawerScrim" in stylesheet
+    assert "QWidget#topBar" in stylesheet
+    assert "QPushButton#ghostButton" in stylesheet

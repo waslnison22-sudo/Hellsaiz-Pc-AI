@@ -26,7 +26,6 @@ def test_theme_styles_new_wave3_components():
     assert "QLabel#privacyNote" in stylesheet
     assert "QPushButton#chipButton" in stylesheet
     assert "QFrame#emptyState" in stylesheet
-    assert "QListWidget#mainNavigation::item:disabled" in stylesheet
     assert "QTabBar::tab:!selected" in stylesheet
 
 
@@ -38,5 +37,4 @@ def test_theme_keeps_existing_contract():
     assert "QFrame#dashboardCard" in stylesheet
     assert "QLabel#dashboardCardValue" in stylesheet
     assert "QPushButton:focus" in stylesheet
-    assert "QListWidget#mainNavigation:focus" in stylesheet
     assert "QLineEdit:focus" in stylesheet

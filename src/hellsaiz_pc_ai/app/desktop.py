@@ -269,7 +269,6 @@ def main() -> int:
     try:
         from PySide6.QtCore import (
             QObject,
-            QPoint,
             QEasingCurve,
             QEvent,
             QPropertyAnimation,
@@ -285,11 +284,9 @@ def main() -> int:
             QDesktopServices,
             QIcon,
             QImageReader,
-            QKeySequence,
             QMovie,
             QPainter,
             QPixmap,
-            QShortcut,
         )
         from PySide6.QtWidgets import (
             QApplication,
@@ -3373,14 +3370,6 @@ def main() -> int:
     top_bar_layout.setContentsMargins(0, 0, 0, 0)
     top_bar_layout.setSpacing(8)
 
-    hamburger_button = QPushButton("\u2630")
-    hamburger_button.setObjectName("hamburgerButton")
-    hamburger_button.setToolTip("Меню разделов")
-    hamburger_button.setAccessibleName("Меню разделов")
-    hamburger_button.setCursor(Qt.CursorShape.PointingHandCursor)
-    hamburger_button.setFixedSize(38, 38)
-    top_bar_layout.addWidget(hamburger_button)
-
     brand_mark = QLabel("H")
     brand_mark.setObjectName("brandMark")
     brand_mark.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -3443,50 +3432,6 @@ def main() -> int:
     root_layout.addWidget(shell)
     root_layout.setCurrentIndex(1)
 
-    scrim = QPushButton(root)
-    scrim.setObjectName("drawerScrim")
-    scrim.setFlat(True)
-    scrim.setCursor(Qt.CursorShape.ArrowCursor)
-    scrim.hide()
-
-    drawer = QFrame(root)
-    drawer.setObjectName("drawerPanel")
-    drawer.setFixedWidth(248)
-    drawer.hide()
-    drawer_layout = QVBoxLayout(drawer)
-    drawer_layout.setContentsMargins(16, 18, 16, 16)
-    drawer_layout.setSpacing(12)
-    drawer_brand_row = QHBoxLayout()
-    drawer_brand_row.setSpacing(10)
-    drawer_brand = QLabel("H")
-    drawer_brand.setObjectName("brandMark")
-    drawer_brand.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    drawer_brand.setFixedSize(36, 36)
-    drawer_title = QLabel("Hellsaiz PC AI")
-    drawer_title.setObjectName("drawerTitle")
-    drawer_brand_row.addWidget(drawer_brand)
-    drawer_brand_row.addWidget(drawer_title, 1)
-    drawer_layout.addLayout(drawer_brand_row)
-
-    drawer_navigation = QListWidget()
-    drawer_navigation.setObjectName("drawerNavigation")
-    drawer_navigation.setAccessibleName("Разделы приложения")
-    for drawer_title_text in page_titles:
-        drawer_navigation.addItem(QListWidgetItem(drawer_title_text))
-    drawer_layout.addWidget(drawer_navigation, 1)
-
-    drawer_footer = QLabel(f"Версия {current_app_version}")
-    drawer_footer.setObjectName("drawerFooter")
-    drawer_layout.addWidget(drawer_footer)
-
-    drawer_state = {"open": False}
-
-    def layout_overlay() -> None:
-        area = root.rect()
-        scrim.setGeometry(area)
-        drawer.setFixedHeight(area.height())
-        drawer.move(0 if drawer_state["open"] else -drawer.width(), 0)
-
     def show_page(name: str) -> None:
         index = title_to_index.get(name)
         if index is None:
@@ -3498,74 +3443,8 @@ def main() -> int:
         else:
             for other_pill in pill_buttons.values():
                 other_pill.setChecked(False)
-        matches = drawer_navigation.findItems(name, Qt.MatchFlag.MatchExactly)
-        if matches:
-            drawer_navigation.setCurrentItem(matches[0])
-        close_drawer()
-
-    drawer_animation = QPropertyAnimation(drawer, b"pos", window)
-    drawer_animation.setDuration(200)
-    drawer_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
-
-    def on_drawer_animation_finished() -> None:
-        if not drawer_state["open"]:
-            drawer.hide()
-
-    drawer_animation.finished.connect(on_drawer_animation_finished)
-
-    def open_drawer() -> None:
-        layout_overlay()
-        drawer_state["open"] = True
-        scrim.show()
-        scrim.raise_()
-        drawer.show()
-        drawer.raise_()
-        drawer_animation.stop()
-        drawer_animation.setStartValue(QPoint(-drawer.width(), 0))
-        drawer_animation.setEndValue(QPoint(0, 0))
-        drawer_animation.start()
-
-    def close_drawer() -> None:
-        if not drawer_state["open"]:
-            return
-        drawer_state["open"] = False
-        scrim.hide()
-        drawer_animation.stop()
-        drawer_animation.setStartValue(drawer.pos())
-        drawer_animation.setEndValue(QPoint(-drawer.width(), 0))
-        drawer_animation.start()
-
-    def toggle_drawer() -> None:
-        if drawer_state["open"]:
-            close_drawer()
-        else:
-            open_drawer()
-
-    def on_drawer_row_changed(row: int) -> None:
-        if 0 <= row < len(page_titles):
-            show_page(page_titles[row])
-
-    class OverlayEvents(QObject):
-        """Keeps the drawer and scrim glued to the window and closes on Esc."""
-
-        def eventFilter(self, watched: Any, event: Any) -> bool:  # noqa: N802 (Qt naming)
-            if event.type() == QEvent.Type.Resize:
-                layout_overlay()
-            elif event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Escape:
-                close_drawer()
-            return False
-
-    overlay_events = OverlayEvents(window)
-    window.installEventFilter(overlay_events)
-    overlay_shortcut = QShortcut(QKeySequence("Escape"), window)
-    overlay_shortcut.activated.connect(close_drawer)
-
-    hamburger_button.clicked.connect(toggle_drawer)
-    scrim.clicked.connect(close_drawer)
-    drawer_navigation.currentRowChanged.connect(on_drawer_row_changed)
 
     window.setCentralWidget(root)
-    layout_overlay()
     show_page("Главная" if "Главная" in title_to_index else page_titles[0])
 
     def scale_wallpaper(pixmap: QPixmap, mode: str) -> QPixmap:
