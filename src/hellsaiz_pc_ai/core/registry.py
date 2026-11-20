@@ -96,7 +96,7 @@ class ToolRegistry:
             predicate = type_checks.get(expected)
             if predicate is None:
                 raise ValueError(f"{path} uses unsupported schema type '{expected}'.")
-            if predicate(value) is not None and not predicate(value):
+            if not predicate(value):
                 raise ValueError(f"{path} must be {expected}.")
 
         if "enum" in schema and value not in schema["enum"]:
@@ -142,6 +142,8 @@ class ToolRegistry:
         if isinstance(value, list):
             if len(value) < schema.get("minItems", 0):
                 raise ValueError(f"{path} has too few items.")
+            if len(value) > schema.get("maxItems", float("inf")):
+                raise ValueError(f"{path} has too many items.")
             item_schema = schema.get("items")
             if item_schema is not None:
                 for index, item in enumerate(value):
