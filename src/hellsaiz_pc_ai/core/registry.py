@@ -96,9 +96,7 @@ class ToolRegistry:
             predicate = type_checks.get(expected)
             if predicate is None:
                 raise ValueError(f"{path} uses unsupported schema type '{expected}'.")
-            if predicate(value):
-                pass
-            else:
+            if not predicate(value):
                 raise ValueError(f"{path} must be {expected}.")
 
         if "enum" in schema and value not in schema["enum"]:
