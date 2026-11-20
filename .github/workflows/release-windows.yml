@@ -25,11 +25,11 @@ jobs:
         shell: pwsh
         run: |
           if ($env:GITHUB_REF -eq "refs/heads/dev/bootstrap") {
-            $tag = "v0.1.8"
+            $tag = "v0.1.9"
           } else {
             $tag = $env:GITHUB_REF_NAME
           }
-          if ($tag -ne "v0.1.8") {
+          if ($tag -ne "v0.1.9") {
             throw "This workflow is configured for the v0.1.9 release only."
           }
           $version = $tag.TrimStart("v")
