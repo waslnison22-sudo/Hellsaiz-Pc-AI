@@ -7,7 +7,7 @@ on:
     tags:
       - "v*"
     paths:
-      - ".release-v0.1.8"
+      - ".release-v0.1.9"
 
 permissions:
   contents: write
@@ -30,7 +30,7 @@ jobs:
             $tag = $env:GITHUB_REF_NAME
           }
           if ($tag -ne "v0.1.8") {
-            throw "This workflow is configured for the v0.1.8 release only."
+            throw "This workflow is configured for the v0.1.9 release only."
           }
           $version = $tag.TrimStart("v")
           "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
