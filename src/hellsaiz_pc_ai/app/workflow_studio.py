@@ -675,6 +675,7 @@ class WorkflowStudioPage(QWidget):
         self.scenario_list = QListWidget()
         self.scenario_list.setAccessibleName("Сохранённые сценарии")
         self.scenario_list.setToolTip("Выбери сценарий, чтобы посмотреть или изменить его.")
+        self.scenario_list.setWordWrap(True)
         library_layout.addWidget(self.scenario_list, 1)
         self.delete_button = QPushButton("Удалить выбранный")
         library_layout.addWidget(self.delete_button)
@@ -1279,6 +1280,7 @@ class WorkflowStudioPage(QWidget):
             self.status_label.setText(f"Не удалось прочитать библиотеку: {exc}")
             return
         target_row = -1
+        shown = 0
         for workflow_id, graph in entries:
             trigger_text = describe_trigger(graph)
             visible_text = f"{graph.name}\n{trigger_text}"
@@ -1287,13 +1289,17 @@ class WorkflowStudioPage(QWidget):
             item = QListWidgetItem(visible_text)
             item.setData(Qt.ItemDataRole.UserRole, workflow_id)
             self.scenario_list.addItem(item)
+            shown += 1
             if workflow_id == selected_id:
                 target_row = self.scenario_list.count() - 1
         self.scenario_list.blockSignals(False)
         if target_row >= 0:
             self.scenario_list.setCurrentRow(target_row)
-        if not entries:
-            self.status_label.setText("Пока нет сценариев. Создай первый или выбери готовый шаблон.")
+        if shown == 0:
+            if query:
+                self.status_label.setText("Ничего не найдено по запросу.")
+            else:
+                self.status_label.setText("Пока нет сценариев. Создай первый или выбери готовый шаблон.")
 
     def _confirm_discard_changes(self) -> bool:
         if not self._dirty:
