@@ -23,7 +23,7 @@ QWidget#wallpaperDim {
 }
 QFrame#wallpaperPreview, QFrame#profilePanel {
     background: #171716;
-    border: 1px solid rgba(255,255,255,15);
+    border: 0;
     border-radius: 14px;
 }
 QFrame#softDivider {
@@ -111,7 +111,7 @@ QPushButton#sendButton:disabled, QPushButton#primaryButton:disabled {
 QPushButton#profileButton, QPushButton#voiceButton {
     background: #171716;
     color: #F2EFEA;
-    border: 1px solid rgba(255,255,255,15);
+    border: 0;
 }
 QLabel#statusError {
     color: #ff7b72;
@@ -231,7 +231,7 @@ QTabBar::tab:selected {
     background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
         stop:0 #E8C29E, stop:1 #D9A87C);
     color: #1A140F;
-    border: 0;
+    border: 1px solid rgba(232, 194, 158, 130);
 }
 QTabWidget::pane > QWidget {
     background: transparent;
@@ -239,7 +239,6 @@ QTabWidget::pane > QWidget {
 QFrame#dashboardCard {
     background: #171716;
     border: 0;
-    border-bottom: 1px solid rgba(255,255,255,9);
     border-radius: 14px;
 }
 QLabel#dashboardCardTitle {
@@ -300,7 +299,6 @@ QLabel#statChipErr {
 QFrame#skillCard {
     background: #171716;
     border: 0;
-    border-bottom: 1px solid rgba(255,255,255,9);
     border-radius: 14px;
 }
 QLabel#skillCardTitle {
