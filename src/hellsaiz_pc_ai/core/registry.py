@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import math
 import re
 from collections.abc import Callable
@@ -13,6 +14,12 @@ ConfirmCallback = Callable[["ToolSpec", dict[str, Any]], bool]
 MAX_ARGUMENT_DEPTH = 16
 MAX_COLLECTION_ITEMS = 1024
 MAX_ARGUMENT_STRING_LENGTH = 100_000
+
+# urllib/socket failures surface as OSError subclasses; HTTP-level
+# protocols are matched by name so the user never sees raw class names.
+_NETWORK_TOOL_ERROR_NAMES = frozenset(
+    {"URLError", "HTTPError", "HTTPException", "SSLError", "TimeoutError"}
+)
 
 
 @dataclass(frozen=True)
@@ -89,7 +96,9 @@ class ToolRegistry:
             predicate = type_checks.get(expected)
             if predicate is None:
                 raise ValueError(f"{path} uses unsupported schema type '{expected}'.")
-            if not predicate(value):
+            if predicate(value):
+                pass
+            else:
                 raise ValueError(f"{path} must be {expected}.")
 
         if "enum" in schema and value not in schema["enum"]:
@@ -168,4 +177,9 @@ class ToolRegistry:
         try:
             return spec.handler(arguments)
         except Exception as exc:
-            return ToolResult(False, f"Ошибка инструмента ({type(exc).__name__}): {exc}")
+            logging.exception("Tool '%s' crashed", name)
+            if isinstance(exc, OSError) or type(exc).__name__ in _NETWORK_TOOL_ERROR_NAMES:
+                message = "Не получилось связаться с сервисом — проверь интернет и попробуй позже."
+            else:
+                message = "Не получилось выполнить действие — попробуй ещё раз."
+            return ToolResult(False, message)

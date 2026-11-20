@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 
 from hellsaiz_pc_ai.tools.public_info import WeatherReport, get_weather_report
 
+from hellsaiz_pc_ai.app.ui_icons import refresh_icon
 from hellsaiz_pc_ai.app.dashboard_texts import (
     greeting_for_hour,
     greeting_note,
@@ -147,7 +148,8 @@ class DashboardPage(QWidget):
         city_row.addWidget(apply_city_button)
         weather_card.layout().addLayout(city_row)
 
-        refresh_weather_button = QPushButton("↻")
+        refresh_weather_button = QPushButton()
+        refresh_weather_button.setIcon(refresh_icon())
         refresh_weather_button.setObjectName("cardIconButton")
         refresh_weather_button.setToolTip("Запросить погоду ещё раз")
         refresh_weather_button.setCursor(Qt.CursorShape.PointingHandCursor)

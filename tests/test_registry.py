@@ -164,3 +164,42 @@ def test_validate_arguments_does_not_invoke_tool_handler():
     assert validation.ok
     assert called is False
 
+
+def test_tool_crash_returns_friendly_message_without_class_names():
+    registry = ToolRegistry()
+
+    def boom(_args):
+        raise RuntimeError("kaboom: raw detail")
+
+    registry.register(ToolSpec(
+        "perform_action", "test",
+        {"type": "object", "properties": {}, "additionalProperties": False},
+        RiskLevel.SAFE, boom,
+    ))
+
+    result = registry.execute("perform_action", {})
+
+    assert not result.ok
+    assert "RuntimeError" not in result.output
+    assert "kaboom" not in result.output
+    assert result.output.strip()
+
+
+def test_network_crash_yields_offline_hint():
+    from urllib.error import URLError
+
+    registry = ToolRegistry()
+
+    def unreachable(_args):
+        raise URLError("Remote end closed connection without response")
+
+    registry.register(ToolSpec(
+        "perform_action", "test",
+        {"type": "object", "properties": {}, "additionalProperties": False},
+        RiskLevel.SAFE, unreachable,
+    ))
+
+    result = registry.execute("perform_action", {})
+
+    assert not result.ok
+    assert "интернет" in result.output
