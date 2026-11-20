@@ -86,9 +86,12 @@ def collect_speech_health(
                     'Пакет Vosk не установлен. Выполни: pip install -e ".[voice]"',
                 ))
             elif not Path(vosk_model_path).is_dir():
+                # Not installed is fixable in the UI, so it is a warning, not
+                # an error: the Diagnostics tab offers a download button.
                 checks.append(HealthItem(
-                    f"STT / {name}", severity,
-                    f"Папка модели не найдена: {vosk_model_path}",
+                    f"STT / {name}", "warning",
+                    f"Модель не загружена: {vosk_model_path}. Скачай её кнопкой "
+                    "«Скачать модель» в Диагностике.",
                 ))
             else:
                 checks.append(HealthItem("STT / Vosk", "ok", "Пакет и локальная модель найдены."))
@@ -121,7 +124,8 @@ def collect_speech_health(
             ))
         elif piper_model_path is None or not Path(piper_model_path).is_file():
             checks.append(HealthItem(
-                "TTS / Piper", "error", "Выбранная ONNX-модель Piper не найдена.",
+                "TTS / Piper", "warning",
+                "Модель не загружена — её можно скачать в «Настройках».",
             ))
         else:
             checks.append(HealthItem(

@@ -15,7 +15,10 @@ from hellsaiz_pc_ai.workflows.library import WorkflowLibrary
 
 
 def test_health_reports_missing_vosk_and_optional_fallback(tmp_path: Path, monkeypatch):
-    monkeypatch.setattr("hellsaiz_pc_ai.app.health._module_available", lambda name: name == "sounddevice")
+    monkeypatch.setattr(
+        "hellsaiz_pc_ai.app.health._module_available",
+        lambda name: name in {"sounddevice", "vosk"},
+    )
     monkeypatch.setattr(
         "hellsaiz_pc_ai.speech.capture.list_input_devices",
         lambda: [InputDevice(0, "USB Mic", "WASAPI", 1, 48000)],
@@ -33,9 +36,36 @@ def test_health_reports_missing_vosk_and_optional_fallback(tmp_path: Path, monke
 
     by_component = {item.component: item for item in checks}
     assert by_component["Микрофон"].level == "ok"
-    assert by_component["STT / vosk"].level == "error"
+    # A missing model is fixable in the UI (download button), so it warns
+    # instead of failing the whole diagnostics run.
+    assert by_component["STT / vosk"].level == "warning"
+    assert "не загружена" in by_component["STT / vosk"].message
     assert by_component["STT / Whisper.cpp"].level == "warning"
     assert by_component["TTS / SAPI5"].level == "warning"
+
+
+def test_health_flags_missing_vosk_package_as_error(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(
+        "hellsaiz_pc_ai.app.health._module_available", lambda name: name == "sounddevice"
+    )
+    monkeypatch.setattr(
+        "hellsaiz_pc_ai.speech.capture.list_input_devices",
+        lambda: [InputDevice(0, "USB Mic", "WASAPI", 1, 48000)],
+    )
+    checks = collect_speech_health(
+        stt_primary="vosk",
+        stt_fallback="none",
+        vosk_model_path=tmp_path / "missing-vosk",
+        whisper_executable=None,
+        whisper_model=None,
+        tts_engine="sapi5",
+        piper_model_path=None,
+        is_windows=True,
+    )
+
+    by_component = {item.component: item for item in checks}
+    # The package ships inside the build; its absence means a broken install.
+    assert by_component["STT / vosk"].level == "error"
 
 
 def test_health_reports_installed_local_engines(tmp_path: Path, monkeypatch):

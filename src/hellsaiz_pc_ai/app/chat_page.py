@@ -147,7 +147,7 @@ class TypingIndicator(QWidget):
         row.addStretch(1)
         self._dots = 0
         self._timer = QTimer(self)
-        self._timer.setInterval(400)
+        self._timer.setInterval(250)
         self._timer.timeout.connect(self._tick)
 
     def start(self) -> None:
@@ -189,6 +189,9 @@ class ChatTranscript(QScrollArea):
 
         self._typing = TypingIndicator()
         self._typing.hide()
+        self._typing_reveal = QTimer(self)
+        self._typing_reveal.setSingleShot(True)
+        self._typing_reveal.timeout.connect(self._reveal_typing)
         self._bubbles: list[MessageBubble] = []
         self._stick_to_bottom = True
         self.verticalScrollBar().rangeChanged.connect(self._on_range_changed)
@@ -225,15 +228,24 @@ class ChatTranscript(QScrollArea):
             bubble.deleteLater()
 
     def show_typing(self) -> None:
+        # Short answers should not flash the indicator: reveal it only after a
+        # small delay, and cancel the reveal when the reply arrives first.
+        self._typing_reveal.start(300)
+
+    def _reveal_typing(self) -> None:
         stick = self._is_at_bottom()
-        self._typing.show()
-        self._typing.start()
         if self._layout.indexOf(self._typing) == -1:
             self._layout.addWidget(self._typing)
+        else:
+            self._layout.removeWidget(self._typing)
+            self._layout.addWidget(self._typing)
+        self._typing.show()
+        self._typing.start()
         if stick:
             QTimer.singleShot(0, self.scroll_to_bottom)
 
     def hide_typing(self) -> None:
+        self._typing_reveal.stop()
         self._typing.stop()
         self._typing.hide()
 
@@ -366,6 +378,17 @@ class Toast(QFrame):
         action: Callable[[], None] | None = None,
         timeout_ms: int = 1600,
     ) -> None:
+        parent = self.parentWidget()
+        # Non-action toasts are pure notices: let clicks fall through to the UI
+        # underneath instead of swallowing them.
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, not action_text)
+        limit = max(220, int((parent.width() if parent is not None else 480) - 80))
+        self.setMaximumWidth(limit)
+        inner = max(120, limit - 28 - (110 if action_text else 0))
+        self.label.setMaximumWidth(inner)
+        if len(text) > 220:
+            text = text[:217].rstrip() + "…"
+        self.label.setWordWrap(True)
         self.label.setText(text)
         self._action_callback = action
         if action_text:

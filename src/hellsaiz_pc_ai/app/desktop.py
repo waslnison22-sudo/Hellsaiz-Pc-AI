@@ -45,6 +45,7 @@ from hellsaiz_pc_ai.tools.system import register_system_tools
 from hellsaiz_pc_ai.tools.public_info import register_public_info_tools
 from hellsaiz_pc_ai.app.wallpaper import WallpaperError, WallpaperStore
 from hellsaiz_pc_ai.app.chat_page import ChatInput, ChatTranscript, Toast
+from hellsaiz_pc_ai.app.ui_icons import mic_icon, send_icon, trash_icon
 from hellsaiz_pc_ai.app.theme import build_dark_stylesheet
 from hellsaiz_pc_ai.app.file_access import (
     FileAccessSettings,
@@ -707,7 +708,8 @@ def main() -> int:
     header.setStyleSheet("padding-bottom:5px;")
     header_row.addWidget(header)
     header_row.addStretch(1)
-    clear_button = QPushButton("\U0001f5d1")
+    clear_button = QPushButton()
+    clear_button.setIcon(trash_icon())
     clear_button.setObjectName("chatClearButton")
     clear_button.setToolTip("Очистить чат")
     clear_button.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -956,12 +958,14 @@ def main() -> int:
     profile_button = QPushButton("ИИ / Голос  ⌃")
     profile_button.setObjectName("profileButton")
     profile_button.setVisible(False)  # страница чата без переключателя: настройки TTS/STT живут в «Настройках»
-    voice_button = QPushButton("🎙")
+    voice_button = QPushButton()
+    voice_button.setIcon(mic_icon())
     voice_button.setObjectName("voiceButton")
     voice_button.setToolTip("Голосовой ввод")
     voice_button.setFixedSize(34, 34)
     voice_button.setCursor(Qt.CursorShape.PointingHandCursor)
-    send_button = QPushButton("➤")
+    send_button = QPushButton()
+    send_button.setIcon(send_icon())
     send_button.setObjectName("sendButton")
     send_button.setToolTip("Отправить")
     send_button.setFixedSize(34, 34)
@@ -3684,46 +3688,63 @@ def main() -> int:
         send_button.setEnabled(False)
         voice_button.setEnabled(False)
         input_box.setEnabled(False)
-        worker = Worker(
-            prompt,
-            voice_input,
-            speak_toggle.isChecked(),
-            workflow_trigger,
-            stt_profile=active_stt,
-            microphone_device=active_microphone["name"],
-            assistant_profile=profile_data,
-            voice_name=active_voice["name"],
-            tts_profile=active_tts,
-        )
-        workers.append(worker)
-        transcript.show_typing()
-        error_state = {"last": None}
+        try:
+            worker = Worker(
+                prompt,
+                voice_input,
+                speak_toggle.isChecked(),
+                workflow_trigger,
+                stt_profile=active_stt,
+                microphone_device=active_microphone["name"],
+                assistant_profile=profile_data,
+                voice_name=active_voice["name"],
+                tts_profile=active_tts,
+            )
+            workers.append(worker)
+            transcript.show_typing()
+            # Safety net: worker.finished normally clears the indicator, but a
+            # failed launch or a missed signal must not leave "typing" hanging.
+            QTimer.singleShot(30_000, transcript.hide_typing)
+            error_state = {"last": None}
 
-        def show_result(recognized: str, answer: str) -> None:
-            error_state["last"] = None
+            def show_result(recognized: str, answer: str) -> None:
+                error_state["last"] = None
+                transcript.hide_typing()
+                if voice_input:
+                    show_chat_message("meta", f"Распознано: {recognized}")
+                show_chat_message("assistant", answer)
+
+            worker.completed.connect(show_result)
+            worker.completed.connect(lambda *_: refresh_reminder_list())
+
+            def show_error(message: str) -> None:
+                if error_state["last"] == message:
+                    return
+                error_state["last"] = message
+                transcript.hide_typing()
+                show_chat_message("error", f"Ошибка: {message}")
+
+            worker.failed.connect(show_error)
+            worker.finished.connect(transcript.hide_typing)
+            worker.finished.connect(lambda: send_button.setEnabled(True))
+            worker.finished.connect(lambda: voice_button.setEnabled(True))
+            worker.finished.connect(lambda: input_box.setEnabled(True))
+            worker.finished.connect(
+                lambda: workers.remove(worker) if worker in workers else None
+            )
+            worker.finished.connect(lambda: QTimer.singleShot(0, dispatch_pending_automations))
+            worker.finished.connect(lambda: QTimer.singleShot(350, resume_wake_listener))
+            worker.start()
+        except Exception:
+            logging.exception("start_worker: failed to launch the chat worker")
             transcript.hide_typing()
-            if voice_input:
-                show_chat_message("meta", f"Распознано: {recognized}")
-            show_chat_message("assistant", answer)
-
-        worker.completed.connect(show_result)
-        worker.completed.connect(lambda *_: refresh_reminder_list())
-        def show_error(message: str) -> None:
-            if error_state["last"] == message:
-                return
-            error_state["last"] = message
-            transcript.hide_typing()
-            show_chat_message("error", f"Ошибка: {message}")
-
-        worker.failed.connect(show_error)
-        worker.finished.connect(transcript.hide_typing)
-        worker.finished.connect(lambda: send_button.setEnabled(True))
-        worker.finished.connect(lambda: voice_button.setEnabled(True))
-        worker.finished.connect(lambda: input_box.setEnabled(True))
-        worker.finished.connect(lambda: workers.remove(worker) if worker in workers else None)
-        worker.finished.connect(lambda: QTimer.singleShot(0, dispatch_pending_automations))
-        worker.finished.connect(lambda: QTimer.singleShot(350, resume_wake_listener))
-        worker.start()
+            send_button.setEnabled(True)
+            voice_button.setEnabled(True)
+            input_box.setEnabled(True)
+            show_chat_message(
+                "error",
+                "Не получилось запустить обработку — попробуй ещё раз.",
+            )
 
     def run_scenario_from_studio(
         workflow_id: str, trigger_kind: str, trigger_value: str

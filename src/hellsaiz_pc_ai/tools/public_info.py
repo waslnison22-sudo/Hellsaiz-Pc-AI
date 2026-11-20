@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import threading
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
@@ -30,10 +32,24 @@ WEATHER_CODES = {
 }
 
 
-def _get_json(url: str, timeout: int = 12):
+def _get_json(url: str, timeout: int = 8):
+    """Fetch JSON with two transient-error retries (pauses: 0.4s, 0.8s)."""
     request = Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
-    with urlopen(request, timeout=timeout) as response:
-        return json.loads(response.read().decode("utf-8"))
+    delays = (0.0, 0.4, 0.8)
+    last_error: Exception | None = None
+    for index, delay in enumerate(delays):
+        if delay:
+            time.sleep(delay)
+        try:
+            with urlopen(request, timeout=timeout) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except Exception as error:
+            last_error = error
+            logging.warning(
+                "Request %s failed (attempt %d/%d): %s", url, index + 1, len(delays), error
+            )
+    assert last_error is not None
+    raise last_error
 
 
 class _DuckDuckGoParser(HTMLParser):

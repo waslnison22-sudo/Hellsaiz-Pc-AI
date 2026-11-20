@@ -139,3 +139,37 @@ def test_weather_report_rejects_unknown_city(monkeypatch):
         assert "Не нашёл город" in str(error)
     else:
         raise AssertionError("expected ValueError for an unknown city")
+
+
+def test_get_json_retries_transient_errors_then_succeeds(monkeypatch):
+    calls = {"count": 0}
+    sleeps = []
+
+    def flaky(*args, **kwargs):
+        calls["count"] += 1
+        if calls["count"] < 3:
+            raise OSError("transient network hiccup")
+        return FakeResponse(b'{"ok": true}')
+
+    monkeypatch.setattr(public_info, "urlopen", flaky)
+    monkeypatch.setattr(public_info.time, "sleep", lambda seconds: sleeps.append(seconds))
+
+    assert public_info._get_json("https://example.test/ping") == {"ok": True}
+    assert calls["count"] == 3
+    assert sleeps == [0.4, 0.8]
+
+
+def test_get_json_retries_are_exhausted_and_error_propagates(monkeypatch):
+    monkeypatch.setattr(public_info.time, "sleep", lambda _seconds: None)
+
+    def always_fails(*args, **kwargs):
+        raise OSError("no route to host")
+
+    monkeypatch.setattr(public_info, "urlopen", always_fails)
+
+    try:
+        public_info._get_json("https://example.test/ping")
+    except OSError:
+        pass
+    else:
+        raise AssertionError("expected the last network error to propagate")
