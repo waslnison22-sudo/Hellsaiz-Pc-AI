@@ -804,7 +804,7 @@ def main() -> int:
     profile_layout.setSpacing(10)
 
     profile_heading = QLabel("Профиль ИИ и голос")
-    profile_heading.setStyleSheet("color:#A6A29C; font-size:10px; letter-spacing:1.8px;")
+    profile_heading.setStyleSheet("color:#A6A29C; font-size:12px;")
     profile_layout.addWidget(profile_heading)
 
     provider_profile_store_path = settings.workflows_path.parent / "provider_profiles.json"
@@ -1601,7 +1601,7 @@ def main() -> int:
     wallpaper_preview_layout = QVBoxLayout(wallpaper_preview)
     wallpaper_preview_layout.setContentsMargins(22, 20, 22, 20)
     wallpaper_preview_title = QLabel("Предпросмотр")
-    wallpaper_preview_title.setStyleSheet("color:#A6A29C; font-size:10px; letter-spacing:1.8px;")
+    wallpaper_preview_title.setStyleSheet("color:#A6A29C; font-size:12px;")
     wallpaper_preview_layout.addWidget(wallpaper_preview_title)
     wallpaper_status = QLabel("Используется чистый чёрный фон.")
     wallpaper_status.setWordWrap(True)
@@ -2054,7 +2054,7 @@ def main() -> int:
     diagnostics_tab_layout.addWidget(QLabel(f"Сценарии: {settings.workflows_path}"))
 
     speech_title = QLabel("Распознавание речи")
-    speech_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
+    speech_title.setStyleSheet("color:#c8cdd5; font-size:12px;")
     speech_tab_layout.addWidget(speech_title)
 
     stt_engine_row = QHBoxLayout()
@@ -2475,7 +2475,7 @@ def main() -> int:
     ocr_model_state = {"ready": False}
 
     ocr_title = QLabel("Распознавание экрана")
-    ocr_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
+    ocr_title.setStyleSheet("color:#c8cdd5; font-size:12px;")
     diagnostics_tab_layout.addWidget(ocr_title)
     ocr_help = QLabel(
         "OCR работает локально на основном мониторе. Снимок не сохраняется и не отправляется "
@@ -2612,7 +2612,7 @@ def main() -> int:
     QTimer.singleShot(0, lambda: start_ocr_models_worker(download=False))
 
     file_access_title = QLabel("Доступ к файлам")
-    file_access_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
+    file_access_title.setStyleSheet("color:#c8cdd5; font-size:12px;")
     files_tab_layout.addWidget(file_access_title)
     file_access_help = QLabel(
         "Помощник работает только внутри этих папок. Поиск, чтение и открытие доступны сразу. "
@@ -2713,7 +2713,7 @@ def main() -> int:
     allow_file_writes_check.toggled.connect(toggle_file_write_permission)
 
     network_title = QLabel("Сеть и v2RayTun")
-    network_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
+    network_title.setStyleSheet("color:#c8cdd5; font-size:12px;")
     network_tab_layout.addWidget(network_title)
     network_help = QLabel(
         "Выбери официальный клиент вручную и укажи локальный HTTP-порт прокси из его настроек. "
@@ -2848,7 +2848,7 @@ def main() -> int:
     launch_v2raytun_check.toggled.connect(lambda _checked: persist_network_settings())
 
     telegram_title = QLabel("Telegram")
-    telegram_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
+    telegram_title.setStyleSheet("color:#c8cdd5; font-size:12px;")
     network_tab_layout.addWidget(telegram_title)
     telegram_help = QLabel(
         "Отдельный локальный бот без ИИ. Команды доступны только указанным user ID и chat ID. "
@@ -3070,7 +3070,7 @@ def main() -> int:
     telegram_poll_timer.timeout.connect(reap_telegram_worker)
     telegram_poll_timer.start()
     startup_title = QLabel("Автозапуск Windows")
-    startup_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
+    startup_title.setStyleSheet("color:#c8cdd5; font-size:12px;")
     files_tab_layout.addWidget(startup_title)
     startup_check = QCheckBox("Запускать помощника при входе в Windows")
     startup_status = QLabel("Проверяю состояние Планировщика заданий…")
@@ -3126,7 +3126,7 @@ def main() -> int:
     startup_check.toggled.connect(change_startup_task)
 
     update_title = QLabel("Обновления")
-    update_title.setStyleSheet("color:#c8cdd5; font-size:11px; letter-spacing:1.6px;")
+    update_title.setStyleSheet("color:#c8cdd5; font-size:12px;")
     updates_tab_layout.addWidget(update_title)
     update_preferences_path = settings.workflows_path.parent / "updates.json"
     update_preferences: dict[str, Any] = {"auto_check": True}
