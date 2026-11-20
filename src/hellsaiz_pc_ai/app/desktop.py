@@ -2188,6 +2188,75 @@ def main() -> int:
     speech_health_status.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
     speech_health_status.setStyleSheet("color:#A6A29C;")
     diagnostics_tab_layout.addWidget(speech_health_status)
+
+    vosk_diag_title = QLabel("Голосовая модель (Vosk)")
+    vosk_diag_title.setStyleSheet("color:#c8cdd5; font-size:12px;")
+    diagnostics_tab_layout.addWidget(vosk_diag_title)
+    vosk_diag_help = QLabel(
+        "Офлайн-распознавание речи работает, когда локальная русская модель Vosk "
+        "установлена. Модель занимает около 45 МБ и остаётся на этом компьютере."
+    )
+    vosk_diag_help.setWordWrap(True)
+    vosk_diag_help.setStyleSheet("color:#A6A29C;")
+    diagnostics_tab_layout.addWidget(vosk_diag_help)
+    vosk_diag_buttons = QHBoxLayout()
+    vosk_diag_check_button = QPushButton("Проверить")
+    vosk_diag_download_button = QPushButton("Загрузить модель")
+    vosk_diag_buttons.addWidget(vosk_diag_check_button)
+    vosk_diag_buttons.addWidget(vosk_diag_download_button)
+    diagnostics_tab_layout.addLayout(vosk_diag_buttons)
+    vosk_diag_status = QLabel("")
+    vosk_diag_status.setWordWrap(True)
+    vosk_diag_status.setStyleSheet("color:#A6A29C;")
+    diagnostics_tab_layout.addWidget(vosk_diag_status)
+
+    def refresh_vosk_diag_status() -> None:
+        from hellsaiz_pc_ai.speech.model_library import is_valid_vosk_model
+
+        try:
+            ready = is_valid_vosk_model(settings.speech.vosk_model_path)
+        except (OSError, ValueError):
+            ready = False
+        if ready:
+            vosk_diag_status.setText("Готово: русская модель Vosk установлена и проверена.")
+        else:
+            vosk_diag_status.setText("Модель не загружена — можно загрузить.")
+
+    def start_vosk_diag_download() -> None:
+        if any(worker.isRunning() for worker in vosk_model_download_workers):
+            vosk_diag_status.setText("Загрузка модели уже выполняется…")
+            return
+        vosk_diag_check_button.setEnabled(False)
+        vosk_diag_download_button.setEnabled(False)
+        vosk_diag_status.setText(
+            "Загружаю официальную русскую модель Vosk small (около 45 МБ)…"
+        )
+        worker = VoskModelDownloadWorker(settings.speech.vosk_model_path.parent)
+        vosk_model_download_workers.append(worker)
+
+        def model_downloaded(model_path: str) -> None:
+            vosk_model_edit.setText(model_path)
+            refresh_vosk_diag_status()
+            save_stt_profile()
+
+        def model_download_failed(message: str) -> None:
+            vosk_diag_status.setText(f"Не удалось загрузить модель: {message}")
+            refresh_vosk_diag_status()
+
+        worker.completed.connect(model_downloaded)
+        worker.failed.connect(model_download_failed)
+        worker.finished.connect(lambda: vosk_diag_check_button.setEnabled(True))
+        worker.finished.connect(lambda: vosk_diag_download_button.setEnabled(True))
+        worker.finished.connect(
+            lambda: vosk_model_download_workers.remove(worker)
+            if worker in vosk_model_download_workers else None
+        )
+        worker.start()
+
+    vosk_diag_check_button.clicked.connect(refresh_vosk_diag_status)
+    vosk_diag_download_button.clicked.connect(start_vosk_diag_download)
+    refresh_vosk_diag_status()
+
     system_health_workers: list[QThread] = []
 
     def refresh_microphone_devices() -> None:
