@@ -1398,9 +1398,18 @@ def main() -> int:
     reminder_layout.addWidget(reminder_description)
     reminder_list = QListWidget()
     reminder_layout.addWidget(reminder_list, 1)
+    reminder_empty = QLabel(
+        "Пока нет напоминаний. Скажи: «напомни в 22:00 проверить чайник» — "
+        "и оно появится здесь."
+    )
+    reminder_empty.setWordWrap(True)
+    reminder_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    reminder_empty.setStyleSheet("color:#A6A29C; padding:24px;")
+    reminder_empty.hide()
+    reminder_layout.addWidget(reminder_empty, 1)
     reminder_buttons = QHBoxLayout()
     refresh_reminders_button = QPushButton("Обновить")
-    dismiss_reminder_button = QPushButton("Отменить выбранное")
+    dismiss_reminder_button = QPushButton("Удалить выбранное")
     reminder_buttons.addWidget(refresh_reminders_button)
     reminder_buttons.addWidget(dismiss_reminder_button)
     reminder_buttons.addStretch(1)
@@ -1423,6 +1432,12 @@ def main() -> int:
             item.setData(Qt.ItemDataRole.UserRole, reminder.id)
             reminder_list.addItem(item)
         reminder_status.setText(f"Активных напоминаний: {len(entries)}")
+        if entries:
+            reminder_empty.hide()
+            reminder_list.show()
+        else:
+            reminder_list.hide()
+            reminder_empty.show()
 
     def dismiss_selected_reminder() -> None:
         item = reminder_list.currentItem()
