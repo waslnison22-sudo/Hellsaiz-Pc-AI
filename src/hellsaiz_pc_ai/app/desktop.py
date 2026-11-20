@@ -976,7 +976,7 @@ def main() -> int:
     quick_commands_row.setSpacing(6)
     for quick_command in ("Какая погода?", "Что ты умеешь?", "Открой блокнот", "Который час?"):
         quick_button = QPushButton(quick_command)
-        quick_button.setObjectName("chipButton")
+        quick_button.setObjectName("secondaryButton")
         quick_button.setToolTip("Вставить в поле ввода")
         quick_button.setCursor(Qt.CursorShape.PointingHandCursor)
         quick_button.clicked.connect(
