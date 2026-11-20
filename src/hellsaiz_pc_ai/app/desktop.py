@@ -501,6 +501,8 @@ def main() -> int:
 
     window = QMainWindow()
     window.setWindowTitle(settings.app_name)
+    if "window_icon" in locals() and not window_icon.isNull():
+        window.setWindowIcon(window_icon)
     window.resize(1240, 820)
     window.setMinimumSize(900, 640)
     wallpaper_store = WallpaperStore(settings.workflows_path.parent)
