@@ -3497,7 +3497,7 @@ def main() -> int:
     top_bar_layout.addWidget(clock_label)
 
     def refresh_clock() -> None:
-        clock_label.setText(f"{datetime.now().strftime('%H:%M')}  ·  v{current_app_version}")
+        clock_label.setText(datetime.now().strftime("%H:%M"))
 
     refresh_clock()
     clock_timer = QTimer(window)
