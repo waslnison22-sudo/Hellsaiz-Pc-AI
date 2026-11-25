@@ -702,7 +702,7 @@ def main() -> int:
     header_row.setContentsMargins(0, 0, 0, 0)
     header_row.setSpacing(8)
     header = QLabel("Чат")
-    header.setStyleSheet("font-size:20px; font-weight:650; color:#F2EFEA;")
+    header.setStyleSheet("font-size:22px; font-weight:650; color:#F2EFEA;")
     header.setStyleSheet("padding-bottom:5px;")
     header_row.addWidget(header)
     header_row.addStretch(1)
@@ -1388,7 +1388,7 @@ def main() -> int:
     reminder_page = QWidget()
     reminder_layout = QVBoxLayout(reminder_page)
     reminder_title = QLabel("Напоминания")
-    reminder_title.setStyleSheet("font-size:20px; font-weight:650; color:#F2EFEA;")
+    reminder_title.setStyleSheet("font-size:22px; font-weight:650; color:#F2EFEA;")
     reminder_layout.addWidget(reminder_title)
     reminder_description = QLabel(
         "Записи хранятся локально. Они срабатывают, пока Hellsaiz PC AI запущен; "
@@ -1473,7 +1473,7 @@ def main() -> int:
     apps_layout = QVBoxLayout(apps_page)
     apps_layout.setContentsMargins(22, 20, 22, 20)
     apps_title = QLabel("Приложения")
-    apps_title.setStyleSheet("font-size:20px; font-weight:650; color:#F2EFEA;")
+    apps_title.setStyleSheet("font-size:22px; font-weight:650; color:#F2EFEA;")
     apps_layout.addWidget(apps_title)
     apps_hint = QLabel(
         "Автопоиск использует ярлыки меню «Пуск» и записи Windows. "
@@ -1601,7 +1601,7 @@ def main() -> int:
     wallpaper_layout.setContentsMargins(0, 6, 0, 10)
     wallpaper_layout.setSpacing(10)
     wallpaper_title = QLabel("Оформление и обои")
-    wallpaper_title.setStyleSheet("font-size:20px; font-weight:650; color:#F2EFEA;")
+    wallpaper_title.setStyleSheet("font-size:22px; font-weight:650; color:#F2EFEA;")
     wallpaper_layout.addWidget(wallpaper_title)
     wallpaper_description = QLabel(
         "Выбери статичное изображение или GIF для фона приложения. "
@@ -1702,7 +1702,7 @@ def main() -> int:
     voices_layout.setContentsMargins(28, 24, 28, 24)
     voices_layout.setSpacing(12)
     voices_title = QLabel("Голоса")
-    voices_title.setStyleSheet("font-size:20px; font-weight:650; color:#F2EFEA;")
+    voices_title.setStyleSheet("font-size:22px; font-weight:650; color:#F2EFEA;")
     voices_layout.addWidget(voices_title)
     voices_description = QLabel(
         "Локальные нейросетевые голоса Piper. Скачанная модель работает без интернета. "
@@ -2063,14 +2063,14 @@ def main() -> int:
     diagnostics_tab_page, diagnostics_tab_layout = _settings_tab("Диагностика")
     settings_layout.addWidget(settings_tabs, 1)
     settings_title = QLabel("Настройки")
-    settings_title.setStyleSheet("font-size:20px; font-weight:650; color:#F2EFEA;")
+    settings_title.setStyleSheet("font-size:22px; font-weight:650; color:#F2EFEA;")
     speech_tab_layout.addWidget(settings_title)
     appearance_tab_layout.addWidget(wallpaper_page)
     diagnostics_tab_layout.addWidget(QLabel(f"История: {settings.database_path}"))
     diagnostics_tab_layout.addWidget(QLabel(f"Сценарии: {settings.workflows_path}"))
 
     speech_title = QLabel("Распознавание речи")
-    speech_title.setStyleSheet("color:#c8cdd5; font-size:12px;")
+    speech_title.setStyleSheet("color:#c8cdd5; font-size:13px; font-weight:600;")
     speech_tab_layout.addWidget(speech_title)
 
     stt_engine_row = QHBoxLayout()
@@ -2189,7 +2189,7 @@ def main() -> int:
     diagnostics_tab_layout.addWidget(speech_health_status)
 
     vosk_diag_title = QLabel("Голосовая модель (Vosk)")
-    vosk_diag_title.setStyleSheet("color:#c8cdd5; font-size:12px;")
+    vosk_diag_title.setStyleSheet("color:#c8cdd5; font-size:13px; font-weight:600;")
     diagnostics_tab_layout.addWidget(vosk_diag_title)
     vosk_diag_help = QLabel(
         "Офлайн-распознавание речи работает, когда локальная русская модель Vosk "
@@ -2560,7 +2560,7 @@ def main() -> int:
     ocr_model_state = {"ready": False}
 
     ocr_title = QLabel("Распознавание экрана")
-    ocr_title.setStyleSheet("color:#c8cdd5; font-size:12px;")
+    ocr_title.setStyleSheet("color:#c8cdd5; font-size:13px; font-weight:600;")
     diagnostics_tab_layout.addWidget(ocr_title)
     ocr_help = QLabel(
         "OCR работает локально на основном мониторе. Снимок не сохраняется и не отправляется "
@@ -2697,7 +2697,7 @@ def main() -> int:
     QTimer.singleShot(0, lambda: start_ocr_models_worker(download=False))
 
     file_access_title = QLabel("Доступ к файлам")
-    file_access_title.setStyleSheet("color:#c8cdd5; font-size:12px;")
+    file_access_title.setStyleSheet("color:#c8cdd5; font-size:13px; font-weight:600;")
     files_tab_layout.addWidget(file_access_title)
     file_access_help = QLabel(
         "Помощник работает только внутри этих папок. Поиск, чтение и открытие доступны сразу. "
@@ -2798,7 +2798,7 @@ def main() -> int:
     allow_file_writes_check.toggled.connect(toggle_file_write_permission)
 
     network_title = QLabel("Сеть и v2RayTun")
-    network_title.setStyleSheet("color:#c8cdd5; font-size:12px;")
+    network_title.setStyleSheet("color:#c8cdd5; font-size:13px; font-weight:600;")
     network_tab_layout.addWidget(network_title)
     network_help = QLabel(
         "Выбери официальный клиент вручную и укажи локальный HTTP-порт прокси из его настроек. "
@@ -2933,7 +2933,7 @@ def main() -> int:
     launch_v2raytun_check.toggled.connect(lambda _checked: persist_network_settings())
 
     telegram_title = QLabel("Telegram")
-    telegram_title.setStyleSheet("color:#c8cdd5; font-size:12px;")
+    telegram_title.setStyleSheet("color:#c8cdd5; font-size:13px; font-weight:600;")
     network_tab_layout.addWidget(telegram_title)
     telegram_help = QLabel(
         "Отдельный локальный бот без ИИ. Команды доступны только указанным user ID и chat ID. "
@@ -3155,7 +3155,7 @@ def main() -> int:
     telegram_poll_timer.timeout.connect(reap_telegram_worker)
     telegram_poll_timer.start()
     startup_title = QLabel("Автозапуск Windows")
-    startup_title.setStyleSheet("color:#c8cdd5; font-size:12px;")
+    startup_title.setStyleSheet("color:#c8cdd5; font-size:13px; font-weight:600;")
     files_tab_layout.addWidget(startup_title)
     startup_check = QCheckBox("Запускать помощника при входе в Windows")
     startup_status = QLabel("Проверяю состояние Планировщика заданий…")
@@ -3211,7 +3211,7 @@ def main() -> int:
     startup_check.toggled.connect(change_startup_task)
 
     update_title = QLabel("Обновления")
-    update_title.setStyleSheet("color:#c8cdd5; font-size:12px;")
+    update_title.setStyleSheet("color:#c8cdd5; font-size:13px; font-weight:600;")
     updates_tab_layout.addWidget(update_title)
     update_preferences_path = settings.workflows_path.parent / "updates.json"
     update_preferences: dict[str, Any] = {"auto_check": True}

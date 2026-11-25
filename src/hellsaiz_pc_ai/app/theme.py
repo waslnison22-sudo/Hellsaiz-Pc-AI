@@ -137,7 +137,7 @@ QListWidget::item:selected {
 QLabel {
     color: #F2EFEA;
     background: transparent;
-    font-size: 13px;
+    font-size: 14px;
 }
 QCheckBox {
     color: #F2EFEA;
@@ -243,7 +243,7 @@ QFrame#dashboardCard {
 }
 QLabel#dashboardCardTitle {
     color: #A6A29C;
-    font-size: 11px;
+    font-size: 13px;
     letter-spacing: 1.2px;
     font-weight: 600;
 }
@@ -254,7 +254,7 @@ QLabel#dashboardCardValue {
 }
 QLabel#dashboardCardNote {
     color: #A6A29C;
-    font-size: 12px;
+    font-size: 13px;
 }
 QLabel#dashboardGreeting {
     color: #F2EFEA;
@@ -267,7 +267,7 @@ QLabel#privacyNote {
     border: 1px solid rgba(125, 212, 135, 45);
     border-radius: 10px;
     padding: 10px 12px;
-    font-size: 12px;
+    font-size: 13px;
 }
 QLabel#statChipOk {
     color: #7dd487;
@@ -308,7 +308,7 @@ QLabel#skillCardTitle {
 }
 QLabel#skillCardNote {
     color: #A6A29C;
-    font-size: 12px;
+    font-size: 13px;
 }
 QFrame#emptyState {
     background: transparent;
@@ -325,7 +325,7 @@ QLabel#emptyStateTitle {
 }
 QLabel#emptyStateHint {
     color: #A6A29C;
-    font-size: 12px;
+    font-size: 13px;
 }
 QPushButton#secondaryButton {
     background: #171716;
@@ -393,7 +393,7 @@ QLabel#weatherCondition {
 }
 QLabel#weatherForecast {
     color: #A6A29C;
-    font-size: 12px;
+    font-size: 13px;
 }
 QLineEdit#weatherCityEdit {
     background: #171716;
@@ -439,26 +439,26 @@ QFrame#chatBubbleError {
 }
 QLabel#chatTextUser {
     color: #1A140F;
-    font-size: 17px;
+    font-size: 18px;
     line-height: 1.45;
 }
 QLabel#chatTextAssistant {
     color: #F2EFEA;
-    font-size: 17px;
+    font-size: 18px;
     line-height: 1.45;
 }
 QLabel#chatTextSystem {
     color: #A6A29C;
-    font-size: 14px;
+    font-size: 15px;
     line-height: 1.45;
 }
 QLabel#chatTextMeta {
     color: #A6A29C;
-    font-size: 14px;
+    font-size: 15px;
 }
 QLabel#chatTextError {
     color: #FFB4AE;
-    font-size: 14px;
+    font-size: 15px;
 }
 QLabel#chatTimestamp {
     color: #6E6A64;
