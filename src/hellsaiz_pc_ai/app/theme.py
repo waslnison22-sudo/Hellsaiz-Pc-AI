@@ -525,6 +525,19 @@ QPushButton#chatToastAction {
 QPushButton#chatToastAction:hover {
     color: #F2D2B0;
 }
+QToolButton#collapsibleHeader {
+    background: #171716;
+    border: 0;
+    border-radius: 12px;
+    color: #F2EFEA;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 8px 14px;
+    min-height: 32px;
+}
+QToolButton#collapsibleHeader:hover {
+    background: #1F1F1D;
+}
 QPushButton#cardIconButton {
     background: transparent;
     border: 0;

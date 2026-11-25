@@ -313,6 +313,7 @@ def main() -> int:
             QStyle,
             QSystemTrayIcon,
             QTabWidget,
+    QToolButton,
             QVBoxLayout,
             QWidget,
         )
@@ -1456,7 +1457,8 @@ def main() -> int:
     dismiss_reminder_button.clicked.connect(dismiss_selected_reminder)
     refresh_reminder_list()
     logging.info("Desktop startup: reminders refreshed.")
-    tabs.addTab(reminder_page, "Напоминания")
+    # Reminders are shown on the dashboard card; the page widget stays for its
+    # refresh hooks but is no longer a navigation entry.
 
     # Everyday scenarios are built visually; the developer JSON editor is secondary.
     scenario_page = WorkflowStudioPage(
@@ -1471,10 +1473,7 @@ def main() -> int:
 
     apps_page = QWidget()
     apps_layout = QVBoxLayout(apps_page)
-    apps_layout.setContentsMargins(22, 20, 22, 20)
-    apps_title = QLabel("Приложения")
-    apps_title.setStyleSheet("font-size:22px; font-weight:650; color:#F2EFEA;")
-    apps_layout.addWidget(apps_title)
+    apps_layout.setContentsMargins(0, 4, 0, 4)
     apps_hint = QLabel(
         "Автопоиск использует ярлыки меню «Пуск» и записи Windows. "
         "Портативные приложения можно добавить вручную с любого диска. "
@@ -1592,7 +1591,6 @@ def main() -> int:
     add_executable_button.clicked.connect(browse_app)
     refresh_apps_list()
     logging.info("Desktop startup: apps refreshed.")
-    tabs.addTab(apps_page, "Приложения")
 
 
     # Personal wallpaper library: no selected file means a completely black background.
@@ -2061,6 +2059,29 @@ def main() -> int:
     files_tab_page, files_tab_layout = _settings_tab("Файлы и автозапуск")
     updates_tab_page, updates_tab_layout = _settings_tab("Обновления")
     diagnostics_tab_page, diagnostics_tab_layout = _settings_tab("Диагностика")
+    apps_tab_page, apps_tab_layout = _settings_tab("Приложения")
+    apps_toggle = QToolButton()
+    apps_toggle.setText("Список приложений")
+    apps_toggle.setObjectName("collapsibleHeader")
+    apps_toggle.setCheckable(True)
+    apps_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+    apps_toggle.setArrowType(Qt.ArrowType.RightArrow)
+    apps_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+    apps_tab_layout.addWidget(apps_toggle)
+    apps_container = QWidget()
+    apps_container.setVisible(False)
+    apps_tab_layout.addWidget(apps_container, 1)
+    apps_container_layout = QVBoxLayout(apps_container)
+    apps_container_layout.setContentsMargins(0, 0, 0, 0)
+    apps_container_layout.addWidget(apps_page)
+
+    def toggle_apps_section(expanded: bool) -> None:
+        apps_container.setVisible(expanded)
+        apps_toggle.setArrowType(
+            Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow
+        )
+
+    apps_toggle.toggled.connect(toggle_apps_section)
     settings_layout.addWidget(settings_tabs, 1)
     settings_title = QLabel("Настройки")
     settings_title.setStyleSheet("font-size:22px; font-weight:650; color:#F2EFEA;")

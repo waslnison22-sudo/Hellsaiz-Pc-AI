@@ -38,3 +38,10 @@ def test_top_bar_navigation_styles_are_present():
     assert "QPushButton#navPill:checked" in stylesheet
     assert "QWidget#topBar" in stylesheet
     assert "QPushButton#ghostButton" in stylesheet
+
+
+def test_collapsible_section_style_is_present():
+    stylesheet = build_dark_stylesheet()
+
+    assert "QToolButton#collapsibleHeader" in stylesheet
+    assert "QToolButton#collapsibleHeader:hover" in stylesheet
