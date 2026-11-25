@@ -65,7 +65,11 @@ from hellsaiz_pc_ai.tools.screen_ocr import (
     register_screen_ocr_tools,
 )
 from hellsaiz_pc_ai.tools.ocr_models import check_russian_ocr_models
-from hellsaiz_pc_ai.workflows.graph import WorkflowGraphRunner, WorkflowTrigger
+from hellsaiz_pc_ai.workflows.graph import (
+    WorkflowGraphRunner,
+    WorkflowTrigger,
+    format_execution_report,
+)
 from hellsaiz_pc_ai.workflows.library import WorkflowLibrary
 from hellsaiz_pc_ai.tools.typing import register_typing_tools
 from hellsaiz_pc_ai.tools.vpn import register_vpn_tools
@@ -595,11 +599,7 @@ def main() -> int:
                             continue
                         execution = workflow_runner.run(graph, trigger)
                         if execution.started:
-                            lines = [
-                                f"Сценарий «{graph.name}» ({workflow_id}): {execution.message}"
-                            ]
-                            lines.extend(f"• {step.output}" for step in execution.steps)
-                            answer = "\n".join(lines)
+                            answer = format_execution_report(graph.name, workflow_id, execution)
                             break
                 except (OSError, ValueError, json.JSONDecodeError) as exc:
                     logging.warning("Workflow library could not be fully loaded: %s", exc)

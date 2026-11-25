@@ -249,6 +249,29 @@ class WorkflowExecution:
     message: str
 
 
+def format_execution_report(
+    graph_name: str,
+    workflow_id: str,
+    execution: WorkflowExecution,
+) -> str:
+    """Render a scenario result without printing the same text twice.
+
+    The header already carries ``execution.message``; a step line is added only
+    when that step produced a different, non-empty result. Repeat nodes emit
+    their own "Повтор N/M: …" line and often mirror the final message, so the
+    duplicate filter keeps the chat answer short and readable.
+    """
+    lines = [f"Сценарий «{graph_name}» ({workflow_id}): {execution.message}"]
+    seen = {execution.message.strip()}
+    for step in execution.steps:
+        output = str(getattr(step, "output", "") or "").strip()
+        if not output or output in seen:
+            continue
+        seen.add(output)
+        lines.append(f"• {output}")
+    return "\n".join(lines)
+
+
 class WorkflowGraphRunner:
     """Executes validated, acyclic graphs using only registered tools."""
 

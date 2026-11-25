@@ -4,7 +4,13 @@ import pytest
 
 from hellsaiz_pc_ai.core.models import RiskLevel, ToolResult
 from hellsaiz_pc_ai.core.registry import ToolRegistry, ToolSpec
-from hellsaiz_pc_ai.workflows.graph import WorkflowGraph, WorkflowGraphRunner, WorkflowTrigger
+from hellsaiz_pc_ai.workflows.graph import (
+    WorkflowExecution,
+    WorkflowGraph,
+    WorkflowGraphRunner,
+    WorkflowTrigger,
+    format_execution_report,
+)
 
 
 def build_graph():
@@ -322,3 +328,39 @@ def test_graph_rejects_unhashable_hour_operators_without_type_error():
     data["nodes"][2]["config"]["operator"] = []
     with pytest.raises(ValueError, match="Hour condition"):
         WorkflowGraph.from_dict(data)
+
+
+def test_execution_report_skips_step_text_equal_to_the_message():
+    execution = WorkflowExecution(
+        started=True,
+        completed=True,
+        steps=(ToolResult(True, "Громкость 25%"),),
+        message="Громкость 25%",
+    )
+
+    report = format_execution_report("Тихий вечер", "wf-1", execution)
+
+    assert report == "Сценарий «Тихий вечер» (wf-1): Громкость 25%"
+    assert report.count("Громкость 25%") == 1
+
+
+def test_execution_report_keeps_distinct_steps_once():
+    execution = WorkflowExecution(
+        started=True,
+        completed=True,
+        steps=(
+            ToolResult(True, "Закрыл Discord"),
+            ToolResult(True, "Закрыл Discord"),
+            ToolResult(True, "Громкость 25%"),
+            ToolResult(True, ""),
+        ),
+        message="Готово: 2 действия",
+    )
+
+    report = format_execution_report("Тихий вечер", "wf-1", execution)
+
+    assert report == (
+        "Сценарий «Тихий вечер» (wf-1): Готово: 2 действия\n"
+        "• Закрыл Discord\n"
+        "• Громкость 25%"
+    )
