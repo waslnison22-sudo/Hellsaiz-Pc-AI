@@ -46,6 +46,7 @@ from hellsaiz_pc_ai.tools.system import register_system_tools
 from hellsaiz_pc_ai.tools.public_info import register_public_info_tools
 from hellsaiz_pc_ai.app.wallpaper import WallpaperError, WallpaperStore
 from hellsaiz_pc_ai.app.chat_page import ChatInput, ChatTranscript, Toast
+from hellsaiz_pc_ai.app.icons import load_icon
 from hellsaiz_pc_ai.app.ui_fx import (
     ArrowRotator,
     PulseDot,
@@ -1530,13 +1531,24 @@ def main() -> int:
     reminder_layout.addWidget(reminder_description)
     reminder_list = QListWidget()
     reminder_layout.addWidget(reminder_list, 1)
-    reminder_empty = QLabel(
+    reminder_empty = QWidget()
+    reminder_empty.setObjectName("remindersEmpty")
+    reminder_empty_layout = QVBoxLayout(reminder_empty)
+    reminder_empty_layout.setContentsMargins(0, 0, 0, 0)
+    reminder_empty_layout.setSpacing(8)
+    reminder_empty_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    reminder_empty_icon = QLabel()
+    reminder_empty_icon.setPixmap(load_icon("bell", "#A6A29C").pixmap(20, 20))
+    reminder_empty_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    reminder_empty_layout.addWidget(reminder_empty_icon, 0, Qt.AlignmentFlag.AlignHCenter)
+    reminder_empty_text = QLabel(
         "Пока нет напоминаний. Скажи: «напомни в 22:00 проверить чайник» — "
         "и оно появится здесь."
     )
-    reminder_empty.setWordWrap(True)
-    reminder_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    reminder_empty.setStyleSheet("color:#A6A29C; padding:24px;")
+    reminder_empty_text.setWordWrap(True)
+    reminder_empty_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    reminder_empty_text.setStyleSheet("color:#A6A29C;")
+    reminder_empty_layout.addWidget(reminder_empty_text)
     reminder_empty.hide()
     reminder_layout.addWidget(reminder_empty, 1)
     reminder_buttons = QHBoxLayout()
