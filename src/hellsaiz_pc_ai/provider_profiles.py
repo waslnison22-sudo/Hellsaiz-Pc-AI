@@ -19,6 +19,7 @@ def _profile(
     base_url: str,
     model: str,
     enabled: bool = False,
+    cloud_notice_shown: bool = False,
 ) -> dict[str, Any]:
     return {
         "name": name,
@@ -26,6 +27,7 @@ def _profile(
         "base_url": base_url.rstrip("/"),
         "model": model,
         "enabled": enabled,
+        "cloud_notice_shown": bool(cloud_notice_shown),
     }
 
 
@@ -89,7 +91,17 @@ def validate_profile(value: Any) -> dict[str, Any]:
         raise ValueError("Имя модели должно содержать от 1 до 128 символов.")
     if not isinstance(enabled, bool):
         raise ValueError("Флаг enabled должен быть логическим значением.")
-    return _profile(name.strip(), provider, base_url.strip(), model.strip(), enabled)
+    cloud_notice_shown = value.get("cloud_notice_shown", False)
+    if not isinstance(cloud_notice_shown, bool):
+        raise ValueError("Флаг cloud_notice_shown должен быть логическим значением.")
+    return _profile(
+        name.strip(),
+        provider,
+        base_url.strip(),
+        model.strip(),
+        enabled,
+        cloud_notice_shown,
+    )
 
 
 def load_profile_store(

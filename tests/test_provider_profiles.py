@@ -118,3 +118,34 @@ def test_corrupted_profile_store_is_rejected(tmp_path: Path):
     path.write_text(json.dumps({"schema_version": 1, "active_profile": "missing", "profiles": []}))
     with pytest.raises(ValueError):
         load_profile_store(path)
+
+
+def test_cloud_notice_flag_is_persisted_in_the_store(tmp_path):
+    from hellsaiz_pc_ai.provider_profiles import (
+        active_profile,
+        default_profile_store,
+        load_profile_store,
+        save_profile_store,
+        upsert_profile,
+    )
+
+    store = default_profile_store()
+    updated = upsert_profile(
+        store,
+        {
+            "name": "DeepSeek (облако)",
+            "provider": "deepseek",
+            "base_url": "https://api.deepseek.com",
+            "model": "deepseek-chat",
+            "enabled": True,
+            "cloud_notice_shown": True,
+        },
+    )
+    path = tmp_path / "provider_profiles.json"
+    save_profile_store(path, updated)
+
+    reloaded = load_profile_store(path)
+    saved = active_profile(reloaded)
+
+    assert saved["name"] == "DeepSeek (облако)"
+    assert saved["cloud_notice_shown"] is True

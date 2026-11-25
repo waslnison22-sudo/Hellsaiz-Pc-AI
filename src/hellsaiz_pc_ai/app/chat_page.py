@@ -13,6 +13,7 @@ from PySide6.QtCore import (
     Signal,
 )
 from hellsaiz_pc_ai.app.chat_style import minute_changed
+from hellsaiz_pc_ai.app.icons import load_icon
 
 from PySide6.QtWidgets import (
     QFrame,
@@ -93,10 +94,13 @@ class MessageBubble(QWidget):
 
         self.avatar: QLabel | None = None
         if role in {"user", "assistant"}:
-            self.avatar = QLabel("В" if role == "user" else "H")
-            self.avatar.setObjectName(
-                "chatAvatarUser" if role == "user" else "chatAvatarAssistant"
-            )
+            self.avatar = QLabel()
+            if role == "user":
+                self.avatar.setObjectName("chatAvatarUser")
+                self.avatar.setPixmap(load_icon("user-round", "#F2EFEA").pixmap(18, 18))
+            else:
+                self.avatar.setObjectName("chatAvatarAssistant")
+                self.avatar.setText("H")
             self.avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.avatar.setFixedSize(28, 28)
 

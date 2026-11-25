@@ -2255,6 +2255,7 @@ def main() -> int:
                 provider_credential_path(settings.workflows_path.parent, profile_name), key
             )
         nonlocal provider_profile_store
+        notice_already_shown = bool(profile_data.get("cloud_notice_shown"))
         try:
             updated = upsert_profile(
                 provider_profile_store,
@@ -2264,6 +2265,7 @@ def main() -> int:
                     "base_url": url,
                     "model": "deepseek-chat",
                     "enabled": True,
+                    "cloud_notice_shown": notice_already_shown or mode == "cloud",
                 },
                 activate=True,
             )
@@ -2275,14 +2277,14 @@ def main() -> int:
         except (OSError, ValueError) as exc:
             provider_status.setText(f"Не удалось сохранить: {exc}")
             return
-        if mode == "cloud" and not profile_data.get("cloud_llm_notice_shown"):
+        if mode == "cloud" and not notice_already_shown:
             QMessageBox.information(
                 window,
                 "Облачный режим",
                 "В облачном режиме текст запросов уходит на api.deepseek.com. "
                 "Не отправляй туда личные данные, если это важно.",
             )
-            profile_data["cloud_llm_notice_shown"] = True
+        profile_data.update(get_active_provider_profile(provider_profile_store))
 
     provider_mode_combo.currentIndexChanged.connect(apply_provider_mode)
     provider_check_button.clicked.connect(check_provider_connection)

@@ -16,7 +16,6 @@ from PySide6.QtSvg import QSvgRenderer
 
 ICON_DIR = Path(__file__).resolve().parent.parent / "assets" / "icons"
 DEFAULT_COLOR = "#F2EFEA"
-SIZE = 20
 
 _CACHE: dict[tuple[str, str], QIcon] = {}
 
