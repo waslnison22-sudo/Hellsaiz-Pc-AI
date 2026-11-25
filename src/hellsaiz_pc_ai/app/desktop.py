@@ -746,8 +746,10 @@ def main() -> int:
     home_layout.setContentsMargins(28, 22, 28, 20)
     home_layout.setSpacing(12)
 
-    header_row = QHBoxLayout()
-    header_row.setContentsMargins(0, 0, 0, 0)
+    chat_header_panel = QFrame()
+    chat_header_panel.setObjectName("glassPanel")
+    header_row = QHBoxLayout(chat_header_panel)
+    header_row.setContentsMargins(12, 10, 12, 10)
     header_row.setSpacing(10)
     chat_header_avatar = QLabel("H")
     chat_header_avatar.setObjectName("chatHeaderAvatar")
@@ -772,7 +774,7 @@ def main() -> int:
     clear_button.setCursor(Qt.CursorShape.PointingHandCursor)
     clear_button.setFixedSize(34, 34)
     header_row.addWidget(clear_button)
-    home_layout.addLayout(header_row)
+    home_layout.addWidget(chat_header_panel)
 
     def set_chat_status(state: str) -> None:
         chat_header_status.setText(state)
@@ -2141,8 +2143,9 @@ def main() -> int:
 
     def _settings_tab(name: str) -> tuple[QWidget, QVBoxLayout]:
         tab_page = QWidget()
+        tab_page.setObjectName("glassPanel")
         tab_layout = QVBoxLayout(tab_page)
-        tab_layout.setContentsMargins(4, 8, 4, 8)
+        tab_layout.setContentsMargins(14, 12, 14, 12)
         tab_layout.setSpacing(10)
         tab_scroll = QScrollArea()
         tab_scroll.setWidgetResizable(True)

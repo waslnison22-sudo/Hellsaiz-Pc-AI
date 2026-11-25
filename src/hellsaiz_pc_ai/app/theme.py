@@ -6,6 +6,49 @@ from __future__ import annotations
 ACCENT = "rgba(232, 194, 158"
 ACCENT_LIGHT = "rgba(217, 168, 124"
 
+# Frosted-glass tokens (wave 7). Alphas are 0-255 because Qt QSS has no floats.
+GLASS_BG = "rgba(255, 255, 255, 14)"            # 0.055 base tint
+GLASS_BG_STRONG = "rgba(255, 255, 255, 20)"     # 0.08 for inputs and chips
+GLASS_BORDER = "rgba(255, 255, 255, 26)"        # 0.10 hairline
+GLASS_HIGHLIGHT = "rgba(255, 255, 255, 20)"     # 0.08 top highlight
+GLASS_RADIUS = "14px"
+
+GLASS_QSS = f"""
+/* --- frosted glass surfaces (wave 7) ------------------------------- */
+QFrame#glassPanel, QWidget#glassPanel,
+QFrame#dashboardCard, QFrame#skillCard,
+QFrame#profilePanel, QFrame#chatToast {{
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 {GLASS_HIGHLIGHT},
+        stop:0.42 {GLASS_BG},
+        stop:1 rgba(255, 255, 255, 10));
+    border: 1px solid {GLASS_BORDER};
+    border-radius: {GLASS_RADIUS};
+}}
+/* Nested blocks inside a glass card stay transparent: no double frost. */
+QWidget#glassPanelInset, QFrame#glassPanelInset {{
+    background: transparent;
+    border: 0;
+}}
+QTextEdit#chatComposer, QWidget#chatQuickCommandsBody {{
+    background: {GLASS_BG_STRONG};
+    border: 1px solid {GLASS_BORDER};
+    border-radius: 12px;
+}}
+QPushButton#secondaryButton {{
+    background: {GLASS_BG_STRONG};
+    border: 1px solid {GLASS_BORDER};
+    border-radius: 12px;
+}}
+QPushButton#secondaryButton:hover {{
+    background: rgba(255, 255, 255, 30);
+    border-color: rgba(255, 255, 255, 60);
+}}
+QPushButton#ghostButton:hover, QPushButton#navPill:hover {{
+    border: 1px solid {GLASS_BORDER};
+}}
+"""
+
 DARK_STYLESHEET = """
 QMainWindow, QWidget {
     background: #0B0B0B;
@@ -594,4 +637,4 @@ QPushButton#cardIconButton:hover {
 
 def build_dark_stylesheet() -> str:
     """Return the dark accent-glass theme with visible keyboard focus states."""
-    return DARK_STYLESHEET
+    return DARK_STYLESHEET + GLASS_QSS
