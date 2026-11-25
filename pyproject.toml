@@ -36,4 +36,4 @@ select = ["E", "F", "B"]
 ignore = ["E501"]
 
 [tool.setuptools.package-data]
-hellsaiz_pc_ai = ["assets/*.ico", "assets/*.png", "assets/icons/*.svg", "assets/icons/NOTICE.txt"]
+hellsaiz_pc_ai = ["assets/*.ico", "assets/*.png", "assets/icons/*.svg", "assets/icons/NOTICE.txt", "assets/icons/weather/*.svg", "assets/icons/weather/NOTICE.txt"]

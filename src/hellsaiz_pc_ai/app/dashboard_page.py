@@ -25,6 +25,7 @@ from hellsaiz_pc_ai.tools.public_info import (
 )
 
 from hellsaiz_pc_ai.app.ui_icons import refresh_icon
+from hellsaiz_pc_ai.app.weather_icon import WeatherIconWidget, map_weather_icon
 from hellsaiz_pc_ai.app.dashboard_texts import (
     greeting_for_hour,
     greeting_note,
@@ -115,10 +116,9 @@ class DashboardPage(QWidget):
         weather_card = self._make_card_frame(grid, 0, 0, "Погода")
         weather_top_row = QHBoxLayout()
         weather_top_row.setSpacing(8)
-        weather_icon = QLabel("…")
+        weather_icon = WeatherIconWidget()
         weather_icon.setObjectName("weatherIcon")
-        weather_icon.setAlignment(Qt.AlignmentFlag.AlignTop)
-        weather_top_row.addWidget(weather_icon)
+        weather_top_row.addWidget(weather_icon, 0, Qt.AlignmentFlag.AlignTop)
         weather_value = QLabel("—")
         weather_value.setObjectName("weatherTemperature")
         weather_top_row.addWidget(weather_value)
@@ -256,6 +256,10 @@ class DashboardPage(QWidget):
         def on_completed(report: WeatherReport) -> None:
             self._weather_finished = True
             self._weather_text.setText(report.condition.capitalize())
+            self._weather_icon.set_dimmed(False)
+            self._weather_icon.set_icon(
+                map_weather_icon(report.condition, datetime.now().hour)
+            )
             self._weather_temperature.setText(_temperature_text(report.temperature))
             self._weather_icon.setText(report.icon)
             self._weather_forecast.setText(report.forecast_line())
@@ -274,7 +278,7 @@ class DashboardPage(QWidget):
             self._weather_finished = True
             self._weather_text.setText("Погоду получить не удалось")
             self._weather_temperature.setText("—")
-            self._weather_icon.setText("☁️")
+            self._weather_icon.set_dimmed(True)
             self._weather_forecast.setText("")
             self._weather_note.setText(
                 "Не получилось связаться с сервисом погоды — проверь интернет и попробуй позже."
@@ -286,7 +290,7 @@ class DashboardPage(QWidget):
             self._weather_finished = True
             self._weather_text.setText("Погоду получить не удалось")
             self._weather_temperature.setText("—")
-            self._weather_icon.setText("☁️")
+            self._weather_icon.set_dimmed(True)
             self._weather_forecast.setText("")
             self._weather_note.setText(
                 "Нет ответа за 15 секунд. Проверь подключение к сети и нажми «Обновить»."
@@ -296,7 +300,7 @@ class DashboardPage(QWidget):
             self._weather_finished = True
             self._weather_text.setText("Погоду получить не удалось")
             self._weather_temperature.setText("—")
-            self._weather_icon.setText("☁️")
+            self._weather_icon.set_dimmed(True)
             self._weather_forecast.setText("")
             self._weather_note.setText(
                 f"Города «{city}» нет в базе сервиса — проверь название."
