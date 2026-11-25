@@ -313,7 +313,7 @@ def main() -> int:
             QStyle,
             QSystemTrayIcon,
             QTabWidget,
-    QToolButton,
+            QToolButton,
             QVBoxLayout,
             QWidget,
         )
