@@ -135,10 +135,24 @@ def test_weather_report_rejects_unknown_city(monkeypatch):
 
     try:
         public_info.get_weather_report("Атлантида")
+    except public_info.WeatherCityNotFound as error:
+        assert "Не нашёл город" in str(error)
+        assert error.city == "Атлантида"
     except ValueError as error:
         assert "Не нашёл город" in str(error)
     else:
         raise AssertionError("expected ValueError for an unknown city")
+
+
+def test_weather_text_for_unknown_city_is_human_and_specific(monkeypatch):
+    public_info._WEATHER_CACHE.clear()
+    monkeypatch.setattr(public_info, "_get_json", lambda *args, **kwargs: {"results": []})
+
+    result = public_info.get_weather("Атлантида")
+
+    assert "нет в базе сервиса" in result
+    assert "проверь название" in result
+    assert "интернет" not in result
 
 
 def test_get_json_retries_transient_errors_then_succeeds(monkeypatch):

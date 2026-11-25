@@ -208,6 +208,14 @@ def _as_int(value: object) -> int | None:
     return int(value)
 
 
+class WeatherCityNotFound(ValueError):
+    """Raised when the geocoding service has no match for the requested city."""
+
+    def __init__(self, city: str) -> None:
+        self.city = city
+        super().__init__(f"Не нашёл город «{city}». Уточни название.")
+
+
 def _geocode(city: str) -> dict:
     location = _get_json(
         "https://geocoding-api.open-meteo.com/v1/search"
@@ -215,7 +223,7 @@ def _geocode(city: str) -> dict:
     )
     matches = location.get("results") or []
     if not matches:
-        raise ValueError(f"Не нашёл город «{city}». Уточни название.")
+        raise WeatherCityNotFound(city)
     return matches[0]
 
 
@@ -311,7 +319,10 @@ def get_weather_report(city: str) -> WeatherReport:
 
 def get_weather(city: str) -> str:
     """Text form kept for the command/tool layer."""
-    report = get_weather_report(city)
+    try:
+        report = get_weather_report(city)
+    except WeatherCityNotFound:
+        return f"Города «{city}» нет в базе сервиса — проверь название."
     parts = [
         f"Сейчас в {report.city}: {report.condition}, {_format_temp(report.temperature)}.",
         f"Ощущается как {_format_temp(report.apparent)}, "

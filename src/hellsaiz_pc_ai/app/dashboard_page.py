@@ -18,7 +18,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from hellsaiz_pc_ai.tools.public_info import WeatherReport, get_weather_report
+from hellsaiz_pc_ai.tools.public_info import (
+    WeatherCityNotFound,
+    WeatherReport,
+    get_weather_report,
+)
 
 from hellsaiz_pc_ai.app.ui_icons import refresh_icon
 from hellsaiz_pc_ai.app.dashboard_texts import (
@@ -33,6 +37,7 @@ class WeatherWorker(QThread):
 
     completed = Signal(object)
     failed = Signal(str)
+    city_missing = Signal(str)
 
     def __init__(self, city: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -41,6 +46,8 @@ class WeatherWorker(QThread):
     def run(self) -> None:
         try:
             self.completed.emit(get_weather_report(self.city))
+        except WeatherCityNotFound as exc:
+            self.city_missing.emit(exc.city)
         except Exception as exc:
             self.failed.emit(str(exc))
 
@@ -285,8 +292,19 @@ class DashboardPage(QWidget):
                 "Нет ответа за 15 секунд. Проверь подключение к сети и нажми «Обновить»."
             )
 
+        def on_city_missing(city: str) -> None:
+            self._weather_finished = True
+            self._weather_text.setText("Погоду получить не удалось")
+            self._weather_temperature.setText("—")
+            self._weather_icon.setText("☁️")
+            self._weather_forecast.setText("")
+            self._weather_note.setText(
+                f"Города «{city}» нет в базе сервиса — проверь название."
+            )
+
         worker.completed.connect(on_completed)
         worker.failed.connect(on_failed)
+        worker.city_missing.connect(on_city_missing)
         worker.finished.connect(
             lambda: self._weather_workers_clear(worker)
         )
