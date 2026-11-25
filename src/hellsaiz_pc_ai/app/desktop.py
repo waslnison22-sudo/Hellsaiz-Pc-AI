@@ -522,6 +522,8 @@ def main() -> int:
     class Worker(QThread):
         completed = Signal(str, str)
         failed = Signal(str)
+        speech_started = Signal()
+        speech_finished = Signal()
 
         def __init__(
             self,
@@ -545,6 +547,8 @@ def main() -> int:
             self.assistant_profile = dict(assistant_profile or profile_data)
             self.voice_name = voice_name
             self.tts_profile = dict(tts_profile or active_tts)
+            # Published while a reply is being spoken so the UI can interrupt it.
+            self.speech_router: Any = None
 
         def run(self) -> None:
             try:
@@ -606,9 +610,10 @@ def main() -> int:
 
                 if self.workflow_trigger is None:
                     if answer is None:
-                        if answer is not None:
+                        routed = router.route(prompt)
+                        if routed is not None:
                             from_local_command = True
-                        answer = router.route(prompt)
+                            answer = routed
                     if answer is None and assistant is not None:
                         answer = assistant.reply(prompt)
                     if answer is None:
@@ -638,7 +643,13 @@ def main() -> int:
 
                 # Голосом озвучиваются только ответы ИИ; подтверждения локальных
                 # команд и сценариев не озвучиваются никогда.
-                if self.speak_reply and self.workflow_trigger is None and not from_local_command:
+                from hellsaiz_pc_ai.speech.output import should_speak_answer
+
+                if should_speak_answer(
+                    self.speak_reply,
+                    workflow_trigger=self.workflow_trigger is not None,
+                    local_command=from_local_command,
+                ):
                     try:
                         from hellsaiz_pc_ai.speech.output import SpeechOutputRouter
                         from hellsaiz_pc_ai.speech.sapi5 import Sapi5Synthesizer
@@ -664,9 +675,16 @@ def main() -> int:
                         if preferred_tts not in {"sapi5", "piper"}:
                             preferred_tts = "sapi5"
                         fallback_tts = "sapi5" if preferred_tts == "piper" else "piper"
-                        result = SpeechOutputRouter(
+                        active_router = SpeechOutputRouter(
                             speakers, preferred_tts, fallback_tts
-                        ).speak(answer)
+                        )
+                        self.speech_router = active_router
+                        self.speech_started.emit()
+                        try:
+                            result = active_router.speak(answer)
+                        finally:
+                            self.speech_router = None
+                            self.speech_finished.emit()
                         if result.fallback_used:
                             logging.warning(
                                 "TTS fell back to %s because the preferred engine failed: %s",
@@ -983,10 +1001,28 @@ def main() -> int:
     send_button.setToolTip("Отправить")
     send_button.setFixedSize(34, 34)
     send_button.setCursor(Qt.CursorShape.PointingHandCursor)
+    mute_speech_button = QPushButton("Не озвучивать")
+    mute_speech_button.setObjectName("secondaryButton")
+    mute_speech_button.setToolTip("Прервать текущую озвучку и вернуться к тексту")
+    mute_speech_button.setCursor(Qt.CursorShape.PointingHandCursor)
+    mute_speech_button.hide()
     controls.addWidget(input_box, 1)
+    controls.addWidget(mute_speech_button)
     controls.addWidget(voice_button)
     controls.addWidget(send_button)
     home_layout.addLayout(controls)
+
+    def stop_speech_playback() -> None:
+        stopped = False
+        for active_worker in list(workers):
+            router = getattr(active_worker, "speech_router", None)
+            if router is not None:
+                router.stop()
+                stopped = True
+        mute_speech_button.hide()
+        toast.show_message("Озвучка выключена" if stopped else "Сейчас нечего озвучивать")
+
+    mute_speech_button.clicked.connect(stop_speech_playback)
 
     quick_scroll = QScrollArea()
     quick_scroll.setObjectName("chatQuickCommands")
@@ -3743,6 +3779,8 @@ def main() -> int:
             worker.failed.connect(show_error)
             worker.finished.connect(transcript.hide_typing)
             worker.finished.connect(lambda: set_chat_status("онлайн"))
+            worker.speech_started.connect(mute_speech_button.show)
+            worker.speech_finished.connect(mute_speech_button.hide)
             worker.finished.connect(lambda: send_button.setEnabled(True))
             worker.finished.connect(lambda: voice_button.setEnabled(True))
             worker.finished.connect(lambda: input_box.setEnabled(True))

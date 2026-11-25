@@ -19,6 +19,20 @@ class SpeechOutputError(RuntimeError):
     pass
 
 
+def should_speak_answer(
+    speak_reply: bool,
+    *,
+    workflow_trigger: bool,
+    local_command: bool,
+) -> bool:
+    """Voice output is reserved for AI answers.
+
+    Local command replies (``помощь``, ``который час`` …) and scenario results are
+    deterministic text: they belong in the chat, not in the speakers.
+    """
+    return bool(speak_reply) and not workflow_trigger and not local_command
+
+
 class SpeechOutputRouter:
     """Play a spoken response with one explicit local fallback."""
 

@@ -67,3 +67,32 @@ def test_empty_tts_text_is_ignored():
     result = router.speak("   ")
 
     assert result.engine == "sapi5"
+
+
+def test_local_command_replies_are_not_spoken():
+    from hellsaiz_pc_ai.speech.output import should_speak_answer
+
+    # "помощь" is answered by the local command router, not by the AI.
+    assert should_speak_answer(True, workflow_trigger=False, local_command=True) is False
+    assert should_speak_answer(True, workflow_trigger=True, local_command=False) is False
+    assert should_speak_answer(True, workflow_trigger=False, local_command=False) is True
+    assert should_speak_answer(False, workflow_trigger=False, local_command=False) is False
+
+
+def test_barge_in_stop_reaches_every_engine():
+    class StoppableSpeaker(FakeSpeaker):
+        def __init__(self):
+            super().__init__()
+            self.stopped = 0
+
+        def stop(self):
+            self.stopped += 1
+
+    primary = StoppableSpeaker()
+    fallback = StoppableSpeaker()
+    router = SpeechOutputRouter({"sapi5": primary, "piper": fallback}, "sapi5", "piper")
+
+    router.stop()
+
+    assert primary.stopped == 1
+    assert fallback.stopped == 1
