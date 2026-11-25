@@ -45,7 +45,14 @@ from hellsaiz_pc_ai.tools.system import register_system_tools
 from hellsaiz_pc_ai.tools.public_info import register_public_info_tools
 from hellsaiz_pc_ai.app.wallpaper import WallpaperError, WallpaperStore
 from hellsaiz_pc_ai.app.chat_page import ChatInput, ChatTranscript, Toast
-from hellsaiz_pc_ai.app.ui_icons import mic_icon, send_icon, trash_icon
+from hellsaiz_pc_ai.app.ui_icons import (
+    mic_icon,
+    mic_off_icon,
+    nav_icon,
+    send_icon,
+    sparkles_icon,
+    trash_icon,
+)
 from hellsaiz_pc_ai.app.theme import build_dark_stylesheet
 from hellsaiz_pc_ai.app.file_access import (
     FileAccessSettings,
@@ -1002,6 +1009,7 @@ def main() -> int:
     send_button.setFixedSize(34, 34)
     send_button.setCursor(Qt.CursorShape.PointingHandCursor)
     mute_speech_button = QPushButton("Не озвучивать")
+    mute_speech_button.setIcon(mic_off_icon())
     mute_speech_button.setObjectName("secondaryButton")
     mute_speech_button.setToolTip("Прервать текущую озвучку и вернуться к тексту")
     mute_speech_button.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -1043,6 +1051,8 @@ def main() -> int:
         ("Напомни", "напомни "),
     ):
         quick_button = QPushButton(quick_label)
+        if quick_label == "Что я умею":
+            quick_button.setIcon(sparkles_icon())
         quick_button.setObjectName("secondaryButton")
         quick_button.setToolTip("Вставить в поле ввода")
         quick_button.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -3565,6 +3575,15 @@ def main() -> int:
         pill.setObjectName("navPill")
         pill.setCheckable(True)
         pill.setCursor(Qt.CursorShape.PointingHandCursor)
+        pill_icon_name = {
+            "Главная": "house",
+            "Чат": "message-circle",
+            "Сценарии": "zap",
+            "Голоса": "mic",
+            "Настройки": "settings",
+        }.get(pill_title)
+        if pill_icon_name:
+            pill.setIcon(nav_icon(pill_icon_name))
         pill.clicked.connect(lambda _checked=False, name=pill_title: show_page(name))
         pill_group.addButton(pill)
         nav_pills_layout.addWidget(pill)

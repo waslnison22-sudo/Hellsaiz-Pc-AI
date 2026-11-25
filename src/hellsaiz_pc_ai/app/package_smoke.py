@@ -42,6 +42,31 @@ PACKAGED_RUNTIME_MODULES = (
 )
 
 
+def check_icon_rendering() -> list[str]:
+    """Render one vendored Lucide icon; proves QtSvg made it into the bundle."""
+    try:
+        from hellsaiz_pc_ai.app.icons import load_icon
+    except Exception as exc:  # pragma: no cover - bundle-specific
+        return [f"icons module could not be imported: {exc}"]
+
+    icon = load_icon("mic", "#F2EFEA")
+    if icon.isNull():
+        return ["Lucide icon 'mic' could not be loaded (missing SVG or QtSvg?)"]
+    pixmap = icon.pixmap(24, 24)
+    if pixmap.isNull() or pixmap.width() < 16:
+        return ["Lucide icon 'mic' rendered an empty pixmap"]
+    image = pixmap.toImage()
+    opaque = sum(
+        1
+        for y in range(image.height())
+        for x in range(image.width())
+        if image.pixelColor(x, y).alpha() > 0
+    )
+    if opaque < 20:
+        return [f"Lucide icon 'mic' rendered only {opaque} visible pixels"]
+    return []
+
+
 def check_packaged_runtime(
     importer: Callable[[str], object] = importlib.import_module,
     progress: Callable[[str], None] | None = None,
