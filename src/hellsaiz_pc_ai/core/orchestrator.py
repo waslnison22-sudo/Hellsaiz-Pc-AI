@@ -28,6 +28,17 @@ class ChatProvider(Protocol):
     def complete(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> dict[str, Any]: ...
 
 
+LLM_FALLBACK_MESSAGE = (
+    "ИИ-провайдер сейчас не отвечает — локальные команды работают. "
+    "Проверь соединение в «Настройки → ИИ-провайдер» и попробуй позже."
+)
+
+
+def llm_failure_message(error: BaseException) -> str:
+    """Human text used when the LLM is unreachable; the cause stays in the log."""
+    return LLM_FALLBACK_MESSAGE
+
+
 class AssistantOrchestrator:
     def __init__(
         self, provider: ChatProvider, registry: ToolRegistry, system_prompt: str, max_tool_rounds: int = 4

@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 
 
 SCHEMA_VERSION = 1
-SUPPORTED_PROVIDERS = {"lm-studio", "ollama", "llama.cpp", "custom", "gigachat"}
+SUPPORTED_PROVIDERS = {"lm-studio", "ollama", "llama.cpp", "custom", "gigachat", "deepseek"}
 DEFAULT_PROFILE_NAME = "LM Studio"
 
 
@@ -43,6 +43,18 @@ def default_profile_store(
         "profiles": [
             selected,
             _profile("Ollama", "ollama", "http://127.0.0.1:11434/v1", "llama3.2"),
+            _profile(
+                "DeepSeek (локальный)",
+                "deepseek",
+                "http://127.0.0.1:8000/v1",
+                "deepseek-chat",
+            ),
+            _profile(
+                "DeepSeek (облако)",
+                "deepseek",
+                "https://api.deepseek.com",
+                "deepseek-chat",
+            ),
         ],
     }
 

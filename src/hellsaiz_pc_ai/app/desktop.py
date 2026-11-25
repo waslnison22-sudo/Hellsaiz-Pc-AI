@@ -24,10 +24,11 @@ from hellsaiz_pc_ai.install_layout import installed_app_root, installed_version
 from hellsaiz_pc_ai import startup_task
 from hellsaiz_pc_ai.network import v2raytun
 from hellsaiz_pc_ai.version import APP_VERSION
-from hellsaiz_pc_ai.core.orchestrator import AssistantOrchestrator
+from hellsaiz_pc_ai.core.orchestrator import AssistantOrchestrator, llm_failure_message
 from hellsaiz_pc_ai.core.registry import ToolRegistry
 from hellsaiz_pc_ai.hotkeys import GlobalHotkeyService, HotkeyUnavailableError
 from hellsaiz_pc_ai.providers.openai_compatible import OpenAICompatibleProvider, ProviderError
+from hellsaiz_pc_ai.providers.deepseek import DeepSeekError, DeepSeekProvider
 from hellsaiz_pc_ai.providers.gigachat import GigaChatProvider
 from hellsaiz_pc_ai.provider_profiles import (
     active_profile as get_active_provider_profile,
@@ -250,6 +251,22 @@ def build_runtime(settings: Settings):
                     assistant = AssistantOrchestrator(
                         provider, registry, settings.llm.system_prompt, settings.llm.max_tool_rounds
                     )
+            elif provider_type == "deepseek":
+                profile_name = str(profile_data.get("name") or "DeepSeek")
+                credential_path = provider_credential_path(
+                    settings.workflows_path.parent, profile_name
+                )
+                api_key = load_secret(credential_path) or ""
+                cloud_mode = "deepseek.com" in profile_base_url or "облак" in profile_name.casefold()
+                provider = DeepSeekProvider(
+                    "cloud" if cloud_mode else "local",
+                    profile_base_url,
+                    api_key,
+                    profile_model,
+                )
+                assistant = AssistantOrchestrator(
+                    provider, registry, settings.llm.system_prompt, settings.llm.max_tool_rounds
+                )
             else:
                 provider = OpenAICompatibleProvider(
                     profile_base_url,
@@ -261,7 +278,7 @@ def build_runtime(settings: Settings):
                 assistant = AssistantOrchestrator(
                     provider, registry, settings.llm.system_prompt, settings.llm.max_tool_rounds
                 )
-        except (ProviderError, SecureStoreError, ValueError) as exc:
+        except (ProviderError, DeepSeekError, SecureStoreError, ValueError) as exc:
             logging.warning("The active AI profile could not be initialized: %s", exc)
 
     store = ChatStore(settings.database_path)
@@ -328,6 +345,7 @@ def main() -> int:
         from hellsaiz_pc_ai.telegram.config import TelegramSettings, load_settings as load_telegram_settings, save_settings as save_telegram_settings
         from hellsaiz_pc_ai.telegram.worker import TelegramBotWorker
         from hellsaiz_pc_ai.app.ui_workers import (
+            DeepSeekCheckWorker,
             HotkeyBridge,
             HotkeyDispatcher,
             NetworkProbeWorker,
@@ -622,7 +640,11 @@ def main() -> int:
                             from_local_command = True
                             answer = routed
                     if answer is None and assistant is not None:
-                        answer = assistant.reply(prompt)
+                        try:
+                            answer = assistant.reply(prompt)
+                        except (ProviderError, DeepSeekError) as exc:
+                            logging.warning("AI provider failed: %s", exc)
+                            answer = llm_failure_message(exc)
                     if answer is None:
                         answer = (
                             "Эта фраза пока не входит в список локальных команд. "
@@ -2135,6 +2157,137 @@ def main() -> int:
     files_tab_page, files_tab_layout = _settings_tab("Файлы и автозапуск")
     updates_tab_page, updates_tab_layout = _settings_tab("Обновления")
     diagnostics_tab_page, diagnostics_tab_layout = _settings_tab("Диагностика")
+    provider_tab_page, provider_tab_layout = _settings_tab("ИИ-провайдер")
+    provider_title = QLabel("DeepSeek")
+    provider_title.setStyleSheet("color:#c8cdd5; font-size:13px; font-weight:600;")
+    provider_tab_layout.addWidget(provider_title)
+    provider_hint = QLabel(
+        "Локальный режим работает с dsh на этом компьютере и не отправляет запросы "
+        "в сеть. Облачный режим отправляет сообщения на api.deepseek.com."
+    )
+    provider_hint.setWordWrap(True)
+    provider_hint.setStyleSheet("color:#A6A29C;")
+    provider_tab_layout.addWidget(provider_hint)
+    provider_mode_combo = QComboBox()
+    provider_mode_combo.addItem("Локальный dsh (127.0.0.1:8000)", "local")
+    provider_mode_combo.addItem("Облако DeepSeek (api.deepseek.com)", "cloud")
+    provider_tab_layout.addWidget(provider_mode_combo)
+    provider_url_edit = QLineEdit()
+    provider_url_edit.setPlaceholderText("http://127.0.0.1:8000/v1")
+    provider_url_row = QHBoxLayout()
+    provider_url_row.addWidget(QLabel("Адрес"))
+    provider_url_row.addWidget(provider_url_edit, 1)
+    provider_tab_layout.addLayout(provider_url_row)
+    provider_key_edit = QLineEdit()
+    provider_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+    provider_key_edit.setPlaceholderText("Ключ DeepSeek API (только для облака)")
+    provider_key_row = QHBoxLayout()
+    provider_key_row.addWidget(QLabel("Ключ"))
+    provider_key_row.addWidget(provider_key_edit, 1)
+    provider_tab_layout.addLayout(provider_key_row)
+    provider_key_status = QLabel("Ключ хранится через Windows DPAPI.")
+    provider_key_status.setStyleSheet("color:#A6A29C;")
+    provider_tab_layout.addWidget(provider_key_status)
+    provider_buttons = QHBoxLayout()
+    provider_check_button = QPushButton("Проверить соединение")
+    provider_save_button = QPushButton("Сохранить настройки")
+    provider_buttons.addWidget(provider_check_button)
+    provider_buttons.addWidget(provider_save_button)
+    provider_buttons.addStretch(1)
+    provider_tab_layout.addLayout(provider_buttons)
+    provider_status = QLabel("Соединение ещё не проверялось.")
+    provider_status.setWordWrap(True)
+    provider_status.setStyleSheet("color:#A6A29C;")
+    provider_tab_layout.addWidget(provider_status)
+    provider_workers: list[QThread] = []
+
+    def _provider_mode() -> str:
+        return str(provider_mode_combo.currentData() or "local")
+
+    def _provider_default_url(mode: str) -> str:
+        return (
+            "http://127.0.0.1:8000/v1"
+            if mode == "local"
+            else "https://api.deepseek.com"
+        )
+
+    def apply_provider_mode() -> None:
+        mode = _provider_mode()
+        if not provider_url_edit.text().strip() or provider_url_edit.text().strip() in {
+            _provider_default_url("local"),
+            _provider_default_url("cloud"),
+        }:
+            provider_url_edit.setText(_provider_default_url(mode))
+        provider_key_edit.setEnabled(mode == "cloud")
+
+    def check_provider_connection() -> None:
+        if any(worker.isRunning() for worker in provider_workers):
+            return
+        provider_check_button.setEnabled(False)
+        provider_status.setText("Проверяю соединение с ИИ-провайдером…")
+        mode = _provider_mode()
+        url = provider_url_edit.text().strip() or _provider_default_url(mode)
+        key = provider_key_edit.text().strip() or load_secret(
+            provider_credential_path(settings.workflows_path.parent, "DeepSeek (облако)")
+        ) or ""
+        worker = DeepSeekCheckWorker(mode, url, key)
+        provider_workers.append(worker)
+
+        def on_result(message: str) -> None:
+            provider_status.setText(message)
+
+        worker.completed.connect(on_result)
+        worker.finished.connect(lambda: provider_check_button.setEnabled(True))
+        worker.finished.connect(
+            lambda: provider_workers.remove(worker) if worker in provider_workers else None
+        )
+        worker.start()
+
+    def save_provider_settings() -> None:
+        mode = _provider_mode()
+        url = provider_url_edit.text().strip() or _provider_default_url(mode)
+        key = provider_key_edit.text().strip()
+        profile_name = (
+            "DeepSeek (локальный)" if mode == "local" else "DeepSeek (облако)"
+        )
+        if mode == "cloud" and key:
+            save_secret(
+                provider_credential_path(settings.workflows_path.parent, profile_name), key
+            )
+        nonlocal provider_profile_store
+        try:
+            updated = upsert_profile(
+                provider_profile_store,
+                {
+                    "name": profile_name,
+                    "provider": "deepseek",
+                    "base_url": url,
+                    "model": "deepseek-chat",
+                    "enabled": True,
+                },
+                activate=True,
+            )
+            save_profile_store(provider_profile_store_path, updated)
+            provider_profile_store = updated
+            provider_status.setText(
+                "Сохранено. Перезапусти приложение, чтобы применить профиль."
+            )
+        except (OSError, ValueError) as exc:
+            provider_status.setText(f"Не удалось сохранить: {exc}")
+            return
+        if mode == "cloud" and not profile_data.get("cloud_llm_notice_shown"):
+            QMessageBox.information(
+                window,
+                "Облачный режим",
+                "В облачном режиме текст запросов уходит на api.deepseek.com. "
+                "Не отправляй туда личные данные, если это важно.",
+            )
+            profile_data["cloud_llm_notice_shown"] = True
+
+    provider_mode_combo.currentIndexChanged.connect(apply_provider_mode)
+    provider_check_button.clicked.connect(check_provider_connection)
+    provider_save_button.clicked.connect(save_provider_settings)
+    apply_provider_mode()
     apps_tab_page, apps_tab_layout = _settings_tab("Приложения")
     apps_toggle = QToolButton()
     apps_toggle.setText("Список приложений")

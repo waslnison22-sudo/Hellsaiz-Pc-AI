@@ -155,6 +155,30 @@ class ProviderHealthWorker(QThread):
             self.failed.emit(str(exc))
 
 
+class DeepSeekCheckWorker(QThread):
+    """Probe the configured DeepSeek endpoint without blocking the UI."""
+
+    completed = Signal(str)
+
+    def __init__(self, mode: str, base_url: str, api_key: str) -> None:
+        super().__init__()
+        self.mode = mode
+        self.base_url = base_url
+        self.api_key = api_key
+
+    def run(self) -> None:
+        try:
+            from hellsaiz_pc_ai.providers.deepseek import DeepSeekError, DeepSeekProvider
+
+            provider = DeepSeekProvider(
+                self.mode, self.base_url, self.api_key, timeout_seconds=8
+            )
+        except (ValueError, DeepSeekError) as exc:
+            self.completed.emit(str(exc))
+            return
+        self.completed.emit(provider.check_connection())
+
+
 class VoiceDownloadWorker(QThread):
     """Downloads a Piper voice into the user voice library."""
 
