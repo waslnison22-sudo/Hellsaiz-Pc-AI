@@ -701,20 +701,34 @@ def main() -> int:
 
     header_row = QHBoxLayout()
     header_row.setContentsMargins(0, 0, 0, 0)
-    header_row.setSpacing(8)
-    header = QLabel("Чат")
-    header.setStyleSheet("font-size:22px; font-weight:650; color:#F2EFEA;")
-    header.setStyleSheet("padding-bottom:5px;")
-    header_row.addWidget(header)
+    header_row.setSpacing(10)
+    chat_header_avatar = QLabel("H")
+    chat_header_avatar.setObjectName("chatHeaderAvatar")
+    chat_header_avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    chat_header_avatar.setFixedSize(28, 28)
+    header_row.addWidget(chat_header_avatar)
+    header_column = QVBoxLayout()
+    header_column.setContentsMargins(0, 0, 0, 0)
+    header_column.setSpacing(0)
+    chat_header_name = QLabel("Hellsaiz")
+    chat_header_name.setObjectName("chatHeaderName")
+    chat_header_status = QLabel("онлайн")
+    chat_header_status.setObjectName("chatHeaderStatus")
+    header_column.addWidget(chat_header_name)
+    header_column.addWidget(chat_header_status)
+    header_row.addLayout(header_column)
     header_row.addStretch(1)
     clear_button = QPushButton()
     clear_button.setIcon(trash_icon())
-    clear_button.setObjectName("chatClearButton")
-    clear_button.setToolTip("Очистить чат")
+    clear_button.setObjectName("ghostButton")
+    clear_button.setToolTip("Очистить историю чата")
     clear_button.setCursor(Qt.CursorShape.PointingHandCursor)
     clear_button.setFixedSize(34, 34)
     header_row.addWidget(clear_button)
     home_layout.addLayout(header_row)
+
+    def set_chat_status(state: str) -> None:
+        chat_header_status.setText(state)
     capabilities_panel = QFrame()
     capabilities_panel.setObjectName("profilePanel")
     capabilities_layout = QVBoxLayout(capabilities_panel)
@@ -974,10 +988,25 @@ def main() -> int:
     controls.addWidget(send_button)
     home_layout.addLayout(controls)
 
-    quick_commands_row = QHBoxLayout()
+    quick_scroll = QScrollArea()
+    quick_scroll.setObjectName("chatQuickCommands")
+    quick_scroll.setWidgetResizable(True)
+    quick_scroll.setFrameShape(QFrame.Shape.NoFrame)
+    quick_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    quick_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+    quick_scroll.setFixedHeight(46)
+    quick_container = QWidget()
+    quick_container.setObjectName("chatQuickCommandsBody")
+    quick_commands_row = QHBoxLayout(quick_container)
+    quick_commands_row.setContentsMargins(0, 0, 0, 0)
     quick_commands_row.setSpacing(6)
-    for quick_command in ("Какая погода?", "Что ты умеешь?", "Открой блокнот", "Который час?"):
-        quick_button = QPushButton(quick_command)
+    for quick_label, quick_command in (
+        ("Что я умею", "что ты умеешь?"),
+        ("Погода", "какая погода?"),
+        ("Открой блокнот", "открой блокнот"),
+        ("Напомни", "напомни "),
+    ):
+        quick_button = QPushButton(quick_label)
         quick_button.setObjectName("secondaryButton")
         quick_button.setToolTip("Вставить в поле ввода")
         quick_button.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -989,7 +1018,8 @@ def main() -> int:
         )
         quick_commands_row.addWidget(quick_button)
     quick_commands_row.addStretch(1)
-    home_layout.addLayout(quick_commands_row)
+    quick_scroll.setWidget(quick_container)
+    home_layout.addWidget(quick_scroll)
 
     endpoint_defaults = {
         "lm-studio": "http://127.0.0.1:1234/v1",
@@ -3687,6 +3717,7 @@ def main() -> int:
             )
             workers.append(worker)
             transcript.show_typing()
+            set_chat_status("слушаю" if voice_input else "думаю")
             # Safety net: worker.finished normally clears the indicator, but a
             # failed launch or a missed signal must not leave "typing" hanging.
             QTimer.singleShot(30_000, transcript.hide_typing)
@@ -3711,6 +3742,7 @@ def main() -> int:
 
             worker.failed.connect(show_error)
             worker.finished.connect(transcript.hide_typing)
+            worker.finished.connect(lambda: set_chat_status("онлайн"))
             worker.finished.connect(lambda: send_button.setEnabled(True))
             worker.finished.connect(lambda: voice_button.setEnabled(True))
             worker.finished.connect(lambda: input_box.setEnabled(True))
@@ -3723,6 +3755,7 @@ def main() -> int:
         except Exception:
             logging.exception("start_worker: failed to launch the chat worker")
             transcript.hide_typing()
+            set_chat_status("онлайн")
             send_button.setEnabled(True)
             voice_button.setEnabled(True)
             input_box.setEnabled(True)

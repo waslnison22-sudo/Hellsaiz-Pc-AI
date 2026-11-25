@@ -44,3 +44,8 @@ def chat_bubble_html(role: str, text: str) -> str:
             f"<b>Распознано:</b> {safe}</p>"
         )
     return f"<p>{safe}</p>"
+
+
+def minute_changed(previous: str | None, current: str) -> bool:
+    """Chat timestamps look like HH:MM; show one only when the minute changes."""
+    return previous is None or previous != current

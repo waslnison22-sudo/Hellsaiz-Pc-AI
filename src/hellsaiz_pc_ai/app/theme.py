@@ -411,6 +411,43 @@ QScrollArea#chatTranscript {
 QWidget#chatTranscriptBody {
     background: transparent;
 }
+QLabel#chatHeaderAvatar {
+    background: #E8C29E;
+    color: #1A140F;
+    border-radius: 14px;
+    font-size: 15px;
+    font-weight: 800;
+}
+QLabel#chatHeaderName {
+    color: #F2EFEA;
+    font-size: 15px;
+    font-weight: 650;
+}
+QLabel#chatHeaderStatus {
+    color: #A6A29C;
+    font-size: 12px;
+}
+QLabel#chatAvatarUser {
+    background: #171716;
+    color: #F2EFEA;
+    border-radius: 14px;
+    font-size: 12px;
+    font-weight: 650;
+}
+QLabel#chatAvatarAssistant {
+    background: #E8C29E;
+    color: #1A140F;
+    border-radius: 14px;
+    font-size: 13px;
+    font-weight: 800;
+}
+QScrollArea#chatQuickCommands {
+    background: transparent;
+    border: 0;
+}
+QWidget#chatQuickCommandsBody {
+    background: transparent;
+}
 QFrame#chatBubbleUser {
     background: #E8C29E;
     border: 0;

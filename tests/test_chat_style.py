@@ -68,6 +68,12 @@ def test_theme_defines_chat_tokens_and_colours():
         "QPushButton#chatClearButton",
         "QTextEdit#chatComposer",
         "QFrame#chatToast",
+        "QLabel#chatHeaderAvatar",
+        "QLabel#chatHeaderName",
+        "QLabel#chatHeaderStatus",
+        "QLabel#chatAvatarUser",
+        "QLabel#chatAvatarAssistant",
+        "QScrollArea#chatQuickCommands",
     ):
         assert selector in stylesheet
 
@@ -94,3 +100,11 @@ def test_typing_indicator_cycle_stays_short():
 
     assert TypingIndicator.TIMER_INTERVAL_MS <= 200
     assert cycle_ms <= 600
+
+
+def test_timestamp_is_shown_once_per_minute():
+    from hellsaiz_pc_ai.app.chat_style import minute_changed
+
+    assert minute_changed(None, "21:03") is True
+    assert minute_changed("21:03", "21:03") is False
+    assert minute_changed("21:03", "21:04") is True

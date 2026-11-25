@@ -12,6 +12,8 @@ from PySide6.QtCore import (
     QTimer,
     Signal,
 )
+from hellsaiz_pc_ai.app.chat_style import minute_changed
+
 from PySide6.QtWidgets import (
     QFrame,
     QGraphicsOpacityEffect,
@@ -51,7 +53,7 @@ class MessageBubble(QWidget):
         self,
         role: str,
         text: str,
-        timestamp: str,
+        timestamp: str | None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -89,27 +91,44 @@ class MessageBubble(QWidget):
         self.copy_button.hide()
         self.copy_button.clicked.connect(self._copy)
 
+        self.avatar: QLabel | None = None
+        if role in {"user", "assistant"}:
+            self.avatar = QLabel("В" if role == "user" else "H")
+            self.avatar.setObjectName(
+                "chatAvatarUser" if role == "user" else "chatAvatarAssistant"
+            )
+            self.avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.avatar.setFixedSize(28, 28)
+
         if role == "user":
             bubble_row.addStretch(1)
             bubble_row.addWidget(self.copy_button)
             bubble_row.addWidget(self.bubble)
+            if self.avatar is not None:
+                bubble_row.addWidget(self.avatar, 0, Qt.AlignmentFlag.AlignBottom)
         else:
+            if self.avatar is not None:
+                bubble_row.addWidget(self.avatar, 0, Qt.AlignmentFlag.AlignBottom)
             bubble_row.addWidget(self.bubble)
             bubble_row.addWidget(self.copy_button)
             bubble_row.addStretch(1)
         column.addLayout(bubble_row)
 
-        self.timestamp_label = QLabel(timestamp)
-        self.timestamp_label.setObjectName("chatTimestamp")
-        timestamp_row = QHBoxLayout()
-        timestamp_row.setContentsMargins(2, 0, 2, 0)
-        if role == "user":
-            timestamp_row.addStretch(1)
-            timestamp_row.addWidget(self.timestamp_label)
-        else:
-            timestamp_row.addWidget(self.timestamp_label)
-            timestamp_row.addStretch(1)
-        column.addLayout(timestamp_row)
+        self.timestamp_label: QLabel | None = None
+        if timestamp:
+            self.timestamp_label = QLabel(timestamp)
+            self.timestamp_label.setObjectName("chatTimestamp")
+            timestamp_row = QHBoxLayout()
+            timestamp_row.setContentsMargins(2, 0, 2, 0)
+            if role == "user":
+                timestamp_row.addStretch(1)
+                timestamp_row.addWidget(self.timestamp_label)
+                timestamp_row.addSpacing(28)
+            else:
+                timestamp_row.addSpacing(28)
+                timestamp_row.addWidget(self.timestamp_label)
+                timestamp_row.addStretch(1)
+            column.addLayout(timestamp_row)
 
         row.addLayout(column, 1)
 
@@ -203,6 +222,7 @@ class ChatTranscript(QScrollArea):
         self._typing_reveal.setSingleShot(True)
         self._typing_reveal.timeout.connect(self._reveal_typing)
         self._bubbles: list[MessageBubble] = []
+        self._last_minute: str | None = None
         self._stick_to_bottom = True
         self.verticalScrollBar().rangeChanged.connect(self._on_range_changed)
         self.verticalScrollBar().valueChanged.connect(self._on_scrolled)
@@ -220,7 +240,10 @@ class ChatTranscript(QScrollArea):
         if self._typing.isVisible():
             self._layout.removeWidget(self._typing)
             self._typing.hide()
-        bubble = MessageBubble(role, text, timestamp)
+        # Messenger-style: one timestamp per minute, not under every bubble.
+        show_stamp = minute_changed(self._last_minute, timestamp)
+        self._last_minute = timestamp
+        bubble = MessageBubble(role, text, timestamp if show_stamp else None)
         bubble.copied.connect(self.copied)
         bubble.setMaximumWidth(self._bubble_max_width())
         self._bubbles.append(bubble)
@@ -265,6 +288,7 @@ class ChatTranscript(QScrollArea):
             self._layout.removeWidget(bubble)
             bubble.hide()
         self._bubbles.clear()
+        self._last_minute = None
         self.hide_typing()
         return removed
 
