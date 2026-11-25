@@ -870,19 +870,24 @@ def main() -> int:
         )
 
     def clear_chat() -> None:
-        removed = transcript.clear_messages()
-        if not removed:
+        if not transcript.message_count():
             return
-
-        def undo() -> None:
-            transcript.restore_messages(removed)
-
-        toast.show_message(
-            f"Очищено сообщений: {len(removed)}",
-            action_text="Отменить",
-            action=undo,
-            timeout_ms=5000,
+        answer = QMessageBox.question(
+            window,
+            "Очистить чат?",
+            "История сообщений будет удалена без возможности отмены.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
         )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        removed = transcript.clear_messages()
+        try:
+            store.clear()
+        except (OSError, ValueError):
+            logging.exception("Could not clear the chat history")
+        set_chat_status("онлайн")
+        toast.show_message(f"Чат очищен: удалено сообщений {len(removed)}")
 
     transcript.copied.connect(lambda _text: toast.show_message("Скопировано"))
     clear_button.clicked.connect(clear_chat)

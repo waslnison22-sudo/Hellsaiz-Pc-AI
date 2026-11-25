@@ -86,3 +86,31 @@ def test_appear_animation_stops_when_the_transcript_is_hidden():
     app.processEvents()
 
     assert fade.state() != QVariantAnimation.State.Running
+
+
+def test_chat_store_clear_removes_history(tmp_path):
+    from hellsaiz_pc_ai.storage.sqlite_store import ChatStore
+
+    store = ChatStore(tmp_path / "history.sqlite3")
+    store.add_message("user", "привет")
+    store.add_message("assistant", "здравствуй")
+    assert len(store.recent_messages()) == 2
+
+    store.clear()
+
+    assert store.recent_messages() == []
+
+
+@_requires_qt
+def test_transcript_reset_returns_to_the_initial_view():
+    app = QApplication.instance() or QApplication([])
+    transcript = ChatTranscript()
+    transcript.add_message("user", "привет", "21:05", "25.11.2026")
+    transcript.add_message("assistant", "здравствуй", "21:05", "25.11.2026")
+    assert transcript.message_count() == 2
+
+    transcript.clear_messages()
+
+    assert transcript.message_count() == 0
+    assert transcript._new_messages_button.isHidden() is True
+    app.processEvents()
