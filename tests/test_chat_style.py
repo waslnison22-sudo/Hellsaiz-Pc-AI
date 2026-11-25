@@ -77,3 +77,20 @@ def test_theme_defines_chat_tokens_and_colours():
     assert "border-bottom-right-radius: 4px" in stylesheet
     assert "border-bottom-left-radius: 4px" in stylesheet
     assert "#E8C29E" in stylesheet
+
+
+@_requires_chat_page
+def test_typing_indicator_keeps_the_short_reveal_delay():
+    from hellsaiz_pc_ai.app.chat_page import TYPING_REVEAL_DELAY_MS
+
+    assert 200 <= TYPING_REVEAL_DELAY_MS <= 400
+
+
+@_requires_chat_page
+def test_typing_indicator_cycle_stays_short():
+    from hellsaiz_pc_ai.app.chat_page import TypingIndicator
+
+    cycle_ms = TypingIndicator.TIMER_INTERVAL_MS * TypingIndicator.DOTS_STATES
+
+    assert TypingIndicator.TIMER_INTERVAL_MS <= 200
+    assert cycle_ms <= 600

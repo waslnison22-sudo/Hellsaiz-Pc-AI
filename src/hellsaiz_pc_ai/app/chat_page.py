@@ -128,8 +128,18 @@ class MessageBubble(QWidget):
         super().leaveEvent(event)
 
 
+TYPING_REVEAL_DELAY_MS = 300
+
+
 class TypingIndicator(QWidget):
-    """Assistant bubble with animated dots, shown while the worker answers."""
+    """Assistant bubble with animated dots, shown while the worker answers.
+
+    The dot cycle is intentionally short: the indicator is only a hint that the
+    answer is coming, and a slow animation reads as a freeze on a busy machine.
+    """
+
+    TIMER_INTERVAL_MS = 150
+    DOTS_STATES = 3
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -147,7 +157,7 @@ class TypingIndicator(QWidget):
         row.addStretch(1)
         self._dots = 0
         self._timer = QTimer(self)
-        self._timer.setInterval(250)
+        self._timer.setInterval(self.TIMER_INTERVAL_MS)
         self._timer.timeout.connect(self._tick)
 
     def start(self) -> None:
@@ -159,7 +169,7 @@ class TypingIndicator(QWidget):
         self._timer.stop()
 
     def _tick(self) -> None:
-        self._dots = (self._dots + 1) % 4
+        self._dots = (self._dots + 1) % self.DOTS_STATES
         self.label.setText("Ассистент печатает" + "." * self._dots)
 
 
@@ -230,7 +240,7 @@ class ChatTranscript(QScrollArea):
     def show_typing(self) -> None:
         # Short answers should not flash the indicator: reveal it only after a
         # small delay, and cancel the reveal when the reply arrives first.
-        self._typing_reveal.start(300)
+        self._typing_reveal.start(TYPING_REVEAL_DELAY_MS)
 
     def _reveal_typing(self) -> None:
         stick = self._is_at_bottom()
