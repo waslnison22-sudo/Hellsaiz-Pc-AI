@@ -46,6 +46,12 @@ from hellsaiz_pc_ai.tools.system import register_system_tools
 from hellsaiz_pc_ai.tools.public_info import register_public_info_tools
 from hellsaiz_pc_ai.app.wallpaper import WallpaperError, WallpaperStore
 from hellsaiz_pc_ai.app.chat_page import ChatInput, ChatTranscript, Toast
+from hellsaiz_pc_ai.app.ui_fx import (
+    ArrowRotator,
+    PulseDot,
+    animate_height,
+    install_button_fx,
+)
 from hellsaiz_pc_ai.app.ui_icons import (
     mic_icon,
     mic_off_icon,
@@ -763,8 +769,17 @@ def main() -> int:
     chat_header_name.setObjectName("chatHeaderName")
     chat_header_status = QLabel("онлайн")
     chat_header_status.setObjectName("chatHeaderStatus")
+    chat_status_row = QHBoxLayout()
+    chat_status_row.setContentsMargins(0, 0, 0, 0)
+    chat_status_row.setSpacing(4)
+    chat_status_dot = QLabel("●")
+    chat_status_dot.setObjectName("chatStatusDot")
+    chat_status_row.addWidget(chat_status_dot, 0, Qt.AlignmentFlag.AlignVCenter)
+    chat_status_row.addWidget(chat_header_status)
+    chat_status_row.addStretch(1)
     header_column.addWidget(chat_header_name)
-    header_column.addWidget(chat_header_status)
+    header_column.addLayout(chat_status_row)
+    status_pulse = PulseDot(chat_status_dot)
     header_row.addLayout(header_column)
     header_row.addStretch(1)
     clear_button = QPushButton()
@@ -778,6 +793,13 @@ def main() -> int:
 
     def set_chat_status(state: str) -> None:
         chat_header_status.setText(state)
+        status_pulse.set_fast(state == "думаю")
+        chat_status_dot.setStyleSheet(
+            "color: rgba(232, 194, 158, 255); font-size: 12px;"
+            if state in {"думаю", "слушаю"}
+            else "color: rgba(125, 212, 135, 255); font-size: 12px;"
+        )
+        status_pulse.start()
     capabilities_panel = QFrame()
     capabilities_panel.setObjectName("profilePanel")
     capabilities_layout = QVBoxLayout(capabilities_panel)
@@ -2299,7 +2321,6 @@ def main() -> int:
     apps_toggle.setObjectName("collapsibleHeader")
     apps_toggle.setCheckable(True)
     apps_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-    apps_toggle.setArrowType(Qt.ArrowType.RightArrow)
     apps_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
     apps_tab_layout.addWidget(apps_toggle)
     apps_container = QWidget()
@@ -2309,11 +2330,11 @@ def main() -> int:
     apps_container_layout.setContentsMargins(0, 0, 0, 0)
     apps_container_layout.addWidget(apps_page)
 
+    apps_arrow = ArrowRotator(apps_toggle)
+
     def toggle_apps_section(expanded: bool) -> None:
-        apps_container.setVisible(expanded)
-        apps_toggle.setArrowType(
-            Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow
-        )
+        animate_height(apps_container, expanded)
+        apps_arrow.set_expanded(expanded)
 
     apps_toggle.toggled.connect(toggle_apps_section)
     settings_layout.addWidget(settings_tabs, 1)
@@ -3795,6 +3816,11 @@ def main() -> int:
 
     window.setCentralWidget(root)
     show_page("Главная" if "Главная" in title_to_index else page_titles[0])
+
+    # Subtle hover/press feedback for the themed button families.
+    for themed_button in window.findChildren(QPushButton):
+        if themed_button.objectName() in {"secondaryButton", "navPill", "ghostButton"}:
+            install_button_fx(themed_button)
 
     def scale_wallpaper(pixmap: QPixmap, mode: str) -> QPixmap:
         size = window.size()

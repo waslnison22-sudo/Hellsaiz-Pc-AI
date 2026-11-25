@@ -466,6 +466,10 @@ QLabel#chatHeaderName {
     font-size: 15px;
     font-weight: 650;
 }
+QLabel#chatStatusDot {
+    color: #7dd487;
+    font-size: 12px;
+}
 QLabel#chatHeaderStatus {
     color: #A6A29C;
     font-size: 12px;
