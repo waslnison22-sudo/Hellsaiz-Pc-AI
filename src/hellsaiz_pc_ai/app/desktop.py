@@ -505,8 +505,7 @@ def main() -> int:
 
     window = QMainWindow()
     window.setWindowTitle(settings.app_name)
-    if "window_icon" in locals() and not window_icon.isNull():
-        window.setWindowIcon(window_icon)
+    window.setWindowIcon(window_icon)
     window.resize(1240, 820)
     window.setMinimumSize(900, 640)
     wallpaper_store = WallpaperStore(settings.workflows_path.parent)
@@ -860,7 +859,7 @@ def main() -> int:
     gigachat_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
     gigachat_key_edit.setPlaceholderText("Authorization key из кабинета GigaChat API")
     gigachat_key_status = QLabel("Ключ хранится через Windows DPAPI.")
-    gigachat_key_status.setStyleSheet("color:#A6A29C; font-size:11px;")
+    gigachat_key_status.setStyleSheet("color:#A6A29C; font-size:12px;")
     gigachat_key_row.addWidget(gigachat_key_label)
     gigachat_key_row.addWidget(gigachat_key_edit, 1)
     profile_layout.addLayout(gigachat_key_row)
@@ -931,7 +930,7 @@ def main() -> int:
     profile_layout.addLayout(persona_row)
     profile_footer = QHBoxLayout()
     profile_status = QLabel("Параметры сохраняются локально.")
-    profile_status.setStyleSheet("color:#A6A29C; font-size:11px;")
+    profile_status.setStyleSheet("color:#A6A29C; font-size:12px;")
     profile_apply_button = QPushButton("Применить и сохранить")
     profile_footer.addWidget(profile_status, 1)
     profile_footer.addWidget(profile_apply_button)
@@ -1644,7 +1643,7 @@ def main() -> int:
     wallpaper_actions.addWidget(wallpaper_fit_combo, 1)
     wallpaper_layout.addLayout(wallpaper_actions)
     wallpaper_limit = QLabel("Форматы: PNG, JPG, WEBP, BMP, GIF · максимум 100 МБ")
-    wallpaper_limit.setStyleSheet("color:#A6A29C; font-size:11px;")
+    wallpaper_limit.setStyleSheet("color:#A6A29C; font-size:12px;")
     wallpaper_layout.addWidget(wallpaper_limit)
 
     def persist_wallpaper_status() -> None:
@@ -1716,7 +1715,7 @@ def main() -> int:
         "Совет: голос Денис звучит механически — попробуй Дмитрия, Ирину или Руслана ниже."
     )
     voices_hint.setWordWrap(True)
-    voices_hint.setStyleSheet("color:#A6A29C; font-size:11px;")
+    voices_hint.setStyleSheet("color:#A6A29C; font-size:12px;")
     voices_layout.addWidget(voices_hint)
     recommended_voice_buttons: list[tuple[QPushButton, str]] = []
     recommended_voice_row = QHBoxLayout()

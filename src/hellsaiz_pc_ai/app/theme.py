@@ -327,21 +327,6 @@ QLabel#emptyStateHint {
     color: #A6A29C;
     font-size: 12px;
 }
-QPushButton#chipButton {
-    background: #E8C29E;
-    border: 0;
-    color: #1A140F;
-    font-size: 12px;
-    padding: 6px 12px;
-    min-height: 30px;
-}
-QPushButton#chipButton:hover {
-    background: #F2D2B0;
-    border-color: transparent;
-}
-QPushButton#chipButton:pressed {
-    background: #D9A87C;
-}
 QPushButton#secondaryButton {
     background: #171716;
     color: #F2EFEA;
