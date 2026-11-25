@@ -864,7 +864,10 @@ def main() -> int:
     toast = Toast(home_page)
 
     def show_chat_message(role: str, message: str) -> None:
-        transcript.add_message(role, message, datetime.now().strftime("%H:%M"))
+        now = datetime.now()
+        transcript.add_message(
+            role, message, now.strftime("%H:%M"), now.strftime("%d.%m.%Y")
+        )
 
     def clear_chat() -> None:
         removed = transcript.clear_messages()
@@ -3966,7 +3969,10 @@ def main() -> int:
                 error_state["last"] = None
                 transcript.hide_typing()
                 if voice_input:
-                    show_chat_message("meta", f"Распознано: {recognized}")
+                    now = datetime.now()
+                    transcript.add_message(
+                        "recognized", recognized, now.strftime("%H:%M"), now.strftime("%d.%m.%Y")
+                    )
                 show_chat_message("assistant", answer)
 
             worker.completed.connect(show_result)

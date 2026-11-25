@@ -544,6 +544,27 @@ QLabel#chatTextError {
     color: #FFB4AE;
     font-size: 15px;
 }
+QLabel#chatDayDivider {
+    color: #A6A29C;
+    font-size: 12px;
+    padding: 6px 0 2px 0;
+}
+QWidget#chatDayDividerSpacer {
+    background: transparent;
+}
+QPushButton#newMessagesButton {
+    background: rgba(232, 194, 158, 230);
+    color: #1A140F;
+    border: 0;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 12px;
+    min-height: 0;
+}
+QPushButton#newMessagesButton:hover {
+    background: #F2D2B0;
+}
 QLabel#chatTimestamp {
     color: #6E6A64;
     font-size: 12px;

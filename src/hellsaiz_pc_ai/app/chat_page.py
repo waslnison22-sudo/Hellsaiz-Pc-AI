@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Callable
 
 from PySide6.QtCore import (
@@ -10,12 +11,16 @@ from PySide6.QtCore import (
     QPropertyAnimation,
     Qt,
     QTimer,
+    QVariantAnimation,
     Signal,
 )
-from hellsaiz_pc_ai.app.chat_style import minute_changed
+from PySide6.QtGui import QColor
+from hellsaiz_pc_ai.app.chat_style import minute_changed, render_assistant_text
 from hellsaiz_pc_ai.app.icons import load_icon
+from hellsaiz_pc_ai.app.ui_fx import animations_enabled, reduce_motion
 
 from PySide6.QtWidgets import (
+    QGraphicsDropShadowEffect,
     QFrame,
     QGraphicsOpacityEffect,
     QHBoxLayout,
@@ -78,11 +83,28 @@ class MessageBubble(QWidget):
         self.bubble.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Minimum)
         bubble_layout = QVBoxLayout(self.bubble)
         bubble_layout.setContentsMargins(14, 10, 14, 10)
-        self.text_label = QLabel(text)
+        self.text_label = QLabel()
         self.text_label.setObjectName(TEXT_OBJECT_NAMES.get(role, "chatTextAssistant"))
         self.text_label.setWordWrap(True)
         self.text_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        if role == "recognized":
+            self.text_label.setTextFormat(Qt.TextFormat.PlainText)
+            self.text_label.setText(f"Распознано: {text}")
+        elif role == "assistant":
+            self.text_label.setTextFormat(Qt.TextFormat.RichText)
+            self.text_label.setText(render_assistant_text(text))
+        else:
+            self.text_label.setTextFormat(Qt.TextFormat.PlainText)
+            self.text_label.setText(text)
         bubble_layout.addWidget(self.text_label)
+        if role in {"assistant", "user"} and not reduce_motion_enabled():
+            shadow = QGraphicsDropShadowEffect(self.bubble)
+            shadow.setBlurRadius(18)
+            shadow.setOffset(0, 3)
+            shadow.setColor(
+                QColor(0, 0, 0, 51) if role == "assistant" else QColor(232, 194, 158, 40)
+            )
+            self.bubble.setGraphicsEffect(shadow)
 
         self.copy_button = QPushButton("\u29c9")
         self.copy_button.setObjectName("chatCopyButton")
@@ -142,6 +164,12 @@ class MessageBubble(QWidget):
         QGuiApplication.clipboard().setText(self._text)
         self.copied.emit(self._text)
 
+    def set_timestamp_visible(self, visible: bool) -> None:
+        """Group timestamps: only the first bubble of a minute shows the time."""
+        if self.timestamp_label is None:
+            return
+        self.timestamp_label.setVisible(visible)
+
     def enterEvent(self, event: QEvent) -> None:  # noqa: N802 (Qt naming)
         self.copy_button.show()
         super().enterEvent(event)
@@ -152,6 +180,11 @@ class MessageBubble(QWidget):
 
 
 TYPING_REVEAL_DELAY_MS = 300
+
+
+def reduce_motion_enabled() -> bool:
+    """Shadow and appear-animation are skipped when motion is reduced."""
+    return reduce_motion()
 
 
 class TypingIndicator(QWidget):
@@ -227,7 +260,16 @@ class ChatTranscript(QScrollArea):
         self._typing_reveal.timeout.connect(self._reveal_typing)
         self._bubbles: list[MessageBubble] = []
         self._last_minute: str | None = None
+        self._last_day: str | None = None
+        self._last_bubble: MessageBubble | None = None
         self._stick_to_bottom = True
+
+        # "↓ новые сообщения" pill shown while the user reads older messages.
+        self._new_messages_button = QPushButton("↓ новые сообщения", self)
+        self._new_messages_button.setObjectName("newMessagesButton")
+        self._new_messages_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._new_messages_button.hide()
+        self._new_messages_button.clicked.connect(self._jump_to_bottom)
         self.verticalScrollBar().rangeChanged.connect(self._on_range_changed)
         self.verticalScrollBar().valueChanged.connect(self._on_scrolled)
 
@@ -239,24 +281,114 @@ class ChatTranscript(QScrollArea):
         bar = self.verticalScrollBar()
         self._stick_to_bottom = value >= bar.maximum() - 48
 
-    def add_message(self, role: str, text: str, timestamp: str) -> MessageBubble:
+    def add_message(
+        self,
+        role: str,
+        text: str,
+        timestamp: str,
+        day: str | None = None,
+    ) -> MessageBubble:
         stick = self._is_at_bottom()
         if self._typing.isVisible():
             self._layout.removeWidget(self._typing)
             self._typing.hide()
-        # Messenger-style: one timestamp per minute, not under every bubble.
-        show_stamp = minute_changed(self._last_minute, timestamp)
+
+        # Day divider above the first message of a new day.
+        day_label = day or datetime.now().strftime("%d.%m.%Y")
+        if self._last_day != day_label:
+            self._last_day = day_label
+            today = datetime.now().strftime("%d.%m.%Y")
+            header = QLabel("Сегодня" if day_label == today else day_label)
+            header.setObjectName("chatDayDivider")
+            header.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._layout.addWidget(header)
+            divider = QWidget()
+            divider.setObjectName("chatDayDividerSpacer")
+            divider.setFixedHeight(2)
+            self._layout.addWidget(divider)
+
+        # Messenger-style grouping: the first bubble of a minute keeps the time,
+        # and a fresh bubble in the same minute takes it over (last message always
+        # shows the time).
+        same_minute = not minute_changed(self._last_minute, timestamp)
+        if same_minute and self._last_bubble is not None:
+            self._last_bubble.set_timestamp_visible(False)
         self._last_minute = timestamp
-        bubble = MessageBubble(role, text, timestamp if show_stamp else None)
+        bubble = MessageBubble(role, text, timestamp)
         bubble.copied.connect(self.copied)
         bubble.setMaximumWidth(self._bubble_max_width())
         self._bubbles.append(bubble)
+        self._last_bubble = bubble
         self._layout.addWidget(bubble)
         self._layout.addWidget(self._typing)
         self._trim_overflow()
+        self._animate_appear(bubble)
         if stick:
-            QTimer.singleShot(0, self.scroll_to_bottom)
+            self._smooth_scroll_to_bottom()
+            self._new_messages_button.hide()
+        else:
+            self._pending_new_message = True
+            self._new_messages_button.show()
+            self._reposition_new_messages_button()
         return bubble
+
+    def _animate_appear(self, bubble: MessageBubble) -> None:
+        """120 ms fade-in with an 8 px upward drift; skipped when motion is reduced."""
+        if not animations_enabled(self):
+            return
+        effect = QGraphicsOpacityEffect(bubble)
+        effect.setOpacity(0.0)
+        bubble.setGraphicsEffect(effect)
+        fade = QPropertyAnimation(effect, b"opacity", bubble)
+        fade.setDuration(120)
+        fade.setStartValue(0.0)
+        fade.setEndValue(1.0)
+        fade.setEasingCurve(QEasingCurve.Type.OutQuad)
+        drift = QVariantAnimation(bubble)
+        drift.setDuration(120)
+        drift.setStartValue(8)
+        drift.setEndValue(0)
+        drift.setEasingCurve(QEasingCurve.Type.OutQuad)
+
+        def apply_drift(value) -> None:
+            bubble.setContentsMargins(0, int(value), 0, 0)
+
+        drift.valueChanged.connect(apply_drift)
+        drift.finished.connect(lambda: bubble.setContentsMargins(0, 0, 0, 0))
+        fade.finished.connect(
+            lambda: (bubble.setGraphicsEffect(None), effect.deleteLater())
+        )
+        bubble._appear_fade = fade
+        bubble._appear_drift = drift
+        fade.start()
+        drift.start()
+
+    def _smooth_scroll_to_bottom(self) -> None:
+        bar = self.verticalScrollBar()
+        target = bar.maximum()
+        if not animations_enabled(self) or bar.value() == target:
+            bar.setValue(target)
+            return
+        animation = QPropertyAnimation(bar, b"value", self)
+        animation.setDuration(150)
+        animation.setStartValue(bar.value())
+        animation.setEndValue(target)
+        animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._scroll_animation = animation
+        animation.start()
+
+    def _jump_to_bottom(self) -> None:
+        self._smooth_scroll_to_bottom()
+        self._pending_new_message = False
+        self._new_messages_button.hide()
+
+    def _reposition_new_messages_button(self) -> None:
+        button = self._new_messages_button
+        button.adjustSize()
+        x = max(0, (self.viewport().width() - button.width()) // 2)
+        y = max(0, self.viewport().height() - button.height() - 12)
+        button.move(x, y)
+        button.raise_()
 
     def _trim_overflow(self) -> None:
         while len(self._bubbles) > self.MAX_VISIBLE_MESSAGES:
@@ -293,6 +425,10 @@ class ChatTranscript(QScrollArea):
             bubble.hide()
         self._bubbles.clear()
         self._last_minute = None
+        self._last_day = None
+        self._last_bubble = None
+        self._pending_new_message = False
+        self._new_messages_button.hide()
         self.hide_typing()
         return removed
 
@@ -318,8 +454,18 @@ class ChatTranscript(QScrollArea):
         width = self.viewport().width() or self.width()
         return max(240, int(width * 0.7))
 
+    def hideEvent(self, event: QEvent) -> None:  # noqa: N802 (Qt naming)
+        super().hideEvent(event)
+        self._new_messages_button.hide()
+        for bubble in self._bubbles:
+            for attribute in ("_appear_fade", "_appear_drift"):
+                animation = getattr(bubble, attribute, None)
+                if animation is not None:
+                    animation.stop()
+
     def resizeEvent(self, event: QEvent) -> None:  # noqa: N802 (Qt naming)
         super().resizeEvent(event)
+        self._reposition_new_messages_button()
         limit = self._bubble_max_width()
         for bubble in self._bubbles:
             bubble.setMaximumWidth(limit)
