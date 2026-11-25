@@ -262,12 +262,16 @@ class DashboardPage(QWidget):
             self._weather_note.setText(", ".join(detail))
 
         def on_failed(message: str) -> None:
+            # The technical reason stays in the log; the card shows a human hint.
+            logging.warning("Weather fetch failed: %s", message)
             self._weather_finished = True
             self._weather_text.setText("Погоду получить не удалось")
             self._weather_temperature.setText("—")
             self._weather_icon.setText("☁️")
             self._weather_forecast.setText("")
-            self._weather_note.setText(f"Причина: {message}. Попробуй «Обновить» позже.")
+            self._weather_note.setText(
+                "Не получилось связаться с сервисом погоды — проверь интернет и попробуй позже."
+            )
 
         def on_timeout() -> None:
             if self._weather_finished:
