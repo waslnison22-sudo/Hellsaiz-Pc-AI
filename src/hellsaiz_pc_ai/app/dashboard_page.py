@@ -261,7 +261,6 @@ class DashboardPage(QWidget):
                 map_weather_icon(report.condition, datetime.now().hour)
             )
             self._weather_temperature.setText(_temperature_text(report.temperature))
-            self._weather_icon.setText(report.icon)
             self._weather_forecast.setText(report.forecast_line())
             detail = []
             if report.apparent is not None:
