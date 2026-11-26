@@ -1,4 +1,4 @@
-"""Batch 6 contracts: knice chat geometry and greeting."""
+"""Wave-7 batch 6 contracts: knice chat geometry and greeting."""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ requires_chat_module = pytest.mark.skipif(
 )
 
 
+@requires_chat_module
 def test_knice_chat_geometry_constants():
     assert chat_module.CHAT_COLUMN_WIDTH == 680
     assert chat_module.BUBBLE_MAX_RATIO == 0.85
