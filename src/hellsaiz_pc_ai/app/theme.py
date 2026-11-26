@@ -44,7 +44,7 @@ QWidget#glassPanelInset, QFrame#glassPanelInset {{
 QTextEdit#chatComposer, QWidget#chatQuickCommandsBody {{
     background: {GLASS_BG_STRONG};
     border: 1px solid {GLASS_BORDER};
-    border-radius: 12px;
+    border-radius: 16px;
 }}
 QPushButton#secondaryButton {{
     background: {GLASS_BG_STRONG};
@@ -626,14 +626,15 @@ QWidget#chatQuickCommandsBody {
 QFrame#chatBubbleUser {
     background: #E8C29E;
     border: 0;
-    border-radius: 14px;
-    border-bottom-right-radius: 4px;
+    border-radius: 16px;
+    border-bottom-right-radius: 8px;
 }
 QFrame#chatBubbleAssistant {
     background: #171716;
     border: 0;
-    border-radius: 14px;
-    border-bottom-left-radius: 4px;
+    border-top: 1px solid rgba(255, 255, 255, 14);
+    border-radius: 16px;
+    border-top-left-radius: 8px;
 }
 QFrame#chatBubbleSystem {
     background: #101010;
@@ -651,13 +652,13 @@ QFrame#chatBubbleError {
 }
 QLabel#chatTextUser {
     color: #1A140F;
-    font-size: 18px;
-    line-height: 1.45;
+    font-size: 16px;
+    line-height: 1.55;
 }
 QLabel#chatTextAssistant {
     color: #F2EFEA;
-    font-size: 18px;
-    line-height: 1.45;
+    font-size: 16px;
+    line-height: 1.55;
 }
 QLabel#chatTextSystem {
     color: #A6A29C;
@@ -712,6 +713,10 @@ QLabel#chatTimestamp {
     font-size: 12px;
     padding: 0 4px;
 }
+QLabel#chatGreetingPrompt {
+    color: #A6A29C;
+    font-size: 15px;
+}
 QLabel#chatTyping {
     color: #A6A29C;
     font-size: 14px;
@@ -746,8 +751,8 @@ QTextEdit#chatComposer {
     background: #171716;
     color: #F2EFEA;
     border: 0;
-    border-radius: 12px;
-    padding: 8px 12px;
+    border-radius: 16px;
+    padding: 10px 16px;
     font-size: 16px;
     line-height: 1.45;
 }
