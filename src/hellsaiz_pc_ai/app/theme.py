@@ -544,6 +544,15 @@ QLabel#chatTextError {
     color: #FFB4AE;
     font-size: 15px;
 }
+QFrame#errorNotice {
+    background: rgba(232, 194, 158, 26);
+    border: 1px solid rgba(232, 194, 158, 80);
+    border-radius: 10px;
+}
+QLabel#errorNoticeText {
+    color: #E8C29E;
+    font-size: 13px;
+}
 QLabel#chatDayDivider {
     color: #A6A29C;
     font-size: 12px;

@@ -33,3 +33,27 @@ def test_skill_card_gets_hover_feedback():
     card = _skill_card("🚀", "Программы", "Запуск приложений")
 
     assert card.property("fxInstalled") is True
+
+
+def test_error_notice_style_is_amber():
+    stylesheet = build_dark_stylesheet()
+    block = stylesheet.split("QFrame#errorNotice", 1)[1].split("}", 1)[0]
+
+    assert "232, 194, 158" in block
+    text_block = stylesheet.split("QLabel#errorNoticeText", 1)[1].split("}", 1)[0]
+    assert "#E8C29E" in text_block
+
+
+def test_voices_page_contract_in_source():
+    import inspect
+
+    from hellsaiz_pc_ai.app import desktop
+
+    source = inspect.getsource(desktop.main)
+
+    assert "addWidget(installed_voices_list, 1)" in source
+    assert 'load_icon("volume-2"' in source
+    assert 'load_icon("circle-check"' in source
+    assert 'load_icon("circle-alert"' in source
+    assert "voices_error_notice" in source
+    assert "errorNoticeText" in source

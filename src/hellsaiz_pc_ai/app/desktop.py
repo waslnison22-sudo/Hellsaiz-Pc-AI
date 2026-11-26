@@ -1891,8 +1891,10 @@ def main() -> int:
     use_voice_button = QPushButton("Использовать для помощника")
     use_voice_button.setObjectName("primaryButton")
     test_piper_voice_button = QPushButton("Прослушать")
+    test_piper_voice_button.setIcon(load_icon("volume-2", "#F2EFEA"))
     use_system_voice_button = QPushButton("Использовать голос Windows")
     test_system_voice_button = QPushButton("Проверить голос Windows")
+    test_system_voice_button.setIcon(load_icon("circle-check", "#F2EFEA"))
     voice_actions.addWidget(use_voice_button)
     voice_actions.addWidget(test_piper_voice_button)
     voice_actions.addWidget(use_system_voice_button)
@@ -1935,6 +1937,22 @@ def main() -> int:
     voices_status.setWordWrap(True)
     voices_status.setStyleSheet("color:#A6A29C;")
     voices_layout.addWidget(voices_status)
+
+    voices_error_notice = QFrame()
+    voices_error_notice.setObjectName("errorNotice")
+    voices_error_layout = QHBoxLayout(voices_error_notice)
+    voices_error_layout.setContentsMargins(10, 8, 10, 8)
+    voices_error_layout.setSpacing(8)
+    voices_error_icon = QLabel()
+    voices_error_icon.setPixmap(load_icon("circle-alert", "#E8C29E").pixmap(18, 18))
+    voices_error_icon.setFixedSize(18, 18)
+    voices_error_layout.addWidget(voices_error_icon, 0, Qt.AlignmentFlag.AlignTop)
+    voices_error_text = QLabel("")
+    voices_error_text.setObjectName("errorNoticeText")
+    voices_error_text.setWordWrap(True)
+    voices_error_layout.addWidget(voices_error_text, 1)
+    voices_error_notice.hide()
+    voices_layout.addWidget(voices_error_notice)
 
     voice_download_workers: list[QThread] = []
 
@@ -2065,6 +2083,7 @@ def main() -> int:
                 if voice.id.casefold() == saved_voice or voice.name.casefold() == saved_voice:
                     selected_index = system_voice_combo.count() - 1
             system_voice_combo.setCurrentIndex(selected_index)
+            voices_error_notice.hide()
             voices_status.setText(
                 f"Найдено системных голосов SAPI5: {len(voices)}. "
                 "Выбери голос и нажми «Использовать голос Windows»."
@@ -2076,7 +2095,9 @@ def main() -> int:
                 )
 
         def failed(message: str) -> None:
-            voices_status.setText(f"Не удалось получить системные голоса: {message}")
+            voices_error_text.setText(f"Не удалось получить системные голоса: {message}")
+            voices_error_notice.show()
+            voices_status.setText("Список системных голосов недоступен — см. предупреждение выше.")
 
         worker.completed.connect(loaded)
         worker.failed.connect(failed)
