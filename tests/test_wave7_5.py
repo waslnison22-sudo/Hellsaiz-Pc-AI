@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from hellsaiz_pc_ai.app.dashboard_texts import greeting_note
 from hellsaiz_pc_ai.app.theme import (
     CARD_EDGE,
@@ -67,6 +69,7 @@ def test_forecast_items_split_day_and_temperature(monkeypatch):
         condition="Ясно",
         icon="☀️",
         hourly=(),
+        fetched_at=datetime.now(timezone.utc),
         daily=(
             public_info.WeatherDay("Сб", 2.0, -3.0, 0, "Ясно", "☀️"),
             public_info.WeatherDay("Пт", 4.0, -1.0, 2, "Малооблачно", "🌤"),
