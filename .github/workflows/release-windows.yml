@@ -7,7 +7,7 @@ on:
     tags:
       - "v*"
     paths:
-      - ".release-v0.1.9"
+      - ".release-v0.2.0"
 
 permissions:
   contents: write
@@ -25,12 +25,12 @@ jobs:
         shell: pwsh
         run: |
           if ($env:GITHUB_REF -eq "refs/heads/dev/bootstrap") {
-            $tag = "v0.1.9"
+            $tag = "v0.2.0"
           } else {
             $tag = $env:GITHUB_REF_NAME
           }
-          if ($tag -ne "v0.1.9") {
-            throw "This workflow is configured for the v0.1.9 release only."
+          if ($tag -ne "v0.2.0") {
+            throw "This workflow is configured for the v0.2.0 release only."
           }
           $version = $tag.TrimStart("v")
           "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
