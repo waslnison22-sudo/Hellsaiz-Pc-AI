@@ -355,9 +355,15 @@ class ChatTranscript(QScrollArea):
 
         drift.valueChanged.connect(apply_drift)
         drift.finished.connect(lambda: bubble.setContentsMargins(0, 0, 0, 0))
-        fade.finished.connect(
-            lambda: (bubble.setGraphicsEffect(None), effect.deleteLater())
-        )
+        def finish_appear() -> None:
+            # setGraphicsEffect(None) takes ownership back and deletes the effect;
+            # calling effect.deleteLater() on top of it double-frees the object.
+            try:
+                bubble.setGraphicsEffect(None)
+            except RuntimeError:
+                return
+
+        fade.finished.connect(finish_appear)
         bubble._appear_fade = fade
         bubble._appear_drift = drift
         fade.start()
@@ -393,6 +399,10 @@ class ChatTranscript(QScrollArea):
     def _trim_overflow(self) -> None:
         while len(self._bubbles) > self.MAX_VISIBLE_MESSAGES:
             bubble = self._bubbles.pop(0)
+            for attribute in ("_appear_fade", "_appear_drift"):
+                animation = getattr(bubble, attribute, None)
+                if animation is not None:
+                    animation.stop()
             self._layout.removeWidget(bubble)
             bubble.deleteLater()
 
@@ -421,6 +431,10 @@ class ChatTranscript(QScrollArea):
     def clear_messages(self) -> list[MessageBubble]:
         removed = list(self._bubbles)
         for bubble in removed:
+            for attribute in ("_appear_fade", "_appear_drift"):
+                animation = getattr(bubble, attribute, None)
+                if animation is not None:
+                    animation.stop()
             self._layout.removeWidget(bubble)
             bubble.hide()
         self._bubbles.clear()
