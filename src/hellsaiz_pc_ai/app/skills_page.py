@@ -5,43 +5,56 @@ Every card mirrors real commands from core/commands.py HELP_TEXT.
 
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
+    QHBoxLayout,
     QLabel,
     QScrollArea,
     QVBoxLayout,
     QWidget,
 )
 
+from hellsaiz_pc_ai.app.icons import load_icon
 from hellsaiz_pc_ai.app.ui_fx import install_button_fx
 
+# Icon names come from the vendored Lucide set: emoji glyphs render as tofu on
+# machines without an emoji font.
 SKILL_CARDS: tuple[tuple[str, str, str], ...] = (
-    ("🚀", "Программы", "Запуск разрешённых приложений по имени: блокнот, калькулятор, проводник, игры."),
-    ("🪟", "Окна", "«Покажи открытые окна», «переключись на Блокнот», «сверни окно», «заблокируй компьютер»."),
-    ("🔊", "Звук и медиа", "Громкость шагом («громче», «громче на 20»), пауза и треки, «включи музыку дождь»."),
-    ("🌐", "Сеть и VPN", "«Включи впн», «выключи впн», «проверь впн» — через локальный клиент v2RayTun."),
-    ("⏰", "Напоминания", "«Напомни через 5 минут…», «напомни в 22:00…», «мои напоминания» — до 30 дней."),
-    ("🌦", "Погода и курсы", "«Погода в Москве», «собираюсь погулять», «курс доллара к рублю»."),
-    ("🧮", "Счёт и поиск", "«Сколько будет 12 умножить на 3», «найди в интернете…», «открой сайт example.com»."),
-    ("📁", "Файлы и буфер", "«Покажи файлы в папке Документы», «прочитай файл…», «скопируй…», «что в буфере обмена»."),
-    ("👁", "Экран и окна-контролы", "«Прочитай текст на экране», «нажми Сохранить в окне Блокнот», «введи текст в поле…»."),
-    ("🎬", "Сценарии", "Своя автоматизация: цепочки действий по расписанию, автозапуску и горячей клавише."),
-    ("🎙", "Голос", "Wake-слово «Хеллсайз», локальное распознавание речи и озвучка ответов."),
-    ("🔒", "Приватность", "Всё локально: никакие команды и разговоры не уходят в сеть. Произвольный код не запускается."),
+    ("zap", "Программы", "Запуск разрешённых приложений по имени: блокнот, калькулятор, проводник, игры."),
+    ("house", "Окна", "«Покажи открытые окна», «переключись на Блокнот», «сверни окно», «заблокируй компьютер»."),
+    ("volume-2", "Звук и медиа", "Громкость шагом («громче», «громче на 20»), пауза и треки, «включи музыку дождь»."),
+    ("settings", "Сеть и VPN", "«Включи впн», «выключи впн», «проверь впн» — через локальный клиент v2RayTun."),
+    ("bell", "Напоминания", "«Напомни через 5 минут…», «напомни в 22:00…», «мои напоминания» — до 30 дней."),
+    ("sparkles", "Погода и курсы", "«Погода в Москве», «собираюсь погулять», «курс доллара к рублю»."),
+    ("circle-check", "Счёт и поиск", "«Сколько будет 12 умножить на 3», «найди в интернете…», «открой сайт example.com»."),
+    ("send", "Файлы и буфер", "«Покажи файлы в папке Документы», «прочитай файл…», «скопируй…», «что в буфере обмена»."),
+    ("circle-alert", "Экран и окна-контролы", "«Прочитай текст на экране», «нажми Сохранить в окне Блокнот», «введи текст в поле…»."),
+    ("play", "Сценарии", "Своя автоматизация: цепочки действий по расписанию, автозапуску и горячей клавише."),
+    ("mic", "Голос", "Wake-слово «Хеллсайз», локальное распознавание речи и озвучка ответов."),
+    ("user-round", "Приватность", "Всё локально: никакие команды и разговоры не уходят в сеть. Произвольный код не запускается."),
 )
 
 
-def _skill_card(glyph: str, title: str, note: str) -> QFrame:
+def _skill_card(icon_name: str, title: str, note: str) -> QFrame:
     card = QFrame()
     card.setObjectName("skillCard")
     layout = QVBoxLayout(card)
     layout.setContentsMargins(16, 14, 16, 14)
     layout.setSpacing(6)
-    title_label = QLabel(f"{glyph}  {title}")
+    header = QHBoxLayout()
+    header.setSpacing(8)
+    icon_label = QLabel()
+    icon_label.setObjectName("skillCardIcon")
+    icon_label.setFixedSize(20, 20)
+    icon_label.setPixmap(load_icon(icon_name, "#E8C29E").pixmap(18, 18))
+    header.addWidget(icon_label, 0, Qt.AlignmentFlag.AlignTop)
+    title_label = QLabel(title)
     title_label.setObjectName("skillCardTitle")
     title_label.setWordWrap(True)
-    layout.addWidget(title_label)
+    header.addWidget(title_label, 1)
+    layout.addLayout(header)
     note_label = QLabel(note)
     note_label.setObjectName("skillCardNote")
     note_label.setWordWrap(True)
