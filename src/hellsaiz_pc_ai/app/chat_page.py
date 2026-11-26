@@ -702,6 +702,16 @@ class Toast(QFrame):
         else:
             self.hide()
 
+    def _fade_out(self) -> None:
+        """Fade the notice out; _on_fade_finished hides it at the end."""
+        if not self.isVisible():
+            return
+        self._effect.setEnabled(True)
+        self._fade.stop()
+        self._fade.setStartValue(self._effect.opacity())
+        self._fade.setEndValue(0.0)
+        self._fade.start()
+
     def _run_action(self) -> None:
         callback = self._action_callback
         self._action_callback = None

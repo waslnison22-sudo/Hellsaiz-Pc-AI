@@ -120,10 +120,14 @@ class CompanionOverlay(QWidget):
         self._timer.stop()
         self.save_state()
 
-    def toggle_visibility(self) -> None:
-        self._visible_by_user = not self._visible_by_user
+    def set_visible(self, visible: bool) -> None:
+        """Show or hide the companion explicitly (persisted in companion.json)."""
+        self._visible_by_user = bool(visible)
         self.setVisible(self._visible_by_user)
         self.save_state()
+
+    def toggle_visibility(self) -> None:
+        self.set_visible(not self._visible_by_user)
 
     def snapshot(self) -> CompanionSnapshot:
         return self._snapshot_provider() if self._snapshot_provider else CompanionSnapshot()

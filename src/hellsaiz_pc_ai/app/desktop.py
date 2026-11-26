@@ -540,6 +540,19 @@ def main() -> int:
     window = QMainWindow()
     window.setWindowTitle(settings.app_name)
     window.setWindowIcon(window_icon)
+
+    # Companion (phase 1): one controller, one translucent overlay, one bridge.
+    from hellsaiz_pc_ai.companion.controller import CompanionController
+    from hellsaiz_pc_ai.companion.events import CompanionEventBridge
+    from hellsaiz_pc_ai.companion.overlay import CompanionOverlay
+
+    companion_controller = CompanionController()
+    companion_overlay = CompanionOverlay(
+        companion_controller.snapshot,
+        state_path=settings.workflows_path.parent / "companion.json",
+    )
+    companion_bridge = CompanionEventBridge(companion_controller)
+    companion_enabled = bool(profile_data.get("companion_enabled", True))
     window.resize(1240, 820)
     window.setMinimumSize(900, 640)
     wallpaper_store = WallpaperStore(settings.workflows_path.parent)
@@ -1505,6 +1518,7 @@ def main() -> int:
         on_send=send_command_from_dashboard,
         on_open_diagnostics=open_settings_diagnostics,
         on_city_change=set_weather_city,
+        on_open_chat=lambda: show_page("Чат"),
         parent=window,
     )
     logging.info("Desktop startup: pages: DashboardPage constructor done.")
@@ -2220,6 +2234,35 @@ def main() -> int:
 
     speech_tab_page, speech_tab_layout = _settings_tab("Речь")
     appearance_tab_page, appearance_tab_layout = _settings_tab("Оформление")
+
+    def persist_companion_setting() -> None:
+        profile_path = settings.workflows_path.parent / "ai_profile.json"
+        try:
+            profile_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = profile_path.with_suffix(".json.tmp")
+            temporary.write_text(
+                json.dumps(profile_data, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            temporary.replace(profile_path)
+        except OSError:
+            logging.exception("Could not persist the companion setting")
+
+    companion_toggle = QCheckBox("Компаньон на рабочем столе")
+    companion_toggle.setChecked(companion_enabled)
+    companion_toggle.setToolTip(
+        "Показывать персонажа поверх окон. Состояние позиции хранится в companion.json."
+    )
+
+    def on_companion_toggled(enabled: bool) -> None:
+        nonlocal companion_enabled
+        companion_enabled = bool(enabled)
+        profile_data["companion_enabled"] = companion_enabled
+        persist_companion_setting()
+        companion_overlay.set_visible(companion_enabled)
+
+    companion_toggle.toggled.connect(on_companion_toggled)
+    appearance_tab_layout.addWidget(companion_toggle)
     network_tab_page, network_tab_layout = _settings_tab("Сеть и Telegram")
     files_tab_page, files_tab_layout = _settings_tab("Файлы и автозапуск")
     updates_tab_page, updates_tab_layout = _settings_tab("Обновления")
@@ -4020,6 +4063,9 @@ def main() -> int:
             workers.append(worker)
             transcript.show_typing()
             set_chat_status("слушаю" if voice_input else "думаю")
+            if voice_input:
+                companion_bridge.listening()
+            companion_bridge.thinking()
             # Safety net: worker.finished normally clears the indicator, but a
             # failed launch or a missed signal must not leave "typing" hanging.
             QTimer.singleShot(30_000, transcript.hide_typing)
@@ -4028,6 +4074,9 @@ def main() -> int:
             def show_result(recognized: str, answer: str) -> None:
                 error_state["last"] = None
                 transcript.hide_typing()
+                first_line = answer.strip().splitlines()[0] if answer.strip() else ""
+                companion_bridge.speaking(first_line)
+                QTimer.singleShot(1600, companion_bridge.settled)
                 if voice_input:
                     now = datetime.now()
                     transcript.add_message(
@@ -4043,11 +4092,14 @@ def main() -> int:
                     return
                 error_state["last"] = message
                 transcript.hide_typing()
+                companion_bridge.error()
+                QTimer.singleShot(1600, companion_bridge.settled)
                 show_chat_message("error", f"Ошибка: {message}")
 
             worker.failed.connect(show_error)
             worker.finished.connect(transcript.hide_typing)
             worker.finished.connect(lambda: set_chat_status("онлайн"))
+            worker.finished.connect(companion_bridge.settled)
             worker.speech_started.connect(mute_speech_button.show)
             worker.speech_finished.connect(mute_speech_button.hide)
             worker.finished.connect(lambda: send_button.setEnabled(True))
@@ -4272,6 +4324,18 @@ def main() -> int:
             pass
 
     app.aboutToQuit.connect(stop_background_workers)
+    app.aboutToQuit.connect(companion_overlay.shutdown)
+
+    class _CompanionCloser(QObject):
+        """Calls overlay.shutdown() before the shell window really closes."""
+
+        def eventFilter(self, watched, event):  # noqa: N802 (Qt naming)
+            if event.type() == QEvent.Type.Close:
+                companion_overlay.shutdown()
+            return False
+
+    companion_closer = _CompanionCloser(window)
+    window.installEventFilter(companion_closer)
 
     def poll_due_reminders() -> None:
         try:
@@ -4303,6 +4367,7 @@ def main() -> int:
 
     # Restore overdue reminders and startup workflows after the main window enters the event loop.
     window.show()
+    companion_overlay.set_visible(companion_enabled)
     if "splash" in locals() and splash is not None:
         _elapsed_ms = int((time.monotonic() - splash_shown_at) * 1000)
         QTimer.singleShot(max(0, 600 - _elapsed_ms), lambda: splash.finish(window))
