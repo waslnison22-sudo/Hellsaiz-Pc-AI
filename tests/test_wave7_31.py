@@ -62,7 +62,7 @@ def test_voices_page_contract_in_source():
     assert "errorNoticeText" in source
 
 
-def test_vosk_model_path_label_is_elided_with_a_tooltip():
+def test_vosk_model_path_is_shown_once_with_a_tooltip():
     import inspect
 
     try:
@@ -73,10 +73,10 @@ def test_vosk_model_path_label_is_elided_with_a_tooltip():
 
     source = inspect.getsource(desktop.main)
 
-    assert "vosk_model_path_label" in source
-    assert "elidedText" in source
-    assert "Qt.TextElideMode.ElideMiddle" in source
-    assert "vosk_model_path_label.setToolTip(full_path)" in source
+    # Wave 9B: one path surface — the editable field, full value in its tooltip.
+    assert "vosk_model_path_label" not in source
+    assert "refresh_vosk_model_tooltip" in source
+    assert "vosk_model_edit.setToolTip(full_path)" in source
     assert "QLabel#pathLabel" in build_dark_stylesheet()
 
 

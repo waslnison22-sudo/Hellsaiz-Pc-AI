@@ -2543,26 +2543,14 @@ def main() -> int:
     vosk_model_row.addWidget(download_vosk_model_button)
     speech_tab_layout.addLayout(vosk_model_row)
 
-    # Long paths must not stretch the settings row: show an elided label with the
-    # full value available in the tooltip.
-    vosk_model_path_label = QLabel()
-    vosk_model_path_label.setObjectName("pathLabel")
-    vosk_model_path_label.setTextInteractionFlags(
-        Qt.TextInteractionFlag.TextSelectableByMouse
-    )
-
-    def refresh_vosk_model_path_label() -> None:
+    # The path lives in the editable field only: a second elided label below it
+    # duplicated the same value, so the full text lives in the tooltip instead.
+    def refresh_vosk_model_tooltip() -> None:
         full_path = vosk_model_edit.text().strip() or "Модель ещё не выбрана"
-        metrics = QFontMetrics(vosk_model_path_label.font())
-        available = max(160, vosk_model_path_label.width() or 420)
-        vosk_model_path_label.setText(
-            metrics.elidedText(full_path, Qt.TextElideMode.ElideMiddle, available)
-        )
-        vosk_model_path_label.setToolTip(full_path)
+        vosk_model_edit.setToolTip(full_path)
 
-    vosk_model_edit.textChanged.connect(refresh_vosk_model_path_label)
-    refresh_vosk_model_path_label()
-    speech_tab_layout.addWidget(vosk_model_path_label)
+    vosk_model_edit.textChanged.connect(refresh_vosk_model_tooltip)
+    refresh_vosk_model_tooltip()
 
     whisper_executable_row = QHBoxLayout()
     whisper_executable_edit = QLineEdit(active_stt["whisper_cpp_executable"])
