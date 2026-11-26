@@ -315,7 +315,6 @@ def main() -> int:
         )
         from PySide6.QtCore import QUrl
         from PySide6.QtGui import (
-            QFontMetrics,
             QColor,
             QDesktopServices,
             QIcon,
@@ -816,7 +815,7 @@ def main() -> int:
     header_column.setSpacing(0)
     chat_header_name = QLabel("Hellsaiz")
     chat_header_name.setObjectName("chatHeaderName")
-    chat_header_status = QLabel("онлайн")
+    chat_header_status = QLabel("Готов")
     chat_header_status.setObjectName("chatHeaderStatus")
     chat_status_row = QHBoxLayout()
     chat_status_row.setContentsMargins(0, 0, 0, 0)
@@ -935,7 +934,7 @@ def main() -> int:
             store.clear()
         except (OSError, ValueError):
             logging.exception("Could not clear the chat history")
-        set_chat_status("онлайн")
+        set_chat_status("Готов")
         toast.show_message(f"Чат очищен: удалено сообщений {len(removed)}")
 
     transcript.copied.connect(lambda _text: toast.show_message("Скопировано"))
@@ -4186,7 +4185,7 @@ def main() -> int:
 
             worker.failed.connect(show_error)
             worker.finished.connect(transcript.hide_typing)
-            worker.finished.connect(lambda: set_chat_status("онлайн"))
+            worker.finished.connect(lambda: set_chat_status("Готов"))
             worker.finished.connect(companion_bridge.settled)
             worker.speech_started.connect(mute_speech_button.show)
             worker.speech_finished.connect(mute_speech_button.hide)
@@ -4202,7 +4201,7 @@ def main() -> int:
         except Exception:
             logging.exception("start_worker: failed to launch the chat worker")
             transcript.hide_typing()
-            set_chat_status("онлайн")
+            set_chat_status("Готов")
             send_button.setEnabled(True)
             voice_button.setEnabled(True)
             input_box.setEnabled(True)
