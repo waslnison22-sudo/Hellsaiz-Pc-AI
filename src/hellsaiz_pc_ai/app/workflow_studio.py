@@ -589,6 +589,19 @@ class ActionCard(QFrame):
         layout.addWidget(remove_button)
 
 
+def launch_state(
+    actions_total: int, *, has_workflow: bool, editable: bool
+) -> tuple[bool, str]:
+    """Pure launch gate: the decision depends on the draft, not on the widgets."""
+    if not editable:
+        return True, "Сложный сценарий: запуск доступен."
+    if not has_workflow:
+        return False, "Сначала сохрани сценарий"
+    if actions_total == 0:
+        return False, "Добавь хотя бы одно действие"
+    return True, "Сценарий готов к запуску"
+
+
 class WorkflowStudioPage(QWidget):
     """A guided, non-code editor for the application's validated workflow graphs."""
 
@@ -764,6 +777,9 @@ class WorkflowStudioPage(QWidget):
         self.status_label = QLabel("Сценарии сохраняются только на этом компьютере.")
         self.status_label.setObjectName("scenarioStatus")
         footer.addWidget(self.status_label, 1)
+        self.launch_status = QLabel("Добавь хотя бы одно действие")
+        self.launch_status.setObjectName("secondaryText")
+        footer.addWidget(self.launch_status)
         self.save_button = QPushButton("Сохранить")
         self.save_button.setObjectName("primaryButton")
         self.run_button = QPushButton("Запустить сейчас")
@@ -779,6 +795,7 @@ class WorkflowStudioPage(QWidget):
         self.run_button.clicked.connect(self.run_current)
         self.search_edit.textChanged.connect(self._refresh_library)
         self.scenario_list.itemSelectionChanged.connect(self.load_selected)
+        self.scenario_list.itemSelectionChanged.connect(self._update_library_actions)
         self.fit_button.clicked.connect(self.graph_view.fit_graph)
         self.reset_layout_button.clicked.connect(self._reset_canvas_layout)
         self.graph_view.node_double_clicked.connect(self._edit_graph_node)
@@ -1071,9 +1088,7 @@ class WorkflowStudioPage(QWidget):
         self._clear_layout(layout)
         actions = self._actions[branch]
         if not actions:
-            empty = QLabel("Пока пусто. Добавь первое действие.")
-            empty.setObjectName("secondaryText")
-            layout.addWidget(empty)
+            layout.addWidget(self._empty_actions_placeholder(branch))
             return
         for index, action in enumerate(actions):
             title, description = self._describe_draft_action(action)
@@ -1092,6 +1107,48 @@ class WorkflowStudioPage(QWidget):
     def _render_all_branches(self) -> None:
         for branch in ("main", "true", "false"):
             self._render_branch(branch)
+        self._update_launch_state()
+
+    def _empty_actions_placeholder(self, branch: str) -> QFrame:
+        """Empty «Действия сценария» state: hint plus a primary add action."""
+        card = QFrame()
+        card.setObjectName("scenarioBranchCard")
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(6)
+        title = QLabel("Действий пока нет")
+        title.setObjectName("scenarioCardTitle")
+        layout.addWidget(title)
+        hint = QLabel(
+            "Выбери действие из библиотеки: Приложения, Система, Звук, "
+            "Уведомления или Ожидание."
+        )
+        hint.setObjectName("secondaryText")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        add_button = QPushButton("Добавить действие")
+        add_button.setObjectName("primaryButton")
+        add_button.clicked.connect(lambda: self.add_action(branch))
+        layout.addWidget(add_button, 0, Qt.AlignmentFlag.AlignLeft)
+        return card
+
+    def _actions_total(self) -> int:
+        return sum(len(actions) for actions in self._actions.values())
+
+    def _update_launch_state(self) -> None:
+        """Gate «Запустить» by data, not by UI heuristics."""
+        enabled, message = launch_state(
+            self._actions_total(),
+            has_workflow=bool(getattr(self, "_workflow_id", None)),
+            editable=bool(getattr(self, "_editable", True)),
+        )
+        self.launch_status.setText(message)
+        self.run_button.setEnabled(enabled)
+
+    def _update_library_actions(self) -> None:
+        """Delete is only meaningful with a library selection."""
+        has_selection = bool(self.scenario_list.selectedItems())
+        self.delete_button.setEnabled(has_selection)
 
     def _describe_draft_action(self, action: dict[str, Any]) -> tuple[str, str]:
         if action.get("kind") == "wait":
@@ -1247,8 +1304,8 @@ class WorkflowStudioPage(QWidget):
         self._loading = False
         self._dirty = False
         self.save_button.setEnabled(False)
-        self.run_button.setEnabled(bool(self._workflow_id))
-        self.delete_button.setEnabled(bool(self._workflow_id))
+        self._update_launch_state()
+        self._update_library_actions()
         self._sync_trigger_page()
         self._sync_condition_page()
         self._sync_action_sections()
@@ -1262,8 +1319,8 @@ class WorkflowStudioPage(QWidget):
         self.editability_notice.setText(message)
         self.editability_notice.show()
         self.save_button.setEnabled(False)
-        self.run_button.setEnabled(True)
-        self.delete_button.setEnabled(True)
+        self._update_launch_state()
+        self._update_library_actions()
         self._update_preview(graph)
         self.detail_tabs.setCurrentIndex(2)
         self.status_label.setText(
