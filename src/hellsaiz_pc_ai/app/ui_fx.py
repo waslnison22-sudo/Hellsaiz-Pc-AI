@@ -124,7 +124,9 @@ def install_button_fx(
     """Attach hover/press feedback unless motion is disabled."""
     if reduce_motion():
         return None
-    return ButtonFx(widget, base, hover, pressed)
+    effect = ButtonFx(widget, base, hover, pressed)
+    widget.setProperty("fxInstalled", True)
+    return effect
 
 
 def animate_height(widget: QWidget, expanded: bool, duration: int = COLLAPSE_DURATION_MS) -> None:

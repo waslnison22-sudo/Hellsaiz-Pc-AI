@@ -14,6 +14,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from hellsaiz_pc_ai.app.ui_fx import install_button_fx
+
 SKILL_CARDS: tuple[tuple[str, str, str], ...] = (
     ("🚀", "Программы", "Запуск разрешённых приложений по имени: блокнот, калькулятор, проводник, игры."),
     ("🪟", "Окна", "«Покажи открытые окна», «переключись на Блокнот», «сверни окно», «заблокируй компьютер»."),
@@ -44,6 +46,8 @@ def _skill_card(glyph: str, title: str, note: str) -> QFrame:
     note_label.setObjectName("skillCardNote")
     note_label.setWordWrap(True)
     layout.addWidget(note_label)
+    # Cards are not buttons, but the same hover feedback makes the grid lively.
+    install_button_fx(card, base="#161615", hover="#1E1E1C", pressed="#121211")
     return card
 
 
