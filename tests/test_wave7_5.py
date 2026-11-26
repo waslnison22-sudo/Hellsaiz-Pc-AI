@@ -74,7 +74,7 @@ def test_big_temperature_and_mono_numbers():
 def test_lively_greeting_phrases():
     assert greeting_note(9, "") == "Работаем в спокойном темпе."
     assert greeting_note(15, "") == "День идёт — я рядом."
-    assert greeting_note(20, "") == "Вечер. Сделаем тише и проще."
+    assert greeting_note(20, "") == "Сделаем тише и проще — день закончился."
     assert greeting_note(2, "") == "Ночная смена. Я на связи."
 
 
