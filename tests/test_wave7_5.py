@@ -15,9 +15,9 @@ from hellsaiz_pc_ai.app.dashboard_texts import (
     system_comment,
 )
 from hellsaiz_pc_ai.app.theme import (
-    CARD_EDGE,
     CARD_RADIUS,
     DASHBOARD_BACKDROP,
+    DASHBOARD_HOVER,
     DASHBOARD_SURFACE,
     build_dark_stylesheet,
 )
@@ -34,13 +34,23 @@ requires_dashboard_module = pytest.mark.skipif(
 
 
 def test_dashboard_card_uses_the_knice_radius_and_edge():
+    """Wave 8 paints the surface and the soft shadow inside the card widget.
+
+    The stylesheet keeps only the radius; the shadow, surface colour and the
+    inset top highlight moved into _ShadowCard.paintEvent, so the contract now
+    reads the tokens plus the radius from the stylesheet.
+    """
+    from hellsaiz_pc_ai.app import dashboard_page as dashboard_module
+
     stylesheet = build_dark_stylesheet()
     block = stylesheet.rsplit("QFrame#dashboardCard {", 1)[1].split("}", 1)[0]
+    source = Path(dashboard_module.__file__).read_text(encoding="utf-8")
 
     assert f"border-radius: {CARD_RADIUS}" in block
     assert CARD_RADIUS == "22px"
-    assert f"border-top: 1px solid {CARD_EDGE}" in block
-    assert DASHBOARD_SURFACE in block
+    assert "QColor(33, 34, 38)" in source
+    assert "QColor(255, 255, 255, 18)" in source
+    assert DASHBOARD_SURFACE == "#212226"
 
 
 def test_dashboard_surface_and_backdrop_colours():
@@ -48,8 +58,7 @@ def test_dashboard_surface_and_backdrop_colours():
 
     assert DASHBOARD_SURFACE == "#212226"
     assert DASHBOARD_BACKDROP == "#17181b"
-    assert "QFrame#dashboardCard:hover" in stylesheet
-    assert "#2a2b30" in stylesheet
+    assert DASHBOARD_HOVER == "#2a2b30"
     assert DASHBOARD_BACKDROP in stylesheet
 
 
