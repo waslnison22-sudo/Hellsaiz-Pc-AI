@@ -4400,13 +4400,17 @@ def main() -> int:
 
     app.aboutToQuit.connect(stop_background_workers)
     app.aboutToQuit.connect(companion_overlay.shutdown)
+    # A visible companion is a second top-level window: without this the shell
+    # could stay alive after the main window closes (closed-last-window rule).
+    app.setQuitOnLastWindowClosed(True)
 
     class _CompanionCloser(QObject):
-        """Calls overlay.shutdown() before the shell window really closes."""
+        """Stops workers and hides the overlay before the shell window closes."""
 
         def eventFilter(self, watched, event):  # noqa: N802 (Qt naming)
             if event.type() == QEvent.Type.Close:
                 companion_overlay.shutdown()
+                companion_overlay.hide()
             return False
 
     companion_closer = _CompanionCloser(window)

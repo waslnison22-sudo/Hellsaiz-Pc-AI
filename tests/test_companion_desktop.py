@@ -108,6 +108,21 @@ def test_toast_starts_and_fades_out_without_missing_methods():
 
 
 @requires_qt
+def test_overlay_hides_when_the_shell_window_closes(tmp_path: Path):
+    QApplication.instance() or QApplication([])
+    overlay = CompanionOverlay(CompanionController().snapshot, state_path=tmp_path / "c.json")
+    overlay.set_visible(True)
+    overlay.show()
+
+    # The shell's close handler calls shutdown() and hide(); this is the contract
+    # that guarantees the process exits when the main window closes.
+    overlay.shutdown()
+    overlay.hide()
+
+    assert overlay.isHidden() is True
+
+
+@requires_qt
 def test_desktop_shell_creates_one_companion_and_shuts_it_down():
     source = inspect.getsource(desktop_module.main)
 
@@ -115,5 +130,7 @@ def test_desktop_shell_creates_one_companion_and_shuts_it_down():
     assert source.count("CompanionOverlay(") == 1
     assert source.count("CompanionEventBridge(") == 1
     assert "companion_overlay.shutdown" in source
+    assert "companion_overlay.hide()" in source
+    assert "app.setQuitOnLastWindowClosed(True)" in source
     assert "companion_overlay.set_visible(companion_enabled)" in source
     assert 'on_open_chat=lambda: show_page("Чат")' in source
