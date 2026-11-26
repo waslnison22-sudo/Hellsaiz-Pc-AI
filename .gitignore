@@ -23,3 +23,8 @@ logs/
 *.safetensors
 .vscode/
 .idea/
+
+# local preview build environment
+.venv-build/
+*.spec
+
