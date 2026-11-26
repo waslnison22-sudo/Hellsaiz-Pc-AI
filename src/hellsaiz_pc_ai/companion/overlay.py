@@ -48,6 +48,9 @@ class CompanionOverlay(QWidget):
         self._last_activity = time.monotonic()
         self._dozing = False
         self._visible_by_user = True
+        self._privacy_mode = False
+        self._obs_mode = False
+        self._gaze = (0.0, 0.0)
 
         self.setObjectName("companionOverlay")
         # Order matters on Windows: attributes before window flags/show.
@@ -93,11 +96,17 @@ class CompanionOverlay(QWidget):
     def save_state(self) -> None:
         if self._state_path is None:
             return
-        payload = {
-            "position": {"x": self.x(), "y": self.y()},
-            "scale": self._scale,
-            "hidden": not self._visible_by_user,
-        }
+        payload: dict = {}
+        if self._state_path is not None and self._state_path.is_file():
+            try:
+                existing = json.loads(self._state_path.read_text(encoding="utf-8"))
+                if isinstance(existing, dict):
+                    payload = existing
+            except (OSError, ValueError, json.JSONDecodeError):
+                payload = {}
+        payload["position"] = {"x": self.x(), "y": self.y()}
+        payload["scale"] = self._scale
+        payload["hidden"] = not self._visible_by_user
         try:
             self._state_path.parent.mkdir(parents=True, exist_ok=True)
             self._state_path.write_text(
@@ -128,6 +137,31 @@ class CompanionOverlay(QWidget):
 
     def toggle_visibility(self) -> None:
         self.set_visible(not self._visible_by_user)
+
+    def set_privacy_mode(self, enabled: bool) -> None:
+        """Privacy mode: the gaze freezes and the face stays neutral."""
+        self._privacy_mode = bool(enabled)
+        if self._privacy_mode:
+            self._gaze = (0.0, 0.0)
+            try:
+                self._controller_set_gaze = getattr(self, "_controller_set_gaze", None)
+            except AttributeError:
+                pass
+        self.update()
+
+    def set_obs_mode(self, enabled: bool) -> None:
+        """Stream mode: clicks pass through so OBS captures the sprite cleanly."""
+        self._obs_mode = bool(enabled)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, self._obs_mode)
+        self.update()
+
+    @property
+    def privacy_mode(self) -> bool:
+        return self._privacy_mode
+
+    @property
+    def obs_mode(self) -> bool:
+        return self._obs_mode
 
     def snapshot(self) -> CompanionSnapshot:
         return self._snapshot_provider() if self._snapshot_provider else CompanionSnapshot()
@@ -202,6 +236,19 @@ class CompanionOverlay(QWidget):
             event.accept()
             return
         super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event: Any) -> None:  # noqa: N802 (Qt naming)
+        if event.button() == Qt.MouseButton.LeftButton and not self._obs_mode:
+            self._last_activity = time.monotonic()
+            pet = getattr(self, "on_pet", None)
+            if callable(pet):
+                try:
+                    pet()
+                except Exception:  # noqa: BLE001 - interaction must not crash the overlay
+                    logging.exception("Companion pet handler failed.")
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
 
     def wheelEvent(self, event: Any) -> None:  # noqa: N802 (Qt naming)
         delta = 0.1 if event.angleDelta().y() > 0 else -0.1

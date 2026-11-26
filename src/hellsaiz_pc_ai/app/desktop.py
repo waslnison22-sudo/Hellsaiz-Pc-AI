@@ -553,6 +553,40 @@ def main() -> int:
     )
     companion_bridge = CompanionEventBridge(companion_controller)
     companion_enabled = bool(profile_data.get("companion_enabled", True))
+
+    from hellsaiz_pc_ai.companion.affinity import AffinityTracker
+    from hellsaiz_pc_ai.companion.contracts import CompanionEmotion
+    from hellsaiz_pc_ai.companion.phrases import phrase_for
+
+    companion_affinity = AffinityTracker(settings.workflows_path.parent / "companion.json")
+    companion_affinity.register_daily_activity()
+
+    def companion_say(line: str, *, seconds: float = 2.5) -> None:
+        if not line or not companion_enabled:
+            return
+        companion_controller.set_mode(
+            companion_controller.snapshot().mode, line
+        )
+        QTimer.singleShot(int(seconds * 1000), lambda: companion_bridge.settled())
+
+    def on_affinity_changed(points: int, level: str) -> None:
+        logging.info("Companion affinity: %s points, level %s.", points, level)
+
+    companion_affinity.subscribe(on_affinity_changed)
+
+    def pet_companion() -> None:
+        companion_controller.set_emotion(CompanionEmotion.HAPPY, weight=1.0)
+
+        def calm_down() -> None:
+            companion_controller.set_emotion(CompanionEmotion.NEUTRAL, weight=1.0)
+
+        QTimer.singleShot(2500, calm_down)
+        _points, _level, raised = companion_affinity.add_points()
+        companion_say(phrase_for("pet"))
+        if raised:
+            companion_say(phrase_for("level_up"))
+
+    companion_overlay.on_pet = pet_companion
     window.resize(1240, 820)
     window.setMinimumSize(900, 640)
     wallpaper_store = WallpaperStore(settings.workflows_path.parent)
@@ -2256,13 +2290,43 @@ def main() -> int:
 
     def on_companion_toggled(enabled: bool) -> None:
         nonlocal companion_enabled
+        from hellsaiz_pc_ai.companion.contracts import CompanionMode as _CompanionMode
+
         companion_enabled = bool(enabled)
         profile_data["companion_enabled"] = companion_enabled
         persist_companion_setting()
         companion_overlay.set_visible(companion_enabled)
+        companion_controller.set_mode(
+            _CompanionMode.IDLE if companion_enabled else _CompanionMode.HIDDEN
+        )
 
     companion_toggle.toggled.connect(on_companion_toggled)
     appearance_tab_layout.addWidget(companion_toggle)
+
+    privacy_toggle = QCheckBox("Приватный режим: персонаж не следит взглядом")
+    privacy_toggle.setChecked(bool(profile_data.get("companion_privacy", False)))
+    obs_toggle = QCheckBox("Режим стрима: клики проходят сквозь персонажа")
+    obs_toggle.setChecked(bool(profile_data.get("companion_obs", False)))
+
+    def persist_companion_flags() -> None:
+        profile_data["companion_privacy"] = privacy_toggle.isChecked()
+        profile_data["companion_obs"] = obs_toggle.isChecked()
+        persist_companion_setting()
+
+    def on_privacy_toggled(enabled: bool) -> None:
+        companion_overlay.set_privacy_mode(enabled)
+        persist_companion_flags()
+
+    def on_obs_toggled(enabled: bool) -> None:
+        companion_overlay.set_obs_mode(enabled)
+        persist_companion_flags()
+
+    privacy_toggle.toggled.connect(on_privacy_toggled)
+    obs_toggle.toggled.connect(on_obs_toggled)
+    appearance_tab_layout.addWidget(privacy_toggle)
+    appearance_tab_layout.addWidget(obs_toggle)
+    companion_overlay.set_privacy_mode(privacy_toggle.isChecked())
+    companion_overlay.set_obs_mode(obs_toggle.isChecked())
     network_tab_page, network_tab_layout = _settings_tab("Сеть и Telegram")
     files_tab_page, files_tab_layout = _settings_tab("Файлы и автозапуск")
     updates_tab_page, updates_tab_layout = _settings_tab("Обновления")
@@ -4077,6 +4141,16 @@ def main() -> int:
                 first_line = answer.strip().splitlines()[0] if answer.strip() else ""
                 companion_bridge.speaking(first_line)
                 QTimer.singleShot(1600, companion_bridge.settled)
+                lowered = answer.casefold()
+                _points, _level, raised = companion_affinity.add_points()
+                if "напомин" in lowered:
+                    companion_affinity.add_points(2)
+                    companion_say(phrase_for("reminder_done"), seconds=3.0)
+                elif "сценари" in lowered or "сценарий" in lowered:
+                    companion_affinity.add_points(3)
+                    companion_say(phrase_for("scenario_started"), seconds=3.0)
+                if raised:
+                    companion_say(phrase_for("level_up"))
                 if voice_input:
                     now = datetime.now()
                     transcript.add_message(
@@ -4093,6 +4167,7 @@ def main() -> int:
                 error_state["last"] = message
                 transcript.hide_typing()
                 companion_bridge.error()
+                companion_say(phrase_for("error"), seconds=2.0)
                 QTimer.singleShot(1600, companion_bridge.settled)
                 show_chat_message("error", f"Ошибка: {message}")
 
@@ -4368,6 +4443,11 @@ def main() -> int:
     # Restore overdue reminders and startup workflows after the main window enters the event loop.
     window.show()
     companion_overlay.set_visible(companion_enabled)
+    from hellsaiz_pc_ai.companion.contracts import CompanionMode as _CompanionMode
+
+    companion_controller.set_mode(
+        _CompanionMode.IDLE if companion_enabled else _CompanionMode.HIDDEN
+    )
     if "splash" in locals() and splash is not None:
         _elapsed_ms = int((time.monotonic() - splash_shown_at) * 1000)
         QTimer.singleShot(max(0, 600 - _elapsed_ms), lambda: splash.finish(window))
