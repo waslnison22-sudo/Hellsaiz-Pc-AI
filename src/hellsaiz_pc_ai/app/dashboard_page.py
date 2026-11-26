@@ -356,11 +356,18 @@ class DashboardPage(QWidget):
         self._city_button.setToolTip("Кликни, чтобы поменять город")
         self._city_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._city_button.clicked.connect(self._show_city_editor)
+        # The generic QPushButton fill painted a black box behind the city name;
+        # a widget-level rule wins over the app stylesheet.
+        self._city_button.setStyleSheet(
+            "background: transparent; border: 0; padding: 0;"
+        )
+        self._city_button.setMinimumHeight(0)
         self._city_edit = QLineEdit(self._city)
         self._city_edit.setObjectName("weatherCityEdit")
         self._city_edit.setToolTip("Город для прогноза")
         self._city_edit.returnPressed.connect(self._apply_city_from_editor)
         self._city_edit.installEventFilter(self)
+        city_stack.setStyleSheet("background: transparent;")
         city_stack.addWidget(self._city_button)
         city_stack.addWidget(self._city_edit)
         city_stack.setCurrentWidget(self._city_button)

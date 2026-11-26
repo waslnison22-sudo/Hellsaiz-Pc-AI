@@ -178,3 +178,16 @@ def test_greeting_is_left_aligned():
     for brand in brands:
         assert bool(brand._align & Qt.AlignmentFlag.AlignLeft)
         assert not bool(brand._align & Qt.AlignmentFlag.AlignHCenter)
+
+
+@requires_qt
+def test_city_label_has_no_chip_background():
+    """The owner saw a black box behind the city name: no fill, no min-height."""
+    QApplication.instance() or QApplication([])
+    page = DashboardPage(reminder_store=_FakeReminderStore())
+
+    button_style = page._city_button.styleSheet().casefold()
+
+    assert "background: transparent" in button_style
+    assert "border: 0" in button_style
+    assert page._city_button.minimumHeight() == 0
