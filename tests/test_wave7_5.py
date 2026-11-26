@@ -6,7 +6,8 @@ import inspect
 from datetime import datetime, timezone
 from pathlib import Path
 
-from hellsaiz_pc_ai.app import dashboard_page as dashboard_module
+import pytest
+
 from hellsaiz_pc_ai.app.dashboard_texts import (
     greeting_note,
     last_reply_empty_note,
@@ -19,6 +20,16 @@ from hellsaiz_pc_ai.app.theme import (
     DASHBOARD_BACKDROP,
     DASHBOARD_SURFACE,
     build_dark_stylesheet,
+)
+
+try:  # The widget module imports PySide6 — unavailable on headless Linux runners.
+    from hellsaiz_pc_ai.app import dashboard_page as dashboard_module
+except ImportError:  # pragma: no cover - runner-specific
+    dashboard_module = None
+
+requires_dashboard_module = pytest.mark.skipif(
+    dashboard_module is None,
+    reason="PySide6-backed dashboard module is not available on this runner",
 )
 
 
@@ -87,6 +98,7 @@ def test_forecast_items_split_day_and_temperature(monkeypatch):
     assert report.forecast_line() == "Сб +2°  Пт +4°"
 
 
+@requires_dashboard_module
 def test_dashboard_dropped_the_ballast():
     source = inspect.getsource(dashboard_module)
     assert "Всё локально" not in source
@@ -112,6 +124,7 @@ def test_system_comment_thresholds():
     assert system_comment(85) == "Процессор сейчас трудится вовсю."
 
 
+@requires_dashboard_module
 def test_dashboard_hub_structure():
     source = inspect.getsource(dashboard_module)
     for needle in (
@@ -131,6 +144,7 @@ def test_dashboard_hub_structure():
         assert needle in source, needle
 
 
+@requires_dashboard_module
 def test_media_icons_are_vendored():
     package_root = (
         Path(dashboard_module.__file__).resolve().parents[1] / "assets" / "icons"

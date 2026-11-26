@@ -47,7 +47,10 @@ def test_error_notice_style_is_amber():
 def test_voices_page_contract_in_source():
     import inspect
 
-    from hellsaiz_pc_ai.app import desktop
+    try:
+        from hellsaiz_pc_ai.app import desktop
+    except ImportError as exc:  # headless Linux runners have no Qt libs
+        pytest.skip(f"Qt native libraries unavailable: {exc}")
 
     source = inspect.getsource(desktop.main)
 
@@ -62,7 +65,10 @@ def test_voices_page_contract_in_source():
 def test_vosk_model_path_label_is_elided_with_a_tooltip():
     import inspect
 
-    from hellsaiz_pc_ai.app import desktop
+    try:
+        from hellsaiz_pc_ai.app import desktop
+    except ImportError as exc:  # headless Linux runners have no Qt libs
+        pytest.skip(f"Qt native libraries unavailable: {exc}")
     from hellsaiz_pc_ai.app.theme import build_dark_stylesheet
 
     source = inspect.getsource(desktop.main)
@@ -77,7 +83,10 @@ def test_vosk_model_path_label_is_elided_with_a_tooltip():
 def test_workflow_studio_form_spacing_and_bold_labels():
     import inspect
 
-    from hellsaiz_pc_ai.app import workflow_studio
+    try:
+        from hellsaiz_pc_ai.app import workflow_studio
+    except ImportError as exc:  # headless Linux runners have no Qt libs
+        pytest.skip(f"Qt native libraries unavailable: {exc}")
 
     source = inspect.getsource(workflow_studio)
 
