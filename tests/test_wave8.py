@@ -26,8 +26,10 @@ DASHBOARD_SOURCE = (
 )
 
 try:  # PySide6 widgets are unavailable on headless Linux runners.
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QApplication, QWidget
 
+    from hellsaiz_pc_ai.app.chat_page import GradientBrandLabel
     from hellsaiz_pc_ai.app.dashboard_page import DashboardPage, columns_for_width
 
     _QT_AVAILABLE = True
@@ -131,3 +133,16 @@ def test_knice_card_style_is_a_dashboard_token():
     block = stylesheet.rsplit("QFrame#dashboardCard {", 1)[1].split("}", 1)[0]
 
     assert "border-radius: 22px" in block
+
+
+@requires_qt
+def test_greeting_is_left_aligned():
+    QApplication.instance() or QApplication([])
+    page = DashboardPage(reminder_store=_FakeReminderStore())
+
+    brands = [w for w in page.findChildren(QWidget) if isinstance(w, GradientBrandLabel)]
+
+    assert brands, "the dashboard greeting must use the gradient brand label"
+    for brand in brands:
+        assert bool(brand._align & Qt.AlignmentFlag.AlignLeft)
+        assert not bool(brand._align & Qt.AlignmentFlag.AlignHCenter)

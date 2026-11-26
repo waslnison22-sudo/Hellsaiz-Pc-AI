@@ -246,7 +246,11 @@ class DashboardPage(QWidget):
         now = datetime.now()
         from hellsaiz_pc_ai.app.chat_page import GradientBrandLabel
 
-        greeting_label = GradientBrandLabel(greeting_for_hour(now.hour), 40)
+        greeting_label = GradientBrandLabel(
+            greeting_for_hour(now.hour),
+            40,
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+        )
         greeting_label.setMinimumHeight(58)
         greeting_label.setObjectName("dashboardGreeting")
         layout.addWidget(greeting_label)
