@@ -1,4 +1,4 @@
-"""Vector icons for chat controls, now backed by vendored Lucide SVGs.
+"""Vector icons for chat and dashboard controls, backed by vendored Lucide SVGs.
 
 Historically these were painted with QPainter because packaged Windows builds
 can lack an emoji font. They now delegate to :mod:`hellsaiz_pc_ai.app.icons`,
@@ -27,6 +27,11 @@ def send_icon() -> QIcon:
     return load_icon("send", _DARK)
 
 
+def send_light_icon() -> QIcon:
+    """Send arrow for dark non-gradient surfaces (dashboard capsule)."""
+    return load_icon("send", _LIGHT)
+
+
 def refresh_icon() -> QIcon:
     """Refresh arrow for card headers."""
     return load_icon("refresh-cw", _MUTED)
@@ -45,6 +50,26 @@ def mic_off_icon() -> QIcon:
 def sparkles_icon(color: str = _MUTED) -> QIcon:
     """Sparkles for assistant-branded labels."""
     return load_icon("sparkles", color)
+
+
+def media_back_icon() -> QIcon:
+    """Skip to the previous track."""
+    return load_icon("skip-back", _LIGHT)
+
+
+def media_next_icon() -> QIcon:
+    """Skip to the next track."""
+    return load_icon("skip-forward", _LIGHT)
+
+
+def media_play_icon() -> QIcon:
+    """Start playback."""
+    return load_icon("play", _LIGHT)
+
+
+def media_pause_icon() -> QIcon:
+    """Pause playback."""
+    return load_icon("pause", _LIGHT)
 
 
 def nav_icon(name: str) -> QIcon:
