@@ -170,6 +170,12 @@ class WeatherReport:
     def short_line(self) -> str:
         return f"{self.icon} {self.condition}, {_format_temp(self.temperature)}"
 
+    def forecast_items(self) -> list[tuple[str, str]]:
+        """Five-day outlook split into (weekday, temperature) pairs for rich labels."""
+        return [
+            (day.weekday, _format_temp(day.temperature_max)) for day in self.daily
+        ]
+
     def forecast_line(self) -> str:
         return "  ".join(
             f"{day.weekday} {_format_temp(day.temperature_max)}" for day in self.daily

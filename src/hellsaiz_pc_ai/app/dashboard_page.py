@@ -5,8 +5,10 @@ from datetime import datetime
 from typing import Any, Callable
 
 from PySide6.QtCore import Qt, QThread, QTimer, Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QFrame,
+    QGraphicsDropShadowEffect,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -24,7 +26,9 @@ from hellsaiz_pc_ai.tools.public_info import (
     get_weather_report,
 )
 
+from hellsaiz_pc_ai.app.theme import CARD_SHADOW_BLUR, CARD_SHADOW_OFFSET_Y
 from hellsaiz_pc_ai.app.ui_icons import refresh_icon
+from hellsaiz_pc_ai.app.ui_fx import reduce_motion as _reduce_motion
 from hellsaiz_pc_ai.app.weather_icon import WeatherIconWidget, map_weather_icon
 from hellsaiz_pc_ai.app.dashboard_texts import (
     greeting_for_hour,
@@ -51,6 +55,16 @@ class WeatherWorker(QThread):
             self.city_missing.emit(exc.city)
         except Exception as exc:
             self.failed.emit(str(exc))
+
+
+def _forecast_html(report: WeatherReport) -> str:
+    """Day names in 12px muted, temperatures in 14px — one compact line."""
+    parts = [
+        f'<span style="color:#A6A29C; font-size:12px;">{weekday}</span>'
+        f'&nbsp;<span style="color:#F2EFEA; font-size:14px;">{temperature}</span>'
+        for weekday, temperature in report.forecast_items()
+    ]
+    return "&nbsp;&nbsp;".join(parts)
 
 
 def _temperature_text(value: float | None) -> str:
@@ -199,11 +213,19 @@ class DashboardPage(QWidget):
         card = QFrame()
         card.setObjectName("dashboardCard")
         card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(16, 14, 16, 14)
+        card_layout.setContentsMargins(20, 18, 20, 18)
         card_layout.setSpacing(8)
         title_label = QLabel(title)
         title_label.setObjectName("dashboardCardTitle")
         card_layout.addWidget(title_label)
+        # Two-layer knice shadow is emulated with one soft drop shadow; the inset
+        # top highlight comes from the stylesheet (border-top with a light alpha).
+        if not _reduce_motion():
+            shadow = QGraphicsDropShadowEffect(card)
+            shadow.setBlurRadius(CARD_SHADOW_BLUR)
+            shadow.setOffset(0, CARD_SHADOW_OFFSET_Y)
+            shadow.setColor(QColor(4, 5, 8, 165))
+            card.setGraphicsEffect(shadow)
         grid.addWidget(card, row, column)
         return card
 
@@ -211,6 +233,7 @@ class DashboardPage(QWidget):
         card = self._make_card_frame(grid, row, column, title)
         logging.info("DashboardPage ctor: reminders card frame created.")
         self._reminders_list = QListWidget()
+        self._reminders_list.setObjectName("dashboardRemindersList")
         logging.info("DashboardPage ctor: reminders list created.")
         self._reminders_empty = EmptyState(
             "Активных напоминаний нет",
@@ -261,7 +284,7 @@ class DashboardPage(QWidget):
                 map_weather_icon(report.condition, datetime.now().hour)
             )
             self._weather_temperature.setText(_temperature_text(report.temperature))
-            self._weather_forecast.setText(report.forecast_line())
+            self._weather_forecast.setText(_forecast_html(report))
             detail = []
             if report.apparent is not None:
                 detail.append(f"ощущается как {_temperature_text(report.apparent)}")

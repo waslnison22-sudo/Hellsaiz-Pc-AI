@@ -25,12 +25,12 @@ def greeting_note(hour: int, persona: str) -> str:
             return "Чем могу помочь, сэр?"
         return "Ночная смена, сэр. Слушаю."
     if 5 <= hour < 12:
-        return "Проверь план дня — я на связи."
+        return "Работаем в спокойном темпе."
     if 12 <= hour < 18:
-        return "Скажи — компьютер сделает."
+        return "День идёт — я рядом."
     if 18 <= hour < 23:
-        return "Вечер. Скажи, что нужно сделать."
-    return "Не спится? Скажи, что сделать."
+        return "Вечер. Сделаем тише и проще."
+    return "Ночная смена. Я на связи."
 
 
 def reminder_preview_line(reminder: Any) -> str:

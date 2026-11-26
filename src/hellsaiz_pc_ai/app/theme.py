@@ -13,6 +13,17 @@ GLASS_BORDER = "rgba(255, 255, 255, 26)"        # 0.10 hairline
 GLASS_HIGHLIGHT = "rgba(255, 255, 255, 20)"     # 0.08 top highlight
 GLASS_RADIUS = "14px"
 
+# knice tokens for the main dashboard: denser surface, 22px cards, layered
+# shadow (applied as a QGraphicsDropShadowEffect) and an inset top highlight.
+DASHBOARD_SURFACE = "#212226"
+DASHBOARD_HOVER = "#2a2b30"
+DASHBOARD_BACKDROP = "#17181b"
+CARD_RADIUS = "22px"
+CARD_EDGE = "rgba(255, 255, 255, 18)"
+CARD_SHADOW_BLUR = 28
+CARD_SHADOW_OFFSET_Y = 10
+CARD_SHADOW_COLOR = "rgba(4, 5, 8, 165)"
+
 GLASS_QSS = f"""
 /* --- frosted glass surfaces (wave 7) ------------------------------- */
 QFrame#glassPanel, QWidget#glassPanel,
@@ -46,6 +57,39 @@ QPushButton#secondaryButton:hover {{
 }}
 QPushButton#ghostButton:hover, QPushButton#navPill:hover {{
     border: 1px solid {GLASS_BORDER};
+}}
+
+/* --- knice main-page tokens ----------------------------------------- */
+QWidget#appShell, QWidget#contentFrame {{
+    background: {DASHBOARD_BACKDROP};
+}}
+QFrame#dashboardCard {{
+    background: {DASHBOARD_SURFACE};
+    border: 0;
+    border-top: 1px solid {CARD_EDGE};
+    border-radius: {CARD_RADIUS};
+}}
+QFrame#dashboardCard:hover {{
+    background: {DASHBOARD_HOVER};
+}}
+QLabel#weatherTemperature {{
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: 46px;
+    font-weight: 800;
+}}
+QLabel#dashboardCardValue {{
+    font-family: "Consolas", "Courier New", monospace;
+    font-weight: 700;
+}}
+QListWidget#dashboardRemindersList {{
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: 12px;
+    background: transparent;
+    border: 0;
+}}
+QLabel#dashboardCardNote {{
+    color: #A6A29C;
+    font-size: 13px;
 }}
 """
 
