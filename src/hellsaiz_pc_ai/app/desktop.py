@@ -1515,7 +1515,7 @@ def main() -> int:
     logging.info("Desktop startup: pages: building pages block started.")
 
     from hellsaiz_pc_ai.app.skills_page import SkillsPage
-    from hellsaiz_pc_ai.app.hud_components import PageFader
+    from hellsaiz_pc_ai.app.hud_components import EmptyState, PageFader
     from hellsaiz_pc_ai.app.dashboard_page import DashboardPage
 
     def send_command_from_dashboard(command: str) -> None:
@@ -1936,6 +1936,13 @@ def main() -> int:
 
     installed_voices_list = QListWidget()
     voices_layout.addWidget(installed_voices_list, 1)
+    voices_empty = EmptyState(
+        "Голосов пока нет",
+        "Выбери голос выше и нажми «Загрузить голос» — или скажи, каким я должен звучать.",
+        glyph="",
+    )
+    voices_layout.addWidget(voices_empty, 1)
+    voices_empty.hide()
     voice_actions = QHBoxLayout()
     use_voice_button = QPushButton("Использовать для помощника")
     use_voice_button.setObjectName("primaryButton")
@@ -2030,8 +2037,10 @@ def main() -> int:
             if item.data(Qt.ItemDataRole.UserRole) == selected_id:
                 installed_voices_list.setCurrentItem(item)
                 break
+        voices_empty.setVisible(installed_voices_list.count() == 0)
+        installed_voices_list.setVisible(installed_voices_list.count() > 0)
         if installed_voices_list.count() == 0:
-            voices_status.setText("Библиотека пуста. Выбери русский голос выше и нажми «Загрузить голос».")
+            voices_status.setText("Библиотека пуста — начни с рекомендованного голоса выше.")
         else:
             voices_status.setText(
                 f"Установлено голосов: {installed_voices_list.count()}. "
