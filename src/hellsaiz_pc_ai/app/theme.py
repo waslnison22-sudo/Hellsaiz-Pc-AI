@@ -20,9 +20,20 @@ DASHBOARD_HOVER = "#2a2b30"
 DASHBOARD_BACKDROP = "#17181b"
 CARD_RADIUS = "22px"
 CARD_EDGE = "rgba(255, 255, 255, 18)"
-CARD_SHADOW_BLUR = 28
-CARD_SHADOW_OFFSET_Y = 10
-CARD_SHADOW_COLOR = "rgba(4, 5, 8, 165)"
+CARD_SHADOW_BLUR = 20
+CARD_SHADOW_OFFSET_Y = 6
+CARD_SHADOW_ALPHA = 120
+
+# Wave-8 dashboard geometry: one gap for the grid, one padding for cards and
+# margins that leave room for the card shadow (it must not be clipped).
+GRID_GAP = 14
+CARD_PADDING = 18
+DASHBOARD_MARGIN_TOP = 36
+DASHBOARD_MARGIN_SIDE = 28
+DASHBOARD_MARGIN_BOTTOM = 24
+GRID_BREAKPOINTS = ((900, 1), (1400, 2), (10**9, 3))
+TEXT_MUTED = "#A6A29C"
+TEXT_PRIMARY = "#F2EFEA"
 
 GLASS_QSS = f"""
 /* --- frosted glass surfaces (wave 7) ------------------------------- */
@@ -64,13 +75,9 @@ QWidget#appShell, QWidget#contentFrame {{
     background: {DASHBOARD_BACKDROP};
 }}
 QFrame#dashboardCard {{
-    background: {DASHBOARD_SURFACE};
+    background: transparent;
     border: 0;
-    border-top: 1px solid {CARD_EDGE};
     border-radius: {CARD_RADIUS};
-}}
-QFrame#dashboardCard:hover {{
-    background: {DASHBOARD_HOVER};
 }}
 QLabel#weatherTemperature {{
     font-family: "Consolas", "Courier New", monospace;

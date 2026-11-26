@@ -4,11 +4,21 @@ import logging
 from datetime import datetime
 from typing import Any, Callable
 
-from PySide6.QtCore import QEvent, Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QColor
+from PySide6.QtCore import (
+    QEasingCurve,
+    QEvent,
+    QPointF,
+    QPropertyAnimation,
+    QRectF,
+    Qt,
+    QThread,
+    QTimer,
+    Signal,
+)
+from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
     QFrame,
-    QGraphicsDropShadowEffect,
+    QGraphicsOpacityEffect,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -28,7 +38,16 @@ from hellsaiz_pc_ai.tools.public_info import (
     get_weather_report,
 )
 
-from hellsaiz_pc_ai.app.theme import CARD_SHADOW_BLUR, CARD_SHADOW_OFFSET_Y
+from hellsaiz_pc_ai.app.theme import (
+    CARD_PADDING,
+    DASHBOARD_MARGIN_BOTTOM,
+    DASHBOARD_MARGIN_SIDE,
+    DASHBOARD_MARGIN_TOP,
+    GRID_BREAKPOINTS,
+    GRID_GAP,
+    TEXT_MUTED,
+    TEXT_PRIMARY,
+)
 from hellsaiz_pc_ai.app.ui_icons import (
     media_back_icon,
     media_next_icon,
@@ -49,6 +68,14 @@ from hellsaiz_pc_ai.app.dashboard_texts import (
     system_comment,
 )
 from hellsaiz_pc_ai.app.hud_components import EmptyState
+
+
+def columns_for_width(width: int) -> int:
+    """Adaptive grid: 1 column on narrow windows, 2 standard, 3 on wide ones."""
+    for threshold, columns in GRID_BREAKPOINTS:
+        if width <= threshold:
+            return columns
+    return GRID_BREAKPOINTS[-1][1]
 
 
 class WeatherWorker(QThread):
@@ -81,9 +108,48 @@ def _temperature_text(value: float | None) -> str:
 def _forecast_day_html(day: str, temperature: str) -> str:
     """One forecast row: weekday muted, temperature bright — knice style."""
     return (
-        f'<span style="color:#A6A29C; font-size:12px;">{day}</span>'
-        f'&nbsp;&nbsp;<span style="color:#F2EFEA; font-size:14px; font-weight:600;">{temperature}</span>'
+        f'<span style="color:{TEXT_MUTED}; font-size:12px;">{day}</span>'
+        f'&nbsp;&nbsp;<span style="color:{TEXT_PRIMARY}; font-size:14px; font-weight:600;">{temperature}</span>'
     )
+
+
+class _ShadowCard(QFrame):
+    """Card that paints its own soft shadow inside the widget.
+
+    A QGraphicsDropShadowEffect is clipped by the parent and disappears when an
+    ancestor (the page fader) also uses a graphics effect, so the knice shadow is
+    drawn in paintEvent with an internal shadow margin instead.
+    """
+
+    RADIUS = 22
+    SHADOW_MARGIN = 10
+
+    def paintEvent(self, event: Any) -> None:  # noqa: N802 (Qt naming)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        inner = QRectF(self.rect()).adjusted(
+            self.SHADOW_MARGIN,
+            self.SHADOW_MARGIN / 2,
+            -self.SHADOW_MARGIN,
+            -self.SHADOW_MARGIN,
+        )
+        for step, alpha in ((6.0, 16), (4.0, 24), (2.0, 32)):
+            path = QPainterPath()
+            path.addRoundedRect(
+                inner.adjusted(-step, -step / 2, step, step * 1.6),
+                self.RADIUS + step,
+                self.RADIUS + step,
+            )
+            painter.fillPath(path, QColor(4, 5, 8, alpha))
+        surface = QPainterPath()
+        surface.addRoundedRect(inner, self.RADIUS, self.RADIUS)
+        painter.fillPath(surface, QColor(33, 34, 38))
+        painter.setPen(QPen(QColor(255, 255, 255, 18), 1.0))
+        painter.drawLine(
+            QPointF(inner.left() + self.RADIUS, inner.top() + 0.5),
+            QPointF(inner.right() - self.RADIUS, inner.top() + 0.5),
+        )
+        painter.end()
 
 
 class _ClickableLabel(QLabel):
@@ -141,27 +207,33 @@ class DashboardPage(QWidget):
         self._weather_worker: WeatherWorker | None = None
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(28, 22, 28, 20)
-        layout.setSpacing(14)
+        layout.setContentsMargins(
+            DASHBOARD_MARGIN_SIDE,
+            DASHBOARD_MARGIN_TOP,
+            DASHBOARD_MARGIN_SIDE,
+            DASHBOARD_MARGIN_BOTTOM,
+        )
+        layout.setSpacing(GRID_GAP)
         logging.info("DashboardPage ctor: entered.")
+
+        self._cards: list[QFrame] = []
+        self._columns = 0
 
         self._build_header(layout)
 
-        grid = QGridLayout()
-        grid.setSpacing(12)
-        # knice hub proportions: narrow sides, a wide centre column.
-        grid.setColumnStretch(0, 5)
-        grid.setColumnStretch(1, 7)
-        grid.setColumnStretch(2, 5)
-        layout.addLayout(grid, 1)
+        self._grid = QGridLayout()
+        self._grid.setSpacing(GRID_GAP)
+        self._grid.setContentsMargins(0, 0, 0, 0)
+        layout.addLayout(self._grid, 1)
         logging.info("DashboardPage ctor: header built.")
 
-        self._build_weather_card(grid)
-        self._build_media_card(grid)
-        self._build_reminders_card(grid)
-        self._build_quick_commands_card(grid)
-        self._build_system_card(grid)
-        self._build_last_reply_card(grid)
+        self._build_weather_card()
+        self._build_media_card()
+        self._build_reminders_card()
+        self._build_quick_commands_card()
+        self._build_system_card()
+        self._build_last_reply_card()
+        self._relayout_grid(self.width(), force=True)
         logging.info("DashboardPage ctor: done.")
 
         self._metrics_timer = QTimer(self)
@@ -172,7 +244,10 @@ class DashboardPage(QWidget):
 
     def _build_header(self, layout: QVBoxLayout) -> None:
         now = datetime.now()
-        greeting_label = QLabel(greeting_for_hour(now.hour))
+        from hellsaiz_pc_ai.app.chat_page import GradientBrandLabel
+
+        greeting_label = GradientBrandLabel(greeting_for_hour(now.hour), 40)
+        greeting_label.setMinimumHeight(58)
         greeting_label.setObjectName("dashboardGreeting")
         layout.addWidget(greeting_label)
         note_label = QLabel(greeting_note(now.hour, self._assistant_persona))
@@ -183,25 +258,47 @@ class DashboardPage(QWidget):
             "Пятница", "Суббота", "Воскресенье",
         )
         meta_label = QLabel(f"{weekdays_ru[now.weekday()]}, {now:%d.%m.%Y}")
-        meta_label.setStyleSheet("color:#A6A29C; font-size:12px;")
+        meta_label.setStyleSheet(f"color:{TEXT_MUTED}; font-size:12px;")
         layout.addWidget(meta_label)
 
     # ------------------------------------------------------------------ shared
 
-    def _make_card_frame(self, grid: QGridLayout, row: int, column: int) -> QFrame:
-        card = QFrame()
+    def _make_card_frame(self) -> QFrame:
+        card = _ShadowCard()
         card.setObjectName("dashboardCard")
+        margin = _ShadowCard.SHADOW_MARGIN
         card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(20, 18, 20, 18)
+        card_layout.setContentsMargins(
+            CARD_PADDING + margin,
+            CARD_PADDING + margin // 2,
+            CARD_PADDING + margin,
+            CARD_PADDING + margin,
+        )
         card_layout.setSpacing(8)
-        if not _reduce_motion():
-            shadow = QGraphicsDropShadowEffect(card)
-            shadow.setBlurRadius(CARD_SHADOW_BLUR)
-            shadow.setOffset(0, CARD_SHADOW_OFFSET_Y)
-            shadow.setColor(QColor(4, 5, 8, 165))
-            card.setGraphicsEffect(shadow)
-        grid.addWidget(card, row, column)
+        self._cards.append(card)
         return card
+
+    def _relayout_grid(self, width: int, *, force: bool = False) -> None:
+        """Re-flow the cards into 1/2/3 columns; shadows keep their margins."""
+        columns = columns_for_width(int(width))
+        if not force and columns == self._columns:
+            return
+        self._columns = columns
+        while self._grid.count():
+            item = self._grid.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(self)
+        for index, card in enumerate(self._cards):
+            self._grid.addWidget(card, index // columns, index % columns)
+        for column in range(3):
+            self._grid.setColumnStretch(column, 1 if column < columns else 0)
+        for row in range((len(self._cards) + columns - 1) // columns):
+            self._grid.setRowStretch(row, 1)
+
+    def resizeEvent(self, event: Any) -> None:  # noqa: N802 (Qt naming)
+        super().resizeEvent(event)
+        self._relayout_grid(self.width())
 
     def _title_label(self, title: str) -> QLabel:
         label = QLabel(title)
@@ -221,8 +318,8 @@ class DashboardPage(QWidget):
 
     # ------------------------------------------------------------------ weather
 
-    def _build_weather_card(self, grid: QGridLayout) -> None:
-        weather_card = self._make_card_frame(grid, 0, 0)
+    def _build_weather_card(self) -> None:
+        weather_card = self._make_card_frame()
 
         title_row = QHBoxLayout()
         title_row.setSpacing(6)
@@ -320,8 +417,8 @@ class DashboardPage(QWidget):
 
     # ------------------------------------------------------------------ media
 
-    def _build_media_card(self, grid: QGridLayout) -> None:
-        media_card = self._make_card_frame(grid, 1, 0)
+    def _build_media_card(self) -> None:
+        media_card = self._make_card_frame()
 
         title_row = QHBoxLayout()
         title_row.setSpacing(6)
@@ -363,8 +460,8 @@ class DashboardPage(QWidget):
 
     # ------------------------------------------------------------------ reminders
 
-    def _build_reminders_card(self, grid: QGridLayout) -> None:
-        card = self._make_card_frame(grid, 0, 1)
+    def _build_reminders_card(self) -> None:
+        card = self._make_card_frame()
         title_row = QHBoxLayout()
         title_row.setSpacing(6)
         title_row.addWidget(self._title_label("Напоминания"))
@@ -412,8 +509,8 @@ class DashboardPage(QWidget):
 
     # ------------------------------------------------------------------ quick commands
 
-    def _build_quick_commands_card(self, grid: QGridLayout) -> None:
-        card = self._make_card_frame(grid, 1, 1)
+    def _build_quick_commands_card(self) -> None:
+        card = self._make_card_frame()
         title_row = QHBoxLayout()
         title_row.setSpacing(6)
         title_row.addWidget(self._title_label("Быстрые команды"))
@@ -461,8 +558,8 @@ class DashboardPage(QWidget):
 
     # ------------------------------------------------------------------ system
 
-    def _build_system_card(self, grid: QGridLayout) -> None:
-        card = self._make_card_frame(grid, 0, 2)
+    def _build_system_card(self) -> None:
+        card = self._make_card_frame()
         title_row = QHBoxLayout()
         title_row.setSpacing(6)
         title_row.addWidget(self._title_label("Система"))
@@ -476,7 +573,7 @@ class DashboardPage(QWidget):
             row = QHBoxLayout()
             row.setSpacing(8)
             label = QLabel(name)
-            label.setStyleSheet("color:#A6A29C; font-size:12px;")
+            label.setStyleSheet(f"color:{TEXT_MUTED}; font-size:12px;")
             row.addWidget(label, 0, Qt.AlignmentFlag.AlignLeft)
             bar = QProgressBar()
             bar.setObjectName("systemBar")
@@ -511,13 +608,16 @@ class DashboardPage(QWidget):
             if value is None:
                 continue
             row["bar"].setValue(int(round(value)))
-            row["value"].setText(f"{int(round(value))}%")
+            text_value = f"{int(round(value))}%"
+            if row["value"].text() != text_value:
+                row["value"].setText(text_value)
+                self._flash_widget(row["value"])
         self._system_comment.setText(system_comment(cpu))
 
     # ------------------------------------------------------------------ last reply
 
-    def _build_last_reply_card(self, grid: QGridLayout) -> None:
-        card = self._make_card_frame(grid, 1, 2)
+    def _build_last_reply_card(self) -> None:
+        card = self._make_card_frame()
         title_row = QHBoxLayout()
         title_row.setSpacing(6)
         title_row.addWidget(self._title_label("Последний ответ"))
@@ -580,34 +680,29 @@ class DashboardPage(QWidget):
             # The technical reason stays in the log; the card shows a human hint.
             logging.warning("Weather fetch failed: %s", message)
             self._weather_finished = True
-            self._weather_condition.setText("Погоду получить не удалось")
+            self._weather_condition.setText("нет сети")
             self._weather_temperature.setText("—")
             self._weather_icon.set_dimmed(True)
             self._clear_forecast()
-            self._weather_note.setText(
-                "Не получилось связаться с сервисом погоды — проверь интернет и попробуй позже."
-            )
+            self._weather_note.setText("Проверь подключение и нажми «Обновить».")
 
         def on_timeout() -> None:
             if self._weather_finished:
                 return
             self._weather_finished = True
-            self._weather_condition.setText("Погоду получить не удалось")
+            self._weather_condition.setText("нет сети")
             self._weather_temperature.setText("—")
             self._weather_icon.set_dimmed(True)
             self._clear_forecast()
-            self._weather_note.setText(
-                "Нет ответа за 15 секунд. Проверь подключение к сети и нажми «Обновить».")
+            self._weather_note.setText("Сервис не ответил за 15 секунд.")
 
         def on_city_missing(city: str) -> None:
             self._weather_finished = True
-            self._weather_condition.setText("Погоду получить не удалось")
+            self._weather_condition.setText("город не найден")
             self._weather_temperature.setText("—")
             self._weather_icon.set_dimmed(True)
             self._clear_forecast()
-            self._weather_note.setText(
-                f"Города «{city}» нет в базе сервиса — проверь название."
-            )
+            self._weather_note.setText(f"Города «{city}» нет в базе — проверь название.")
 
         worker.completed.connect(on_completed)
         worker.failed.connect(on_failed)
@@ -645,6 +740,29 @@ class DashboardPage(QWidget):
     def _weather_workers_clear(self, worker: WeatherWorker) -> None:
         if self._weather_worker is worker:
             self._weather_worker = None
+
+    def _flash_widget(self, widget: QWidget) -> None:
+        """Soft 180 ms opacity pulse on a value change (skipped when motion is off)."""
+        if _reduce_motion():
+            return
+        effect = QGraphicsOpacityEffect(widget)
+        effect.setOpacity(0.35)
+        widget.setGraphicsEffect(effect)
+        animation = QPropertyAnimation(effect, b"opacity", widget)
+        animation.setDuration(180)
+        animation.setStartValue(0.35)
+        animation.setEndValue(1.0)
+        animation.setEasingCurve(QEasingCurve.Type.OutQuad)
+
+        def finish() -> None:
+            try:
+                widget.setGraphicsEffect(None)
+            except RuntimeError:
+                return
+
+        animation.finished.connect(finish)
+        widget._flash_animation = animation
+        animation.start()
 
     def shutdown(self) -> None:
         """Stop the weather thread; called from app.aboutToQuit."""

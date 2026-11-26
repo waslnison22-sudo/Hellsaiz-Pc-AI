@@ -64,10 +64,17 @@ BUBBLE_MAX_CAP = 580
 class GradientBrandLabel(QWidget):
     """Brand wordmark with a vertical text gradient (QSS cannot clip text)."""
 
-    def __init__(self, text: str, font_size: int = 48, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        text: str,
+        font_size: int = 48,
+        align: Qt.AlignmentFlag = Qt.AlignmentFlag.AlignCenter,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
         self._text = text
         self._font_size = font_size
+        self._align = align
         font = QFont()
         font.setPixelSize(font_size)
         font.setWeight(QFont.Weight.ExtraBold)
@@ -82,7 +89,9 @@ class GradientBrandLabel(QWidget):
         gradient.setColorAt(0.2, QColor("#F2EFEA"))
         gradient.setColorAt(1.0, QColor("#9B9CA3"))
         painter.setPen(QPen(gradient, 0))
-        painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self._text)
+        painter.drawText(
+            self.rect(), self._align | Qt.AlignmentFlag.AlignVCenter, self._text
+        )
 
     def sizeHint(self):  # noqa: N802 (Qt naming)
         metrics = QFontMetrics(self._font)
