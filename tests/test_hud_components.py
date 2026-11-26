@@ -23,7 +23,6 @@ def test_theme_styles_new_wave3_components():
 
     assert "QFrame#skillCard" in stylesheet
     assert "QLabel#skillCardTitle" in stylesheet
-    assert "QLabel#privacyNote" in stylesheet
     assert "QFrame#emptyState" in stylesheet
     assert "QTabBar::tab:!selected" in stylesheet
 

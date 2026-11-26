@@ -1,10 +1,18 @@
-"""Batch 5 contracts: knice main-page tokens."""
+"""Batch 5 contracts: knice main-page hub."""
 
 from __future__ import annotations
 
+import inspect
 from datetime import datetime, timezone
+from pathlib import Path
 
-from hellsaiz_pc_ai.app.dashboard_texts import greeting_note
+from hellsaiz_pc_ai.app import dashboard_page as dashboard_module
+from hellsaiz_pc_ai.app.dashboard_texts import (
+    greeting_note,
+    last_reply_empty_note,
+    reminders_count_label,
+    system_comment,
+)
 from hellsaiz_pc_ai.app.theme import (
     CARD_EDGE,
     CARD_RADIUS,
@@ -37,14 +45,11 @@ def test_dashboard_surface_and_backdrop_colours():
 def test_big_temperature_and_mono_numbers():
     stylesheet = build_dark_stylesheet()
     temperature = stylesheet.rsplit("QLabel#weatherTemperature {", 1)[1].split("}", 1)[0]
-    value = stylesheet.rsplit("QLabel#dashboardCardValue {", 1)[1].split("}", 1)[0]
-    reminders = stylesheet.rsplit("QListWidget#dashboardRemindersList {", 1)[1].split("}", 1)[0]
 
     assert "font-size: 46px" in temperature
     assert "font-weight: 800" in temperature
     assert "Consolas" in temperature
-    assert "Consolas" in value
-    assert "Consolas" in reminders
+    assert "Consolas" in stylesheet.rsplit("QLabel#dashboardCardValue {", 1)[1].split("}", 1)[0]
 
 
 def test_lively_greeting_phrases():
@@ -80,3 +85,76 @@ def test_forecast_items_split_day_and_temperature(monkeypatch):
 
     assert items == [("Сб", "+2°"), ("Пт", "+4°")]
     assert report.forecast_line() == "Сб +2°  Пт +4°"
+
+
+def test_dashboard_dropped_the_ballast():
+    source = inspect.getsource(dashboard_module)
+    assert "Всё локально" not in source
+    assert "Применить" not in source
+    assert "Версия " not in source
+
+
+def test_reminders_count_label_plural():
+    assert reminders_count_label(0) == "На сегодня ничего нет"
+    assert reminders_count_label(1) == "1 напоминание на сегодня"
+    assert reminders_count_label(2) == "2 напоминания на сегодня"
+    assert reminders_count_label(5) == "5 напоминаний на сегодня"
+    assert reminders_count_label(12) == "12 напоминаний на сегодня"
+    assert reminders_count_label(21) == "21 напоминание на сегодня"
+
+
+def test_system_comment_thresholds():
+    assert system_comment(None) == "Метрики пока не считаны."
+    assert system_comment(12) == "Работаем в спокойном темпе."
+    assert system_comment(39.9) == "Работаем в спокойном темпе."
+    assert system_comment(40) == "Средняя нагрузка — всё под контролем."
+    assert system_comment(79) == "Средняя нагрузка — всё под контролем."
+    assert system_comment(85) == "Процессор сейчас трудится вовсю."
+
+
+def test_dashboard_hub_structure():
+    source = inspect.getsource(dashboard_module)
+    for needle in (
+        "Напоминания",
+        "Музыка",
+        "Быстрые команды",
+        "Система",
+        "Последний ответ",
+        "музыка назад",
+        "музыка пауза",
+        "музыка дальше",
+        "on_open_chat",
+        "set_last_reply",
+        "system_snapshot",
+        "reminders_count_label",
+    ):
+        assert needle in source, needle
+
+
+def test_media_icons_are_vendored():
+    package_root = (
+        Path(dashboard_module.__file__).resolve().parents[1] / "assets" / "icons"
+    )
+    for name in ("skip-back.svg", "skip-forward.svg", "play.svg", "pause.svg"):
+        assert (package_root / name).exists(), name
+
+
+def test_system_bar_uses_progress_styling():
+    stylesheet = build_dark_stylesheet()
+    block = stylesheet.rsplit("QProgressBar#systemBar {", 1)[1].split("}", 1)[0]
+
+    assert "border-radius: 3px" in block
+    assert "max-height: 6px" in block
+    assert "QProgressBar#systemBar::chunk" in stylesheet
+    assert "#E8C29E" in stylesheet.rsplit("QProgressBar#systemBar::chunk {", 1)[1].split("}", 1)[0]
+
+
+def test_last_reply_empty_note_text():
+    assert last_reply_empty_note() == "Пока тишина. Спроси меня о чём угодно."
+
+
+def test_greeting_note_respects_persona():
+    assert "сэр" in greeting_note(14, "джарвис")
+    note = greeting_note(14, "хеллсайз")
+    assert "сэр" not in note.casefold()
+    assert note

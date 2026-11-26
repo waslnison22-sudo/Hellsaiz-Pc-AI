@@ -91,6 +91,98 @@ QLabel#dashboardCardNote {{
     color: #A6A29C;
     font-size: 13px;
 }}
+QPushButton#cityButton {{
+    background: transparent;
+    border: 0;
+    color: #F2EFEA;
+    font-size: 16px;
+    font-weight: 700;
+    padding: 0;
+    min-height: 0;
+    text-align: left;
+}}
+QPushButton#cityButton:hover {{
+    color: #F2D2B0;
+}}
+QLineEdit#weatherCityEdit {{
+    background: {GLASS_BG_STRONG};
+    color: #F2EFEA;
+    border: 1px solid rgba(232, 194, 158, 140);
+    border-radius: 10px;
+    padding: 4px 10px;
+    min-height: 0;
+}}
+QPushButton#mediaButton {{
+    background: rgba(255, 255, 255, 12);
+    border: 0;
+    border-radius: 18px;
+    padding: 0;
+    min-height: 0;
+}}
+QPushButton#mediaButton:hover {{
+    background: rgba(255, 255, 255, 26);
+}}
+QToolButton#quickChip {{
+    background: rgba(255, 255, 255, 12);
+    border: 1px solid rgba(255, 255, 255, 26);
+    border-radius: 999px;
+    color: #A6A29C;
+    font-size: 12px;
+    padding: 4px 12px;
+    min-height: 0;
+}}
+QToolButton#quickChip:hover {{
+    background: rgba(255, 255, 255, 26);
+    color: #F2EFEA;
+}}
+QLineEdit#quickCommandInput {{
+    background: {GLASS_BG_STRONG};
+    color: #F2EFEA;
+    border: 1px solid rgba(255, 255, 255, 26);
+    border-radius: 16px;
+    padding: 6px 14px;
+    min-height: 34px;
+    font-size: 14px;
+}}
+QLineEdit#quickCommandInput:focus {{
+    border: 1px solid rgba(232, 194, 158, 140);
+    background: rgba(255, 255, 255, 30);
+}}
+QProgressBar#systemBar {{
+    background: rgba(255, 255, 255, 26);
+    border: 0;
+    border-radius: 3px;
+    max-height: 6px;
+    min-height: 6px;
+    text-align: center;
+    color: transparent;
+    font-size: 1px;
+}}
+QProgressBar#systemBar::chunk {{
+    background: #E8C29E;
+    border-radius: 3px;
+}}
+QLabel#remindersCount {{
+    color: #A6A29C;
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: 12px;
+}}
+QLabel#systemBarValue {{
+    color: #A6A29C;
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: 12px;
+}}
+QLabel#lastReplyText {{
+    color: #F2EFEA;
+    font-size: 15px;
+}}
+QLabel#lastReplyText:hover {{
+    color: #F2D2B0;
+}}
+QLabel#lastReplyTime {{
+    color: #A6A29C;
+    font-size: 12px;
+}}
 """
 
 DARK_STYLESHEET = """
@@ -345,16 +437,8 @@ QLabel#dashboardCardNote {
 }
 QLabel#dashboardGreeting {
     color: #F2EFEA;
-    font-size: 28px;
-    font-weight: 600;
-}
-QLabel#privacyNote {
-    color: #bfe8c7;
-    background: rgba(125, 212, 135, 20);
-    border: 1px solid rgba(125, 212, 135, 45);
-    border-radius: 10px;
-    padding: 10px 12px;
-    font-size: 13px;
+    font-size: 20px;
+    font-weight: 700;
 }
 QLabel#statChipOk {
     color: #7dd487;
