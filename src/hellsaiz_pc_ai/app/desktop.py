@@ -315,6 +315,7 @@ def main() -> int:
         )
         from PySide6.QtCore import QUrl
         from PySide6.QtGui import (
+            QFontMetrics,
             QColor,
             QDesktopServices,
             QIcon,
@@ -2422,6 +2423,27 @@ def main() -> int:
     vosk_model_row.addWidget(choose_vosk_model_button)
     vosk_model_row.addWidget(download_vosk_model_button)
     speech_tab_layout.addLayout(vosk_model_row)
+
+    # Long paths must not stretch the settings row: show an elided label with the
+    # full value available in the tooltip.
+    vosk_model_path_label = QLabel()
+    vosk_model_path_label.setObjectName("pathLabel")
+    vosk_model_path_label.setTextInteractionFlags(
+        Qt.TextInteractionFlag.TextSelectableByMouse
+    )
+
+    def refresh_vosk_model_path_label() -> None:
+        full_path = vosk_model_edit.text().strip() or "Модель ещё не выбрана"
+        metrics = QFontMetrics(vosk_model_path_label.font())
+        available = max(160, vosk_model_path_label.width() or 420)
+        vosk_model_path_label.setText(
+            metrics.elidedText(full_path, Qt.TextElideMode.ElideMiddle, available)
+        )
+        vosk_model_path_label.setToolTip(full_path)
+
+    vosk_model_edit.textChanged.connect(refresh_vosk_model_path_label)
+    refresh_vosk_model_path_label()
+    speech_tab_layout.addWidget(vosk_model_path_label)
 
     whisper_executable_row = QHBoxLayout()
     whisper_executable_edit = QLineEdit(active_stt["whisper_cpp_executable"])

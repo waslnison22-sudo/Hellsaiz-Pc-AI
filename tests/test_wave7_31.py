@@ -57,3 +57,18 @@ def test_voices_page_contract_in_source():
     assert 'load_icon("circle-alert"' in source
     assert "voices_error_notice" in source
     assert "errorNoticeText" in source
+
+
+def test_vosk_model_path_label_is_elided_with_a_tooltip():
+    import inspect
+
+    from hellsaiz_pc_ai.app import desktop
+    from hellsaiz_pc_ai.app.theme import build_dark_stylesheet
+
+    source = inspect.getsource(desktop.main)
+
+    assert "vosk_model_path_label" in source
+    assert "elidedText" in source
+    assert "Qt.TextElideMode.ElideMiddle" in source
+    assert "vosk_model_path_label.setToolTip(full_path)" in source
+    assert "QLabel#pathLabel" in build_dark_stylesheet()

@@ -544,6 +544,11 @@ QLabel#chatTextError {
     color: #FFB4AE;
     font-size: 15px;
 }
+QLabel#pathLabel {
+    color: #A6A29C;
+    font-size: 12px;
+    padding: 0 2px;
+}
 QFrame#errorNotice {
     background: rgba(232, 194, 158, 26);
     border: 1px solid rgba(232, 194, 158, 80);
