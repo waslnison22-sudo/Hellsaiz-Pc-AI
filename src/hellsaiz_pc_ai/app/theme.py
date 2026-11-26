@@ -78,11 +78,13 @@ QFrame#dashboardCard {{
     background: transparent;
     border: 0;
     border-radius: {CARD_RADIUS};
+    min-height: 150px;
 }}
 QLabel#weatherTemperature {{
     font-family: "Consolas", "Courier New", monospace;
-    font-size: 46px;
+    font-size: 38px;
     font-weight: 800;
+    padding: 2px 0;
 }}
 QLabel#dashboardCardValue {{
     font-family: "Consolas", "Courier New", monospace;
@@ -111,6 +113,15 @@ QPushButton#cityButton {{
 QPushButton#cityButton:hover {{
     color: #F2D2B0;
 }}
+QLabel#weatherCityDot {{
+    color: {TEXT_MUTED};
+    font-size: 14px;
+    padding: 6px 0 0 2px;
+}}
+QLabel#mediaState {{
+    color: {TEXT_MUTED};
+    font-size: 13px;
+}}
 QLineEdit#weatherCityEdit {{
     background: {GLASS_BG_STRONG};
     color: #F2EFEA;
@@ -132,7 +143,7 @@ QPushButton#mediaButton:hover {{
 QToolButton#quickChip {{
     background: rgba(255, 255, 255, 12);
     border: 1px solid rgba(255, 255, 255, 26);
-    border-radius: 999px;
+    border-radius: 16px;
     color: #A6A29C;
     font-size: 12px;
     padding: 4px 12px;
@@ -524,7 +535,7 @@ QPushButton#navPill {
     color: #A6A29C;
     border: 0;
     border-radius: 12px;
-    padding: 8px 16px;
+    padding: 7px 14px;
     min-height: 0;
     font-weight: 600;
 }

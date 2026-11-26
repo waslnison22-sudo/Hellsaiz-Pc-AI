@@ -2144,7 +2144,11 @@ def main() -> int:
                 )
 
         def failed(message: str) -> None:
-            voices_error_text.setText(f"Не удалось получить системные голоса: {message}")
+            logging.warning("System voice inventory failed: %s", message)
+            voices_error_text.setText(
+                "Системные голоса Windows недоступны: движок SAPI5 не установлен. "
+                "Голоса Piper при этом работают как обычно."
+            )
             voices_error_notice.show()
             voices_status.setText("Список системных голосов недоступен — см. предупреждение выше.")
 

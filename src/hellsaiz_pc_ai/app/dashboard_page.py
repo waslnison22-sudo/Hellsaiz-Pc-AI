@@ -326,7 +326,7 @@ class DashboardPage(QWidget):
         weather_card = self._make_card_frame()
 
         title_row = QHBoxLayout()
-        title_row.setSpacing(6)
+        title_row.setSpacing(8)
         title_row.addWidget(self._title_label("Погода"))
         title_row.addStretch(1)
         refresh_weather_button = self._icon_button(
@@ -351,22 +351,38 @@ class DashboardPage(QWidget):
         city_stack.addWidget(self._city_button)
         city_stack.addWidget(self._city_edit)
         city_stack.setCurrentWidget(self._city_button)
-        title_row.insertWidget(0, city_stack)
+        # «Погода · Ставрополь»: the city lives on its own line, never glued to
+        # the card title.
+        city_row = QHBoxLayout()
+        city_row.setSpacing(6)
+        city_dot = QLabel("·")
+        city_dot.setObjectName("weatherCityDot")
+        city_row.addWidget(city_dot)
+        city_row.addWidget(city_stack)
+        city_row.addStretch(1)
+        weather_card.layout().addLayout(city_row)
 
         weather_top_row = QHBoxLayout()
-        weather_top_row.setSpacing(8)
-        weather_icon = WeatherIconWidget()
+        weather_top_row.setSpacing(12)
+        weather_icon = WeatherIconWidget(size=52)
         weather_icon.setObjectName("weatherIcon")
         weather_top_row.addWidget(weather_icon, 0, Qt.AlignmentFlag.AlignTop)
+        weather_column = QVBoxLayout()
+        weather_column.setSpacing(2)
         weather_value = QLabel("—")
         weather_value.setObjectName("weatherTemperature")
-        weather_top_row.addWidget(weather_value)
-        weather_top_row.addStretch(1)
-        weather_card.layout().addLayout(weather_top_row)
+        weather_value.setMinimumWidth(120)
+        weather_value.setFixedHeight(64)
+        weather_value.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        )
+        weather_column.addWidget(weather_value)
         self._weather_condition = QLabel(f"Загружаю погоду для {self._city}…")
         self._weather_condition.setObjectName("weatherCondition")
         self._weather_condition.setWordWrap(True)
-        weather_card.layout().addWidget(self._weather_condition)
+        weather_column.addWidget(self._weather_condition)
+        weather_top_row.addLayout(weather_column, 1)
+        weather_card.layout().addLayout(weather_top_row)
         weather_note = QLabel("")
         weather_note.setObjectName("dashboardCardNote")
         weather_note.setWordWrap(True)
@@ -430,10 +446,14 @@ class DashboardPage(QWidget):
         title_row.addStretch(1)
         media_card.layout().addLayout(title_row)
 
-        note = QLabel("Управление воспроизведением Windows")
+        note = QLabel("Медиа-клавиши Windows: играет или пауза")
         note.setObjectName("dashboardCardNote")
         note.setWordWrap(True)
         media_card.layout().addWidget(note)
+
+        self._media_state = QLabel("Состояние: пауза")
+        self._media_state.setObjectName("mediaState")
+        media_card.layout().addWidget(self._media_state)
 
         controls_row = QHBoxLayout()
         controls_row.setSpacing(10)
@@ -460,6 +480,9 @@ class DashboardPage(QWidget):
         self._media_playing = not self._media_playing
         icon = media_pause_icon() if self._media_playing else media_play_icon()
         self._media_play_button.setIcon(icon)
+        self._media_state.setText(
+            "Состояние: играет" if self._media_playing else "Состояние: пауза"
+        )
         self._send_media_command("toggle")
 
     # ------------------------------------------------------------------ reminders
@@ -478,11 +501,12 @@ class DashboardPage(QWidget):
         logging.info("DashboardPage ctor: reminders card frame created.")
         self._reminders_list = QListWidget()
         self._reminders_list.setObjectName("dashboardRemindersList")
+        self._reminders_list.setMinimumHeight(120)
         logging.info("DashboardPage ctor: reminders list created.")
         self._reminders_empty = EmptyState(
             "Активных напоминаний нет",
             "Скажи: «напомни в 22:00 проверить чайник» — и я добавлю.",
-            glyph="🔔",
+            glyph="",
         )
         logging.info("DashboardPage ctor: empty state created.")
         self._reminders_stack = QStackedWidget()
@@ -539,6 +563,7 @@ class DashboardPage(QWidget):
             chip = QToolButton()
             chip.setObjectName("quickChip")
             chip.setText(label)
+            chip.setFocusPolicy(Qt.FocusPolicy.NoFocus)
             chip.setCursor(Qt.CursorShape.PointingHandCursor)
             chip.clicked.connect(lambda _checked=False, cmd=command: self._use_quick_chip(cmd))
             chips_row.addWidget(chip)
@@ -595,6 +620,7 @@ class DashboardPage(QWidget):
                 "value": value,
             }
         card.layout().addLayout(self._system_bars_layout)
+        card.layout().addStretch(1)
         self._system_comment = QLabel(system_comment(None))
         self._system_comment.setObjectName("dashboardCardNote")
         self._system_comment.setWordWrap(True)
