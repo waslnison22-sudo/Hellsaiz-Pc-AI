@@ -1,4 +1,9 @@
-"""Chat transcript widgets for the wave-4 redesign (bubbles, typing, input, toast)."""
+"""Chat transcript widgets for the wave-4/6 redesign (bubbles, typing, input, toast).
+
+Wave 6 (knice): a 680 px message column, 16 px bubbles with a "broken" corner,
+no avatars inside bubbles (the header keeps the only avatar) and a knice-style
+greeting shown while the chat is empty.
+"""
 
 from __future__ import annotations
 
@@ -10,13 +15,13 @@ from PySide6.QtCore import (
     QEvent,
     QPropertyAnimation,
     Qt,
+    QSize,
     QTimer,
     QVariantAnimation,
     Signal,
 )
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QLinearGradient, QPainter, QPen
 from hellsaiz_pc_ai.app.chat_style import minute_changed, render_assistant_text
-from hellsaiz_pc_ai.app.icons import load_icon
 from hellsaiz_pc_ai.app.ui_fx import animations_enabled, reduce_motion
 
 from PySide6.QtWidgets import (
@@ -49,9 +54,69 @@ TEXT_OBJECT_NAMES = {
     "error": "chatTextError",
 }
 
+# knice chat geometry: the messages live in a narrow centred column; bubbles
+# never exceed 85% of it (capped at 580 px for very wide windows).
+CHAT_COLUMN_WIDTH = 680
+BUBBLE_MAX_RATIO = 0.85
+BUBBLE_MAX_CAP = 580
+
+
+class GradientBrandLabel(QWidget):
+    """Brand wordmark with a vertical text gradient (QSS cannot clip text)."""
+
+    def __init__(self, text: str, font_size: int = 48, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._text = text
+        self._font_size = font_size
+        font = QFont()
+        font.setPixelSize(font_size)
+        font.setWeight(QFont.Weight.ExtraBold)
+        font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, -1.0)
+        self._font = font
+
+    def paintEvent(self, event: QEvent) -> None:  # noqa: N802 (Qt naming)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setFont(self._font)
+        gradient = QLinearGradient(0, 0, 0, self.height())
+        gradient.setColorAt(0.2, QColor("#F2EFEA"))
+        gradient.setColorAt(1.0, QColor("#9B9CA3"))
+        painter.setPen(QPen(gradient, 0))
+        painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self._text)
+
+    def sizeHint(self):  # noqa: N802 (Qt naming)
+        metrics = QFontMetrics(self._font)
+        return metrics.boundingRect(self._text).size() + QSize(0, 8)
+
+
+class ChatGreeting(QWidget):
+    """Empty-chat greeting: gradient brand wordmark plus a hand-written prompt."""
+
+    BRAND_TEXT = "Hellsaiz"
+    BRAND_FONT_SIZE = 48
+    PROMPT_TEXT = "пиши сюда — или просто скажи вслух"
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("chatGreeting")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+        self.brand = GradientBrandLabel(self.BRAND_TEXT, self.BRAND_FONT_SIZE)
+        self.brand.setFixedHeight(int(self.BRAND_FONT_SIZE * 1.2))
+        layout.addWidget(self.brand)
+        self.prompt = QLabel(self.PROMPT_TEXT)
+        self.prompt.setObjectName("chatGreetingPrompt")
+        self.prompt.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.prompt)
+
 
 class MessageBubble(QWidget):
-    """One message: bubble frame, hover copy button and a timestamp under it."""
+    """One message: bubble frame, hover copy button and a timestamp under it.
+
+    Wave 6: avatars are gone (the header owns the only avatar) and the bubble
+    uses knice padding with a 16 px radius and a "broken" corner.
+    """
 
     copied = Signal(str)
 
@@ -82,7 +147,7 @@ class MessageBubble(QWidget):
         self.bubble.setObjectName(ROLE_OBJECT_NAMES.get(role, "chatBubbleAssistant"))
         self.bubble.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Minimum)
         bubble_layout = QVBoxLayout(self.bubble)
-        bubble_layout.setContentsMargins(14, 10, 14, 10)
+        bubble_layout.setContentsMargins(18, 12, 18, 12)
         self.text_label = QLabel()
         self.text_label.setObjectName(TEXT_OBJECT_NAMES.get(role, "chatTextAssistant"))
         self.text_label.setWordWrap(True)
@@ -114,27 +179,11 @@ class MessageBubble(QWidget):
         self.copy_button.hide()
         self.copy_button.clicked.connect(self._copy)
 
-        self.avatar: QLabel | None = None
-        if role in {"user", "assistant"}:
-            self.avatar = QLabel()
-            if role == "user":
-                self.avatar.setObjectName("chatAvatarUser")
-                self.avatar.setPixmap(load_icon("user-round", "#F2EFEA").pixmap(18, 18))
-            else:
-                self.avatar.setObjectName("chatAvatarAssistant")
-                self.avatar.setText("H")
-            self.avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.avatar.setFixedSize(28, 28)
-
         if role == "user":
             bubble_row.addStretch(1)
             bubble_row.addWidget(self.copy_button)
             bubble_row.addWidget(self.bubble)
-            if self.avatar is not None:
-                bubble_row.addWidget(self.avatar, 0, Qt.AlignmentFlag.AlignBottom)
         else:
-            if self.avatar is not None:
-                bubble_row.addWidget(self.avatar, 0, Qt.AlignmentFlag.AlignBottom)
             bubble_row.addWidget(self.bubble)
             bubble_row.addWidget(self.copy_button)
             bubble_row.addStretch(1)
@@ -149,9 +198,7 @@ class MessageBubble(QWidget):
             if role == "user":
                 timestamp_row.addStretch(1)
                 timestamp_row.addWidget(self.timestamp_label)
-                timestamp_row.addSpacing(28)
             else:
-                timestamp_row.addSpacing(28)
                 timestamp_row.addWidget(self.timestamp_label)
                 timestamp_row.addStretch(1)
             column.addLayout(timestamp_row)
@@ -205,7 +252,7 @@ class TypingIndicator(QWidget):
         bubble.setObjectName("chatBubbleAssistant")
         bubble.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Minimum)
         bubble_layout = QHBoxLayout(bubble)
-        bubble_layout.setContentsMargins(14, 10, 14, 10)
+        bubble_layout.setContentsMargins(18, 12, 18, 12)
         self.label = QLabel("Ассистент печатает")
         self.label.setObjectName("chatTyping")
         bubble_layout.addWidget(self.label)
@@ -230,7 +277,11 @@ class TypingIndicator(QWidget):
 
 
 class ChatTranscript(QScrollArea):
-    """Scrollable message list with sticky-to-bottom behaviour."""
+    """Scrollable message list with sticky-to-bottom behaviour.
+
+    Wave 6: the content lives in a centred 680 px column and an empty chat
+    shows the knice-style greeting overlay above the composer area.
+    """
 
     copied = Signal(str)
     # Hard cap on visible bubbles: beyond this, oldest bubbles are dropped so a
@@ -247,10 +298,17 @@ class ChatTranscript(QScrollArea):
 
         container = QWidget()
         container.setObjectName("chatTranscriptBody")
-        self._layout = QVBoxLayout(container)
-        self._layout.setContentsMargins(4, 8, 4, 8)
-        self._layout.setSpacing(10)
-        self._layout.addStretch(1)
+        outer = QHBoxLayout(container)
+        outer.setContentsMargins(0, 8, 0, 8)
+        outer.setSpacing(0)
+        outer.addStretch(1)
+        column = QVBoxLayout()
+        column.setContentsMargins(0, 0, 0, 0)
+        column.setSpacing(16)
+        self._column = column
+        outer.addLayout(column, 0)
+        outer.addStretch(1)
+        self._layout = column  # legacy alias: the messages column
         self.setWidget(container)
 
         self._typing = TypingIndicator()
@@ -263,6 +321,11 @@ class ChatTranscript(QScrollArea):
         self._last_day: str | None = None
         self._last_bubble: MessageBubble | None = None
         self._stick_to_bottom = True
+
+        # knice-style greeting for an empty chat, kept as an overlay so it
+        # never interferes with the message flow inside the scroll column.
+        self._greeting_overlay = ChatGreeting(self)
+        self._greeting_overlay.hide()
 
         # "↓ новые сообщения" pill shown while the user reads older messages.
         self._new_messages_button = QPushButton("↓ новые сообщения", self)
@@ -290,7 +353,7 @@ class ChatTranscript(QScrollArea):
     ) -> MessageBubble:
         stick = self._is_at_bottom()
         if self._typing.isVisible():
-            self._layout.removeWidget(self._typing)
+            self._column.removeWidget(self._typing)
             self._typing.hide()
 
         # Day divider above the first message of a new day.
@@ -301,11 +364,11 @@ class ChatTranscript(QScrollArea):
             header = QLabel("Сегодня" if day_label == today else day_label)
             header.setObjectName("chatDayDivider")
             header.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self._layout.addWidget(header)
+            self._column.addWidget(header)
             divider = QWidget()
             divider.setObjectName("chatDayDividerSpacer")
             divider.setFixedHeight(2)
-            self._layout.addWidget(divider)
+            self._column.addWidget(divider)
 
         # Messenger-style grouping: the first bubble of a minute keeps the time,
         # and a fresh bubble in the same minute takes it over (last message always
@@ -319,10 +382,12 @@ class ChatTranscript(QScrollArea):
         bubble.setMaximumWidth(self._bubble_max_width())
         self._bubbles.append(bubble)
         self._last_bubble = bubble
-        self._layout.addWidget(bubble)
-        self._layout.addWidget(self._typing)
+        self._column.addWidget(bubble)
+        self._column.addWidget(self._typing)
         self._trim_overflow()
         self._animate_appear(bubble)
+        if self._greeting_overlay.isVisible():
+            self._greeting_overlay.hide()
         if stick:
             self._smooth_scroll_to_bottom()
             self._new_messages_button.hide()
@@ -355,6 +420,7 @@ class ChatTranscript(QScrollArea):
 
         drift.valueChanged.connect(apply_drift)
         drift.finished.connect(lambda: bubble.setContentsMargins(0, 0, 0, 0))
+
         def finish_appear() -> None:
             # setGraphicsEffect(None) takes ownership back and deletes the effect;
             # calling effect.deleteLater() on top of it double-frees the object.
@@ -396,6 +462,14 @@ class ChatTranscript(QScrollArea):
         button.move(x, y)
         button.raise_()
 
+    def _reposition_greeting_overlay(self) -> None:
+        overlay = self._greeting_overlay
+        overlay.adjustSize()
+        x = max(0, (self.viewport().width() - overlay.width()) // 2)
+        y = max(24, self.viewport().height() - overlay.height() - 120)
+        overlay.move(x, y)
+        overlay.raise_()
+
     def _trim_overflow(self) -> None:
         while len(self._bubbles) > self.MAX_VISIBLE_MESSAGES:
             bubble = self._bubbles.pop(0)
@@ -403,7 +477,7 @@ class ChatTranscript(QScrollArea):
                 animation = getattr(bubble, attribute, None)
                 if animation is not None:
                     animation.stop()
-            self._layout.removeWidget(bubble)
+            self._column.removeWidget(bubble)
             bubble.deleteLater()
 
     def show_typing(self) -> None:
@@ -413,11 +487,11 @@ class ChatTranscript(QScrollArea):
 
     def _reveal_typing(self) -> None:
         stick = self._is_at_bottom()
-        if self._layout.indexOf(self._typing) == -1:
-            self._layout.addWidget(self._typing)
+        if self._column.indexOf(self._typing) == -1:
+            self._column.addWidget(self._typing)
         else:
-            self._layout.removeWidget(self._typing)
-            self._layout.addWidget(self._typing)
+            self._column.removeWidget(self._typing)
+            self._column.addWidget(self._typing)
         self._typing.show()
         self._typing.start()
         if stick:
@@ -435,7 +509,7 @@ class ChatTranscript(QScrollArea):
                 animation = getattr(bubble, attribute, None)
                 if animation is not None:
                     animation.stop()
-            self._layout.removeWidget(bubble)
+            self._column.removeWidget(bubble)
             bubble.hide()
         self._bubbles.clear()
         self._last_minute = None
@@ -444,13 +518,17 @@ class ChatTranscript(QScrollArea):
         self._pending_new_message = False
         self._new_messages_button.hide()
         self.hide_typing()
+        self._greeting_overlay.show()
+        self._reposition_greeting_overlay()
         return removed
 
     def restore_messages(self, bubbles: list[MessageBubble]) -> None:
         for bubble in bubbles:
             bubble.show()
-            self._layout.addWidget(bubble)
+            self._column.addWidget(bubble)
             self._bubbles.append(bubble)
+        if self._greeting_overlay.isVisible():
+            self._greeting_overlay.hide()
         self.scroll_to_bottom()
 
     def message_count(self) -> int:
@@ -466,7 +544,15 @@ class ChatTranscript(QScrollArea):
 
     def _bubble_max_width(self) -> int:
         width = self.viewport().width() or self.width()
-        return max(240, int(width * 0.7))
+        column = min(width, CHAT_COLUMN_WIDTH)
+        return max(240, int(column * BUBBLE_MAX_RATIO))
+
+    def showEvent(self, event: QEvent) -> None:  # noqa: N802 (Qt naming)
+        super().showEvent(event)
+        # An empty chat greets; the overlay lives outside the scrolled column.
+        if not self._bubbles:
+            self._greeting_overlay.show()
+            self._reposition_greeting_overlay()
 
     def hideEvent(self, event: QEvent) -> None:  # noqa: N802 (Qt naming)
         super().hideEvent(event)
@@ -483,6 +569,8 @@ class ChatTranscript(QScrollArea):
         limit = self._bubble_max_width()
         for bubble in self._bubbles:
             bubble.setMaximumWidth(limit)
+        if self._greeting_overlay.isVisible():
+            self._reposition_greeting_overlay()
 
 
 class ChatInput(QTextEdit):
@@ -621,13 +709,6 @@ class Toast(QFrame):
         self.hide()
         if callback is not None:
             callback()
-
-    def _fade_out(self) -> None:
-        self._effect.setEnabled(True)
-        self._fade.stop()
-        self._fade.setStartValue(1.0)
-        self._fade.setEndValue(0.0)
-        self._fade.start()
 
     def _reposition(self) -> None:
         parent = self.parentWidget()
