@@ -159,3 +159,35 @@ def test_default_painter_character_needs_no_files():
     renderer.load_model("", "")
     assert renderer.render_status() == {"renderer": "painter-sprite", "version": "1"}
     assert BASE_SIZE == 128
+
+
+def test_painter_sprite_never_touches_the_window_edges(qapp):
+    """Regression: the halo and the status bubble must stay inside 128x128."""
+    from PySide6.QtCore import QRectF
+    from PySide6.QtGui import QColor, QImage, QPainter
+
+    renderer = PainterSpriteRenderer()
+    edge_hits: list[str] = []
+    for mode in CompanionMode:
+        snapshot = CompanionSnapshot(mode=mode, status_text="Проверка" if mode == CompanionMode.SPEAKING else "")
+        image = QImage(BASE_SIZE, BASE_SIZE, QImage.Format.Format_ARGB32)
+        image.fill(QColor(0, 0, 0, 0))
+        painter = QPainter(image)
+        try:
+            renderer.paint(painter, QRectF(0, 0, BASE_SIZE, BASE_SIZE), snapshot)
+        finally:
+            painter.end()
+        last = BASE_SIZE - 1
+        border_hits = 0
+        for x in range(BASE_SIZE):
+            for y in (0, last):
+                if image.pixelColor(x, y).alpha() > 0:
+                    border_hits += 1
+        for y in range(BASE_SIZE):
+            for x in (0, last):
+                if image.pixelColor(x, y).alpha() > 0:
+                    border_hits += 1
+        if border_hits:
+            edge_hits.append(f"{mode.value}: {border_hits} edge pixels")
+
+    assert edge_hits == [], edge_hits

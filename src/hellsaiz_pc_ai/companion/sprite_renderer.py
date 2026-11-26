@@ -92,7 +92,7 @@ class PainterSpriteRenderer:
         elif snapshot.mode == CompanionMode.ERROR:
             scale = 0.94
         center = rect.center()
-        side = min(rect.width(), rect.height()) * 0.72 * scale
+        side = min(rect.width(), rect.height()) * 0.58 * scale
         return QRectF(
             center.x() - side / 2,
             center.y() - side / 2,
@@ -105,14 +105,14 @@ class PainterSpriteRenderer:
     def _draw_body(self, painter: QPainter, body: QRectF, snapshot: CompanionSnapshot) -> None:
         glow = ERROR_COLOR if snapshot.mode == CompanionMode.ERROR else GLOW_COLOR
         path = self._body_path(body)
-        halo = QRadialGradient(body.center(), body.width() * 0.75)
+        halo = QRadialGradient(body.center(), body.width() * 0.6)
         halo_color = QColor(glow)
         halo_color.setAlpha(70 if snapshot.mode == CompanionMode.ERROR else 46)
         halo.setColorAt(0.55, QColor(0, 0, 0, 0))
         halo.setColorAt(1.0, halo_color)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QBrush(halo))
-        painter.drawEllipse(body.adjusted(-body.width() * 0.3, -body.height() * 0.3, body.width() * 0.3, body.height() * 0.3))
+        painter.drawEllipse(body.adjusted(-body.width() * 0.2, -body.height() * 0.2, body.width() * 0.2, body.height() * 0.2))
 
         gradient = QRadialGradient(body.center().x(), body.top(), body.height())
         gradient.setColorAt(0.0, BODY_COLOR.lighter(130))
@@ -206,7 +206,7 @@ class PainterSpriteRenderer:
         font.setPixelSize(14)
         font.setWeight(QFont.Weight.Medium)
         metrics = QFontMetrics(font)
-        width = max(72, min(rect.width() * 1.6, metrics.horizontalAdvance(text) + 24))
+        width = max(72, min(rect.width() - 12.0, metrics.horizontalAdvance(text) + 24))
         height = 30
         bubble = QRectF(
             rect.center().x() - width / 2,
