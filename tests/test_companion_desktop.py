@@ -1,4 +1,8 @@
-"""Companion integration contracts (task 1) + toast startup regression."""
+"""Companion integration contracts (task 1) + toast startup regression.
+
+The controller/bridge are pure Python; only the overlay, toast and desktop
+shell need PySide6, so those imports sit behind the usual Linux skip guard.
+"""
 
 from __future__ import annotations
 
@@ -7,12 +11,14 @@ from pathlib import Path
 
 import pytest
 
+from hellsaiz_pc_ai.companion.controller import CompanionController
+from hellsaiz_pc_ai.companion.events import CompanionEventBridge
+
 try:  # PySide6 widgets are unavailable on headless Linux runners.
     from PySide6.QtWidgets import QApplication, QWidget
 
     from hellsaiz_pc_ai.app.chat_page import Toast
-    from hellsaiz_pc_ai.companion.controller import CompanionController
-    from hellsaiz_pc_ai.companion.events import CompanionEventBridge
+    from hellsaiz_pc_ai.app import desktop as desktop_module
     from hellsaiz_pc_ai.companion.overlay import CompanionOverlay
 
     _QT_AVAILABLE = True
@@ -44,12 +50,25 @@ def test_bridge_maps_worker_events_to_modes():
     assert settled.mode.value == "idle"
 
 
+def test_bridge_tolerates_a_worker_without_the_expected_signals():
+    class SignallessWorker:
+        pass
+
+    controller = CompanionController()
+    bridge = CompanionEventBridge(controller)
+
+    bridge.connect_worker(
+        SignallessWorker(), SignallessWorker(), SignallessWorker()
+    )
+
+    assert controller.snapshot().mode.value == "hidden"
+
+
 @requires_qt
 def test_overlay_set_visible_persists_the_choice(tmp_path: Path):
     QApplication.instance() or QApplication([])
     state_path = tmp_path / "companion.json"
-    controller = CompanionController()
-    overlay = CompanionOverlay(controller.snapshot, state_path=state_path)
+    overlay = CompanionOverlay(CompanionController().snapshot, state_path=state_path)
 
     overlay.set_visible(False)
     assert overlay._visible_by_user is False
@@ -88,10 +107,9 @@ def test_toast_starts_and_fades_out_without_missing_methods():
     assert hasattr(toast, "_fade_out")
 
 
+@requires_qt
 def test_desktop_shell_creates_one_companion_and_shuts_it_down():
-    from hellsaiz_pc_ai.app import desktop
-
-    source = inspect.getsource(desktop.main)
+    source = inspect.getsource(desktop_module.main)
 
     assert source.count("CompanionController()") == 1
     assert source.count("CompanionOverlay(") == 1
