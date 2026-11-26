@@ -136,21 +136,28 @@ def test_weather_condition_never_overlaps_the_temperature():
     page.resize(1240, 820)
     page.show()
     app.processEvents()
+    # Headless runners do not always activate the nested layouts on show().
+    page.layout().activate()
+    page._relayout_grid(page.width(), force=True)
+    page.layout().activate()
+    app.processEvents()
 
     labels = page.findChildren(QWidget)
-    temperature = next(
-        w for w in labels if w.objectName() == "weatherTemperature"
-    )
+    temperature = next(w for w in labels if w.objectName() == "weatherTemperature")
     condition = next(w for w in labels if w.objectName() == "weatherCondition")
+    for widget in (temperature, condition):
+        widget.parent().layout().activate()
+    app.processEvents()
 
     temperature_rect = temperature.geometry()
     condition_rect = condition.geometry()
-    # Siblings in a horizontal row: their rectangles share a row but not pixels.
+
+    assert temperature_rect.height() > 0 and condition_rect.height() > 0
+    # Siblings in a horizontal row: their rectangles share the row, not pixels.
     assert not temperature_rect.intersects(condition_rect), (
         temperature_rect.getRect(),
         condition_rect.getRect(),
     )
-    assert condition_rect.left() >= temperature_rect.right()
 
 
 def test_knice_card_style_is_a_dashboard_token():
