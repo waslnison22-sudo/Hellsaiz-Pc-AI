@@ -20,7 +20,7 @@ def greeting_note(hour: int, persona: str) -> str:
         if 5 <= hour < 12:
             return "Доброе утро, сэр. Системы на связи."
         if 12 <= hour < 18:
-            return "Вечер в разгаре? Я к вашим услугам, сэр."
+            return "День в разгаре. Я к вашим услугам, сэр."
         if 18 <= hour < 23:
             return "Чем могу помочь, сэр?"
         return "Ночная смена, сэр. Слушаю."
@@ -29,7 +29,7 @@ def greeting_note(hour: int, persona: str) -> str:
     if 12 <= hour < 18:
         return "День идёт — я рядом."
     if 18 <= hour < 23:
-        return "Вечер. Сделаем тише и проще."
+        return "Сделаем тише и проще — день закончился."
     return "Ночная смена. Я на связи."
 
 

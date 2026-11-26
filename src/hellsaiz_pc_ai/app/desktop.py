@@ -1901,7 +1901,7 @@ def main() -> int:
     voices_description.setStyleSheet("color:#A6A29C;")
     voices_layout.addWidget(voices_description)
     voices_hint = QLabel(
-        "Совет: голос Денис звучит механически — попробуй Дмитрия, Ирину или Руслана ниже."
+        "Совет: голос Денис звучит механически — попробуй Дмитрия, Ирину или Руслана из списка."
     )
     voices_hint.setWordWrap(True)
     voices_hint.setStyleSheet("color:#A6A29C; font-size:12px;")
