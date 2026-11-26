@@ -72,3 +72,16 @@ def test_vosk_model_path_label_is_elided_with_a_tooltip():
     assert "Qt.TextElideMode.ElideMiddle" in source
     assert "vosk_model_path_label.setToolTip(full_path)" in source
     assert "QLabel#pathLabel" in build_dark_stylesheet()
+
+
+def test_workflow_studio_form_spacing_and_bold_labels():
+    import inspect
+
+    from hellsaiz_pc_ai.app import workflow_studio
+
+    source = inspect.getsource(workflow_studio)
+
+    assert "builder_fields_layout.setSpacing(20)" in source
+    assert source.count("QGroupBox::title { font-weight: 600; }") == 2
+    assert "1. Когда запускать сценарий?" in source
+    assert "2. Добавить условие (необязательно)" in source

@@ -700,7 +700,7 @@ class WorkflowStudioPage(QWidget):
         self.builder_fields = QWidget()
         self.builder_fields_layout = QVBoxLayout(self.builder_fields)
         self.builder_fields_layout.setContentsMargins(4, 4, 8, 8)
-        self.builder_fields_layout.setSpacing(12)
+        self.builder_fields_layout.setSpacing(20)
         name_group = QGroupBox("Название сценария")
         name_group.setObjectName("scenarioCard")
         name_layout = QVBoxLayout(name_group)
@@ -882,6 +882,7 @@ class WorkflowStudioPage(QWidget):
 
     def _build_trigger_section(self) -> None:
         group = QGroupBox("1. Когда запускать сценарий?")
+        group.setStyleSheet("QGroupBox::title { font-weight: 600; }")
         group.setObjectName("scenarioCard")
         layout = QVBoxLayout(group)
         self.trigger_combo = QComboBox()
@@ -955,6 +956,7 @@ class WorkflowStudioPage(QWidget):
 
     def _build_condition_section(self) -> None:
         self.condition_group = QGroupBox("2. Добавить условие (необязательно)")
+        self.condition_group.setStyleSheet("QGroupBox::title { font-weight: 600; }")
         self.condition_group.setObjectName("scenarioCard")
         self.condition_group.setCheckable(True)
         self.condition_group.setChecked(False)
