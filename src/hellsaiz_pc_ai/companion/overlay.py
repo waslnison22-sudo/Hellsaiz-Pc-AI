@@ -70,21 +70,40 @@ class CompanionOverlay(QWidget):
 
     # -- State persistence -----------------------------------------------------
 
+    def _place_in_default_corner(self) -> None:
+        """Default spot: the bottom-right corner, clear of the interface."""
+        from PySide6.QtGui import QGuiApplication
+
+        screen = self.screen() or QGuiApplication.primaryScreen()
+        if screen is None:
+            return
+        area = screen.availableGeometry()
+        margin = int(self.EDGE_SNAP_MARGIN)
+        self.move(
+            area.right() - self.width() - margin,
+            area.bottom() - self.height() - margin,
+        )
+
     def _restore_state(self) -> None:
         if self._state_path is None:
+            self._place_in_default_corner()
             return
         try:
             raw = json.loads(self._state_path.read_text(encoding="utf-8"))
         except (OSError, ValueError, json.JSONDecodeError):
             logging.debug("Companion state is unreadable; using defaults.")
+            self._place_in_default_corner()
             return
         if not isinstance(raw, dict):
+            self._place_in_default_corner()
             return
+        placed = False
         position = raw.get("position")
         if isinstance(position, dict):
             x, y = position.get("x"), position.get("y")
             if isinstance(x, int) and isinstance(y, int):
                 self.move(QPoint(x, y))
+                placed = True
         scale = raw.get("scale")
         if isinstance(scale, (int, float)) and self.MIN_SCALE <= scale <= self.MAX_SCALE:
             # Resize without moving: position is restored afterwards, verbatim.
@@ -92,6 +111,8 @@ class CompanionOverlay(QWidget):
             self.setFixedSize(int(BASE_SIZE * scale), int(BASE_SIZE * scale))
         if raw.get("hidden") is True:
             self._visible_by_user = False
+        if not placed:
+            self._place_in_default_corner()
 
     def save_state(self) -> None:
         if self._state_path is None:
