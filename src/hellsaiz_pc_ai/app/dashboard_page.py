@@ -57,6 +57,11 @@ from hellsaiz_pc_ai.app.ui_icons import (
     send_light_icon,
 )
 from hellsaiz_pc_ai.app.system_metrics import system_snapshot
+from hellsaiz_pc_ai.app.weather_cache import (
+    load_weather_cache,
+    save_weather_cache,
+    updated_label,
+)
 from hellsaiz_pc_ai.app.ui_fx import reduce_motion as _reduce_motion
 from hellsaiz_pc_ai.app.weather_icon import WeatherIconWidget, map_weather_icon
 from hellsaiz_pc_ai.app.dashboard_texts import (
@@ -399,6 +404,10 @@ class DashboardPage(QWidget):
         weather_note.setWordWrap(True)
         weather_card.layout().addWidget(weather_note)
         self._weather_note = weather_note
+        weather_updated = QLabel("")
+        weather_updated.setObjectName("dashboardCardNote")
+        weather_card.layout().addWidget(weather_updated)
+        self._weather_updated = weather_updated
         self._weather_icon = weather_icon
         self._weather_temperature = weather_value
 
@@ -716,26 +725,26 @@ class DashboardPage(QWidget):
                 ", ".join(self._weather_details(report))
             )
             self._rebuild_forecast(report)
+            payload = {
+                "city": self._city,
+                "condition": self._weather_condition.text(),
+                "temperature": self._weather_temperature.text(),
+                "details": self._weather_note.text(),
+            }
+            save_weather_cache(payload)
+            self._weather_updated.setText(updated_label(load_weather_cache() or payload))
 
         def on_failed(message: str) -> None:
             # The technical reason stays in the log; the card shows a human hint.
             logging.warning("Weather fetch failed: %s", message)
             self._weather_finished = True
-            self._weather_condition.setText("нет сети")
-            self._weather_temperature.setText("—")
-            self._weather_icon.set_dimmed(True)
-            self._clear_forecast()
-            self._weather_note.setText("Проверь подключение и нажми «Обновить».")
+            self._apply_cached_weather()
 
         def on_timeout() -> None:
             if self._weather_finished:
                 return
             self._weather_finished = True
-            self._weather_condition.setText("нет сети")
-            self._weather_temperature.setText("—")
-            self._weather_icon.set_dimmed(True)
-            self._clear_forecast()
-            self._weather_note.setText("Сервис не ответил за 15 секунд.")
+            self._apply_cached_weather()
 
         def on_city_missing(city: str) -> None:
             self._weather_finished = True
@@ -744,6 +753,7 @@ class DashboardPage(QWidget):
             self._weather_icon.set_dimmed(True)
             self._clear_forecast()
             self._weather_note.setText(f"Города «{city}» нет в базе — проверь название.")
+            self._weather_updated.setText("")
 
         worker.completed.connect(on_completed)
         worker.failed.connect(on_failed)
@@ -753,6 +763,23 @@ class DashboardPage(QWidget):
         )
         worker.start()
         QTimer.singleShot(15000, on_timeout)
+
+    def _apply_cached_weather(self) -> None:
+        """Offline state: show the saved report, or a human empty state."""
+        cached = load_weather_cache()
+        self._clear_forecast()
+        if not cached:
+            self._weather_condition.setText("нет сети")
+            self._weather_temperature.setText("—")
+            self._weather_icon.set_dimmed(True)
+            self._weather_note.setText("Погода появится, когда появится сеть.")
+            self._weather_updated.setText("")
+            return
+        self._weather_condition.setText(str(cached.get("condition") or "нет сети"))
+        self._weather_temperature.setText(str(cached.get("temperature") or "—"))
+        self._weather_icon.set_dimmed(True)
+        self._weather_note.setText("Нет соединения — показаны сохранённые данные")
+        self._weather_updated.setText(updated_label(cached))
 
     @staticmethod
     def _weather_details(report: WeatherReport) -> list[str]:
