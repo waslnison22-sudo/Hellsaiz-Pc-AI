@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from hellsaiz_pc_ai.app import ui_fx
+try:  # PySide6 GUI libraries are absent on headless Linux runners.
+    from hellsaiz_pc_ai.app import ui_fx
+except ImportError as exc:  # pragma: no cover - runner-specific
+    pytest.skip(f"Qt native libraries unavailable: {exc}", allow_module_level=True)
 
 try:  # PySide6 GUI libraries are absent on headless Linux runners.
     from PySide6.QtCore import QVariantAnimation

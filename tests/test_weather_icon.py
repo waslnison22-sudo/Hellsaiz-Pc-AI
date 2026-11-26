@@ -4,16 +4,16 @@ from __future__ import annotations
 
 import pytest
 
-from hellsaiz_pc_ai.app.weather_icon import is_night_hour, map_weather_icon
-
 try:  # PySide6 GUI libraries are absent on headless Linux runners.
+    from hellsaiz_pc_ai.app.weather_icon import is_night_hour, map_weather_icon
+
     from PySide6.QtWidgets import QApplication
 
     from hellsaiz_pc_ai.app.weather_icon import WeatherIconWidget
 
     _QT_AVAILABLE = True
-except ImportError:  # pragma: no cover - runner-specific
-    _QT_AVAILABLE = False
+except ImportError as exc:  # pragma: no cover - runner-specific
+    pytest.skip(f"Qt native libraries unavailable: {exc}", allow_module_level=True)
 
 _requires_qt = pytest.mark.skipif(
     not _QT_AVAILABLE, reason="PySide6 GUI libraries are not available on this runner"
