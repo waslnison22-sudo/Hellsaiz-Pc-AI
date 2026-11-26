@@ -65,7 +65,7 @@ def test_big_temperature_and_mono_numbers():
     stylesheet = build_dark_stylesheet()
     temperature = stylesheet.rsplit("QLabel#weatherTemperature {", 1)[1].split("}", 1)[0]
 
-    assert "font-size: 46px" in temperature
+    assert "font-size: 38px" in temperature
     assert "font-weight: 800" in temperature
     assert "Consolas" in temperature
     assert "Consolas" in stylesheet.rsplit("QLabel#dashboardCardValue {", 1)[1].split("}", 1)[0]
