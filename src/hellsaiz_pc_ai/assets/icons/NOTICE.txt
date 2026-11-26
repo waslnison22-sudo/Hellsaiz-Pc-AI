@@ -1,6 +1,8 @@
 Lucide icons (https://lucide.dev)
 Files in this directory are unmodified SVG sources from lucide-static v0.469.0.
 
+Wave-9 additions (same package, same version): globe, folder, calculator, eye, film, lock.
+
 ISC License
 
 Copyright (c) for portions of Lucide are held by Cole Bemis 2013-2022 as part of Feather
