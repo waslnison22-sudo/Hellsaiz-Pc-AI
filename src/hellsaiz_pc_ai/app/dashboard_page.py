@@ -411,6 +411,7 @@ class DashboardPage(QWidget):
         weather_note.setWordWrap(True)
         weather_card.layout().addWidget(weather_note)
         self._weather_note = weather_note
+        self._weather_card = weather_card
         weather_updated = QLabel("")
         weather_updated.setObjectName("dashboardCardNote")
         weather_card.layout().addWidget(weather_updated)
@@ -740,6 +741,7 @@ class DashboardPage(QWidget):
             }
             save_weather_cache(payload)
             self._weather_updated.setText(updated_label(load_weather_cache() or payload))
+            self._lock_card_minimum(self._weather_card)
 
         def on_failed(message: str) -> None:
             # The technical reason stays in the log; the card shows a human hint.
@@ -781,12 +783,14 @@ class DashboardPage(QWidget):
             self._weather_icon.set_dimmed(True)
             self._weather_note.setText("Погода появится, когда появится сеть.")
             self._weather_updated.setText("")
+            self._lock_card_minimum(self._weather_card)
             return
         self._weather_condition.setText(str(cached.get("condition") or "нет сети"))
         self._weather_temperature.setText(str(cached.get("temperature") or "—"))
         self._weather_icon.set_dimmed(True)
         self._weather_note.setText("Нет соединения — показаны сохранённые данные")
         self._weather_updated.setText(updated_label(cached))
+        self._lock_card_minimum(self._weather_card)
 
     @staticmethod
     def _weather_details(report: WeatherReport) -> list[str]:
@@ -854,8 +858,25 @@ class DashboardPage(QWidget):
         except RuntimeError:
             pass
 
+    @staticmethod
+    def _lock_card_minimum(card: QWidget) -> None:
+        """Raise a card's minimum height to what its own layout needs."""
+        layout = card.layout()
+        if layout is None:
+            return
+        layout.activate()
+        minimum = layout.minimumSize().height()
+        if minimum > card.minimumHeight():
+            card.setMinimumHeight(minimum)
+
+    def _lock_card_minimums(self) -> None:
+        """Cards never shrink below their content, so labels cannot overlap."""
+        for card in self._cards:
+            self._lock_card_minimum(card)
+
     def showEvent(self, event: Any) -> None:  # noqa: N802 (Qt naming)
         super().showEvent(event)
+        QTimer.singleShot(0, self._lock_card_minimums)
         if not self._weather_fetch_started:
             self._weather_fetch_started = True
             QTimer.singleShot(300, self._start_weather_fetch)

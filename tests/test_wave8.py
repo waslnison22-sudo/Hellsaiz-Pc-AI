@@ -191,3 +191,22 @@ def test_city_label_has_no_chip_background():
     assert "background: transparent" in button_style
     assert "border: 0" in button_style
     assert page._city_button.minimumHeight() == 0
+
+
+@requires_qt
+def test_weather_card_height_covers_its_content():
+    """At 125/150 % the details row used to land on top of the big temperature."""
+    app = QApplication.instance() or QApplication([])
+    page = DashboardPage(reminder_store=_FakeReminderStore())
+    page.resize(1240, 820)
+    page.show()
+    app.processEvents()
+    page._lock_card_minimums()
+    app.processEvents()
+
+    card = page._weather_card
+    layout = card.layout()
+    layout.activate()
+
+    assert card.minimumHeight() >= layout.minimumSize().height()
+    assert card.height() >= card.minimumHeight()
