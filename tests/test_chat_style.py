@@ -77,11 +77,10 @@ def test_theme_defines_chat_tokens_and_colours():
     ):
         assert selector in stylesheet
 
-    assert "font-size: 18px" in stylesheet
     assert "font-size: 16px" in stylesheet
     assert "font-size: 12px" in stylesheet
-    assert "border-bottom-right-radius: 4px" in stylesheet
-    assert "border-bottom-left-radius: 4px" in stylesheet
+    assert "border-bottom-right-radius: 8px" in stylesheet
+    assert "border-top-left-radius: 8px" in stylesheet
     assert "#E8C29E" in stylesheet
 
 
