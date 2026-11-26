@@ -283,7 +283,13 @@ class DashboardPage(QWidget):
         return card
 
     def _relayout_grid(self, width: int, *, force: bool = False) -> None:
-        """Re-flow the cards into 1/2/3 columns; shadows keep their margins."""
+        """Re-flow the cards into 1/2/3 columns; shadows keep their margins.
+
+        Rows are sized by the cards themselves: stretching every row made tall
+        cards overlap their own children (the big temperature sat on top of the
+        condition line), so the spare vertical space goes to a trailing spacer
+        row instead.
+        """
         columns = columns_for_width(int(width))
         if not force and columns == self._columns:
             return
@@ -297,8 +303,10 @@ class DashboardPage(QWidget):
             self._grid.addWidget(card, index // columns, index % columns)
         for column in range(3):
             self._grid.setColumnStretch(column, 1 if column < columns else 0)
-        for row in range((len(self._cards) + columns - 1) // columns):
-            self._grid.setRowStretch(row, 1)
+        card_rows = (len(self._cards) + columns - 1) // columns
+        for row in range(card_rows):
+            self._grid.setRowStretch(row, 0)
+        self._grid.setRowStretch(card_rows, 1)
 
     def resizeEvent(self, event: Any) -> None:  # noqa: N802 (Qt naming)
         super().resizeEvent(event)
@@ -367,8 +375,6 @@ class DashboardPage(QWidget):
         weather_icon = WeatherIconWidget(size=52)
         weather_icon.setObjectName("weatherIcon")
         weather_top_row.addWidget(weather_icon, 0, Qt.AlignmentFlag.AlignTop)
-        weather_column = QVBoxLayout()
-        weather_column.setSpacing(2)
         weather_value = QLabel("—")
         weather_value.setObjectName("weatherTemperature")
         weather_value.setMinimumWidth(120)
@@ -376,13 +382,18 @@ class DashboardPage(QWidget):
         weather_value.setAlignment(
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
         )
-        weather_column.addWidget(weather_value)
+        weather_top_row.addWidget(weather_value, 0, Qt.AlignmentFlag.AlignTop)
+        # The condition sits beside the number in the same row: a squeezed card
+        # can never stack the caption on top of the temperature glyphs.
         self._weather_condition = QLabel(f"Загружаю погоду для {self._city}…")
         self._weather_condition.setObjectName("weatherCondition")
         self._weather_condition.setWordWrap(True)
-        weather_column.addWidget(self._weather_condition)
-        weather_top_row.addLayout(weather_column, 1)
+        self._weather_condition.setMinimumWidth(160)
+        weather_top_row.addWidget(
+            self._weather_condition, 1, Qt.AlignmentFlag.AlignBottom
+        )
         weather_card.layout().addLayout(weather_top_row)
+
         weather_note = QLabel("")
         weather_note.setObjectName("dashboardCardNote")
         weather_note.setWordWrap(True)

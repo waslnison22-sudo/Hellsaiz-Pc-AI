@@ -128,6 +128,31 @@ def test_metrics_timer_stops_when_the_page_is_hidden():
     assert page._metrics_timer.isActive() is False
 
 
+@requires_qt
+def test_weather_condition_never_overlaps_the_temperature():
+    """Layout contract: the caption is beside the number, not stacked on it."""
+    app = QApplication.instance() or QApplication([])
+    page = DashboardPage(reminder_store=_FakeReminderStore())
+    page.resize(1240, 820)
+    page.show()
+    app.processEvents()
+
+    labels = page.findChildren(QWidget)
+    temperature = next(
+        w for w in labels if w.objectName() == "weatherTemperature"
+    )
+    condition = next(w for w in labels if w.objectName() == "weatherCondition")
+
+    temperature_rect = temperature.geometry()
+    condition_rect = condition.geometry()
+    # Siblings in a horizontal row: their rectangles share a row but not pixels.
+    assert not temperature_rect.intersects(condition_rect), (
+        temperature_rect.getRect(),
+        condition_rect.getRect(),
+    )
+    assert condition_rect.left() >= temperature_rect.right()
+
+
 def test_knice_card_style_is_a_dashboard_token():
     stylesheet = build_dark_stylesheet()
     block = stylesheet.rsplit("QFrame#dashboardCard {", 1)[1].split("}", 1)[0]

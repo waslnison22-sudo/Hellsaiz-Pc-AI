@@ -78,7 +78,6 @@ QFrame#dashboardCard {{
     background: transparent;
     border: 0;
     border-radius: {CARD_RADIUS};
-    min-height: 150px;
 }}
 QLabel#weatherTemperature {{
     font-family: "Consolas", "Courier New", monospace;
