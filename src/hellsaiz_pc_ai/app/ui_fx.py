@@ -71,8 +71,20 @@ class ButtonFx(QObject):
         self._animation.valueChanged.connect(self._apply)
         widget.installEventFilter(self)
         self._last_painted: QColor | None = None
+        widget.destroyed.connect(lambda *_: self._on_widget_destroyed())
+
+    def _on_widget_destroyed(self, *_args: Any) -> None:
+        # Qt may still deliver the last animation tick while the C++ widget is
+        # already gone; stop early and drop the reference.
+        try:
+            self._animation.stop()
+        except RuntimeError:
+            pass
+        self.widget = None
 
     def _apply(self, value: Any) -> None:
+        if getattr(self, "widget", None) is None:
+            return
         color = QColor(value) if not isinstance(value, QColor) else value
         if color == self._last_painted:
             return
@@ -82,6 +94,8 @@ class ButtonFx(QObject):
         )
 
     def _animate_to(self, color: QColor, duration: int = HOVER_DURATION_MS) -> None:
+        if getattr(self, "widget", None) is None:
+            return
         if not animations_enabled(self.widget):
             self._animation.stop()
             self._target = color
