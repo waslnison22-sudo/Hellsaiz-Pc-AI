@@ -13,6 +13,14 @@ VOSK_MODEL_ID = "vosk-model-small-ru-0.22"
 VOSK_MODEL_URL = (
     "https://alphacephei.com/vosk/models/vosk-model-small-ru-0.22.zip"
 )
+# The official host is unreachable from some networks (timeouts), so the app
+# falls through to public mirrors of the very same archive.
+VOSK_MODEL_MIRRORS = (
+    VOSK_MODEL_URL,
+    "https://github.com/kercre123/vosk-models/raw/main/vosk-model-small-ru-0.22.zip",
+    "https://huggingface.co/localstack/vosk-models/resolve/main/vosk-model-small-ru-0.22.zip",
+    "https://hf-mirror.com/localstack/vosk-models/resolve/main/vosk-model-small-ru-0.22.zip",
+)
 VOSK_MODEL_LICENSE = "Apache-2.0"
 MAX_ARCHIVE_BYTES = 100 * 1024 * 1024
 MAX_EXTRACTED_BYTES = 256 * 1024 * 1024
@@ -27,10 +35,13 @@ def is_valid_vosk_model(model_dir: Path) -> bool:
     model_dir = Path(model_dir)
     if model_dir.is_symlink() or not model_dir.is_dir():
         return False
+    # The official small-ru 0.22 archive ships HCLr.fst/Gr.fst but no words.txt,
+    # so the old check rejected a perfectly valid model.
     required = (
         model_dir / "am" / "final.mdl",
         model_dir / "conf" / "model.conf",
-        model_dir / "graph" / "words.txt",
+        model_dir / "graph" / "HCLr.fst",
+        model_dir / "graph" / "Gr.fst",
     )
     return all(path.is_file() and not path.is_symlink() for path in required)
 
@@ -42,9 +53,9 @@ def _remove_path(path: Path) -> None:
         shutil.rmtree(path)
 
 
-def _download_archive(destination: Path) -> None:
+def _download_once(url: str, destination: Path) -> None:
     request = urllib.request.Request(
-        VOSK_MODEL_URL,
+        url,
         headers={"User-Agent": "Hellsaiz-PC-AI/0.1.4 Vosk-Model-Installer"},
     )
     try:
@@ -68,7 +79,29 @@ def _download_archive(destination: Path) -> None:
         destination.unlink(missing_ok=True)
         if isinstance(exc, ModelInstallError):
             raise
-        raise ModelInstallError(f"Не удалось загрузить модель Vosk: {exc}") from exc
+        raise ModelInstallError(str(exc)) from exc
+
+
+def _download_archive(destination: Path) -> None:
+    """Download the model from the first reachable mirror."""
+    problems: list[str] = []
+    for url in VOSK_MODEL_MIRRORS:
+        host = url.split("/")[2] if "//" in url else url
+        try:
+            _download_once(url, destination)
+        except ModelInstallError as exc:
+            problems.append(f"{host}: {exc}")
+            destination.unlink(missing_ok=True)
+            continue
+        if destination.is_file() and destination.stat().st_size > 0:
+            return
+        problems.append(f"{host}: пустой ответ")
+        destination.unlink(missing_ok=True)
+    detail = "; ".join(problems[-3:]) or "нет доступных зеркал"
+    raise ModelInstallError(
+        "Не удалось скачать модель Vosk ни с одного зеркала "
+        f"({detail}). Проверь интернет или прокси и попробуй снова."
+    )
 
 
 def _safe_extract(archive_path: Path, destination: Path) -> Path:
@@ -91,8 +124,15 @@ def _safe_extract(archive_path: Path, destination: Path) -> Path:
                     or any(part in {"", ".", ".."} or ":" in part for part in relative.parts)
                 ):
                     raise ModelInstallError("Архив Vosk содержит путь за пределами модели.")
-                if not relative.parts or relative.parts[0] != expected_root:
-                    raise ModelInstallError("Архив Vosk имеет неожиданный корневой каталог.")
+                if not relative.parts:
+                    raise ModelInstallError("Архив Vosk содержит некорректную запись.")
+                top = relative.parts[0]
+                if top != expected_root and relative.parts[-1] != top and len(relative.parts) > 1:
+                    # Flat archives put am/, conf/, graph/ right at the root.
+                    if top not in {"am", "conf", "graph", "ivector", "lang"}:
+                        raise ModelInstallError(
+                            "Архив Vosk имеет неожиданный корневой каталог."
+                        )
                 mode = (info.external_attr >> 16) & 0xFFFF
                 if stat.S_ISLNK(mode):
                     raise ModelInstallError("Символические ссылки в архиве Vosk запрещены.")
@@ -111,6 +151,8 @@ def _safe_extract(archive_path: Path, destination: Path) -> Path:
                     raise ModelInstallError("Архив Vosk содержит подозрительно сжатый файл.")
 
                 target = destination.joinpath(*relative.parts)
+                if target.exists() and target.is_file():
+                    target.unlink()
                 target.parent.mkdir(parents=True, exist_ok=True)
                 written = 0
                 with archive.open(info, "r") as source, target.open("xb") as output:
@@ -129,6 +171,8 @@ def _safe_extract(archive_path: Path, destination: Path) -> Path:
 
     model_path = destination / expected_root
     if not is_valid_vosk_model(model_path):
+        if is_valid_vosk_model(destination):
+            return destination
         raise ModelInstallError(
             "Архив распакован, но обязательные файлы модели Vosk не найдены."
         )

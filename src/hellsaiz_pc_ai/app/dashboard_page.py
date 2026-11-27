@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any, Callable
 
 from PySide6.QtCore import (
+    QObject,
     QEasingCurve,
     QEvent,
     QPointF,
@@ -15,7 +16,7 @@ from PySide6.QtCore import (
     QTimer,
     Signal,
 )
-from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
+from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
     QFrame,
     QGraphicsOpacityEffect,
@@ -63,7 +64,11 @@ from hellsaiz_pc_ai.app.weather_cache import (
     updated_label,
 )
 from hellsaiz_pc_ai.app.ui_fx import reduce_motion as _reduce_motion
-from hellsaiz_pc_ai.app.yandex_music import open_or_focus_player, now_playing
+from hellsaiz_pc_ai.app.yandex_music import (
+    media_session,
+    now_playing,
+    open_or_focus_player,
+)
 from hellsaiz_pc_ai.app.weather_icon import WeatherIconWidget, map_weather_icon
 from hellsaiz_pc_ai.app.dashboard_texts import (
     greeting_for_hour,
@@ -163,6 +168,31 @@ class _ClickableLabel(QLabel):
     def mousePressEvent(self, event: Any) -> None:  # noqa: N802 (Qt naming)
         self.clicked.emit()
         super().mousePressEvent(event)
+
+
+class MediaPollThread(QThread):
+    """Polls the Windows media session off the GUI thread."""
+
+    session_ready = Signal(object)
+
+    def __init__(self, parent: QObject | None = None) -> None:
+        super().__init__(parent)
+        self._stopped = False
+
+    def stop(self) -> None:
+        self._stopped = True
+
+    def run(self) -> None:  # noqa: D102 - QThread entry point
+        while not self._stopped:
+            try:
+                session = media_session()
+            except Exception:  # noqa: BLE001 - polling must never kill the thread
+                logging.debug("Media poll failed", exc_info=True)
+                session = None
+            if self._stopped:
+                break
+            self.session_ready.emit(session)
+            self.msleep(2500)
 
 
 class DashboardPage(QWidget):
@@ -546,9 +576,59 @@ class DashboardPage(QWidget):
         self._player_timer.timeout.connect(self._refresh_now_playing)
         logging.info("DashboardPage ctor: media card done.")
 
+    def _set_cover(self, artwork: bytes, has_track: bool) -> None:
+        """Paint the album art (or the placeholder icon) in the rounded cover."""
+        if not artwork:
+            if not has_track:
+                self._media_cover.setPixmap(media_play_icon().pixmap(28, 28))
+            return
+        pixmap = QPixmap()
+        if not pixmap.loadFromData(artwork):
+            return
+        size = self._media_cover.width() or 64
+        scaled = pixmap.scaled(
+            size,
+            size,
+            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        canvas = QPixmap(size, size)
+        canvas.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(canvas)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        path = QPainterPath()
+        path.addRoundedRect(0, 0, size, size, 16, 16)
+        painter.setClipPath(path)
+        painter.drawPixmap(
+            (size - scaled.width()) // 2, (size - scaled.height()) // 2, scaled
+        )
+        painter.end()
+        self._media_cover.setPixmap(canvas)
+
     def _refresh_now_playing(self) -> None:
-        """Read the Yandex Music window title and update the player card."""
+        """Read the Windows media session; fall back to the player window title."""
         if not hasattr(self, "_media_track"):
+            return
+        session = None
+        try:
+            session = media_session()
+        except Exception:  # noqa: BLE001 - the player probe must never break the page
+            logging.debug("Media session probe failed", exc_info=True)
+        if session is not None and session.has_track:
+            for button in (
+                self._media_back_button,
+                self._media_play_button,
+                self._media_next_button,
+            ):
+                button.setEnabled(True)
+            self._media_track.setText(session.display_line())
+            source = "Яндекс Музыка" if "yandex" in session.app.casefold() else session.app
+            self._media_artist.setText(f"{source} · {session.status}")
+            self._player_state.setText(session.status)
+            self._set_cover(session.artwork, True)
+            self._media_playing = session.status == "играет"
+            icon = media_pause_icon() if self._media_playing else media_play_icon()
+            self._media_play_button.setIcon(icon)
             return
         try:
             playing = now_playing()
@@ -561,6 +641,7 @@ class DashboardPage(QWidget):
                 "Нажми «Открыть» — карточка подхватит трек"
             )
             self._player_state.setText("")
+            self._set_cover(b"", False)
             self._media_open_button.setEnabled(True)
             for button in (
                 self._media_back_button,
@@ -596,6 +677,51 @@ class DashboardPage(QWidget):
         self._media_artist.setText(
             "Установи приложение «Яндекс Музыка» — карточка подхватит трек"
         )
+
+    def _ensure_media_thread(self) -> None:
+        thread = getattr(self, "_media_thread", None)
+        if thread is not None and thread.isRunning():
+            return
+        self._media_thread = MediaPollThread(self)
+        self._media_thread.session_ready.connect(self._apply_media_session)
+        self._media_thread.start()
+
+    def _stop_media_thread(self) -> None:
+        thread = getattr(self, "_media_thread", None)
+        if thread is None:
+            return
+        thread.stop()
+        thread.wait(3000)
+        self._media_thread = None
+
+    def _apply_media_session(self, session: object) -> None:
+        """Update the player card from a session snapshot (no blocking IO)."""
+        if session is not None and getattr(session, "has_track", False):
+            for button in (
+                self._media_back_button,
+                self._media_play_button,
+                self._media_next_button,
+            ):
+                button.setEnabled(True)
+            self._media_track.setText(session.display_line())
+            source = "Яндекс Музыка" if "yandex" in session.app.casefold() else session.app
+            self._media_artist.setText(f"{source} · {session.status}")
+            self._player_state.setText(session.status)
+            self._set_cover(getattr(session, "artwork", b""), True)
+            self._media_playing = session.status == "играет"
+            icon = media_pause_icon() if self._media_playing else media_play_icon()
+            self._media_play_button.setIcon(icon)
+            return
+        self._media_track.setText("Яндекс Музыка не запущена")
+        self._media_artist.setText("Нажми «Открыть» — карточка подхватит трек")
+        self._player_state.setText("")
+        self._set_cover(b"", False)
+        for button in (
+            self._media_back_button,
+            self._media_play_button,
+            self._media_next_button,
+        ):
+            button.setEnabled(False)
 
     def _start_player_watch(self) -> None:
         self._refresh_now_playing()
@@ -954,9 +1080,11 @@ class DashboardPage(QWidget):
             self._refresh_metrics()
             self._metrics_timer.start()
         self._start_player_watch()
+        self._ensure_media_thread()
 
     def hideEvent(self, event: Any) -> None:  # noqa: N802 (Qt naming)
         super().hideEvent(event)
         if self._metrics_timer.isActive():
             self._metrics_timer.stop()
         self._stop_player_watch()
+        self._stop_media_thread()

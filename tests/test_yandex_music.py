@@ -54,6 +54,9 @@ def test_empty_title_is_safe():
 def test_player_card_shows_the_no_player_state(monkeypatch):
     QApplication.instance() or QApplication([])
     monkeypatch.setattr(
+        "hellsaiz_pc_ai.app.dashboard_page.media_session", lambda: None
+    )
+    monkeypatch.setattr(
         "hellsaiz_pc_ai.app.dashboard_page.now_playing", lambda: NowPlaying(title="")
     )
     page = DashboardPage(reminder_store=_FakeReminderStore())
@@ -66,10 +69,18 @@ def test_player_card_shows_the_no_player_state(monkeypatch):
 
 @requires_qt
 def test_player_card_shows_a_running_track(monkeypatch):
+    from hellsaiz_pc_ai.app.yandex_music import MediaSession
+
     QApplication.instance() or QApplication([])
     monkeypatch.setattr(
-        "hellsaiz_pc_ai.app.dashboard_page.now_playing",
-        lambda: NowPlaying(title="Radiohead — Creep", artist="Radiohead", track="Creep"),
+        "hellsaiz_pc_ai.app.dashboard_page.media_session",
+        lambda: MediaSession(
+            app="ru.yandex.desktop.music",
+            title="Creep",
+            artist="Radiohead",
+            album="Pablo Honey",
+            status="играет",
+        ),
     )
     page = DashboardPage(reminder_store=_FakeReminderStore())
 
@@ -111,3 +122,11 @@ def test_open_or_focus_reports_missing_app(monkeypatch):
     monkeypatch.setattr(yandex_music, "player_executable", lambda: None)
 
     assert yandex_music.open_or_focus_player() == "missing"
+
+
+def test_playback_state_names_are_localised():
+    from hellsaiz_pc_ai.app.yandex_music import playback_state_name
+
+    assert playback_state_name(5) == "играет"
+    assert playback_state_name(4) == "пауза"
+    assert playback_state_name("bad") == "неизвестно"

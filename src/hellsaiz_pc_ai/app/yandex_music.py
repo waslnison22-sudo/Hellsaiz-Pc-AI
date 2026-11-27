@@ -17,6 +17,12 @@ from typing import Any
 
 YANDEX_MUSIC_TITLES = ("яндекс музыка", "yandex music", "yandex.music")
 PLAYER_SUFFIXES = ("—", " - ", "|")
+BROWSER_NOISE = (
+    "слушать онлайн",
+    "на яндекс музыке",
+    "бесплатно",
+    "хорошем качестве",
+)
 
 
 @dataclass(frozen=True)
@@ -44,6 +50,9 @@ def parse_window_title(window_title: str) -> NowPlaying:
     raw = " ".join(str(window_title or "").split())
     if not raw:
         return NowPlaying(title="")
+    lowered_raw = raw.casefold()
+    if any(noise in lowered_raw for noise in BROWSER_NOISE):
+        return NowPlaying(title="", window_title=raw)
 
     candidates = [raw]
     for separator in PLAYER_SUFFIXES:
@@ -111,14 +120,56 @@ def _window_titles() -> list[tuple[int, str]]:
     return found
 
 
+PROCESS_MARKERS = ("музык", "yandexmusic", "yandex music", "yandex.music")
+
+
+def _process_image(pid: int) -> str:
+    """Full executable path of a pid (Windows only), best effort."""
+    if os.name != "nt":
+        return ""
+    try:
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return ""
+        try:
+            size = ctypes.c_ulong(1024)
+            buffer = ctypes.create_unicode_buffer(size.value)
+            if kernel32.QueryFullProcessImageNameW(handle, 0, buffer, ctypes.byref(size)):
+                return buffer.value
+            return ""
+        finally:
+            kernel32.CloseHandle(handle)
+    except (AttributeError, OSError):  # pragma: no cover - defensive
+        return ""
+
+
+def _window_owner_pid(hwnd: int) -> int:
+    pid = ctypes.c_ulong(0)
+    try:
+        ctypes.windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    except (AttributeError, OSError):  # pragma: no cover - defensive
+        return 0
+    return int(pid.value)
+
+
 def player_window() -> tuple[int, str] | None:
-    """The Yandex Music window handle and title, if the app is running."""
+    """The Yandex Music window handle and title, if the app is running.
+
+    The desktop app is an Electron bundle: the process image is the Cyrillic
+    «Яндекс Музыка.exe», and the window title is the current track.
+    """
+    candidates: list[tuple[int, str]] = []
     for hwnd, title in _window_titles():
-        lowered = title.casefold()
-        if any(marker in lowered for marker in YANDEX_MUSIC_TITLES) or " - " in title:
-            if "—" in title or "-" in title:
-                return hwnd, title
-    return None
+        image = _process_image(_window_owner_pid(hwnd)).casefold()
+        if image and any(marker in image for marker in PROCESS_MARKERS):
+            candidates.append((hwnd, title))
+    # Browser tabs about Yandex Music carry page titles, not tracks: only the
+    # desktop app process counts.
+    for hwnd, title in candidates:
+        if title.strip():
+            return hwnd, title
+    return candidates[0] if candidates else None
 
 
 def now_playing() -> NowPlaying:
@@ -156,16 +207,26 @@ def player_executable() -> str | None:
     roaming = os.environ.get("APPDATA") or ""
     program_files = os.environ.get("ProgramFiles") or ""
     program_files_x86 = os.environ.get("ProgramFiles(x86)") or ""
-    candidates = [
-        os.path.join(local, "Programs", "YandexMusic", "YandexMusic.exe"),
-        os.path.join(local, "YandexMusic", "YandexMusic.exe"),
-        os.path.join(roaming, "YandexMusic", "YandexMusic.exe"),
-        os.path.join(program_files, "YandexMusic", "YandexMusic.exe"),
-        os.path.join(program_files_x86, "YandexMusic", "YandexMusic.exe"),
+    folders = [
+        os.path.join(local, "Programs", "YandexMusic"),
+        os.path.join(local, "YandexMusic"),
+        os.path.join(roaming, "YandexMusic"),
+        os.path.join(program_files, "YandexMusic"),
+        os.path.join(program_files_x86, "YandexMusic"),
     ]
-    for candidate in candidates:
-        if candidate and os.path.isfile(candidate):
-            return candidate
+    for folder in folders:
+        if not folder or not os.path.isdir(folder):
+            continue
+        # The bundle ships «Яндекс Музыка.exe»; ignore the uninstaller.
+        candidates = [
+            entry
+            for entry in sorted(os.listdir(folder))
+            if entry.casefold().endswith(".exe") and "uninstall" not in entry.casefold()
+        ]
+        for entry in candidates:
+            path = os.path.join(folder, entry)
+            if os.path.isfile(path):
+                return path
     return None
 
 
@@ -184,3 +245,106 @@ def open_or_focus_player() -> str:
         logging.debug("Launching Yandex Music failed", exc_info=True)
         return "missing"
     return "launched"
+
+
+# ---------------------------------------------------------------- media session
+
+
+@dataclass(frozen=True)
+class MediaSession:
+    """What the system media transport controls report for a player."""
+
+    app: str
+    title: str
+    artist: str
+    album: str
+    status: str
+    artwork: bytes = b""
+
+    @property
+    def has_track(self) -> bool:
+        return bool(self.title.strip())
+
+    def display_line(self) -> str:
+        if self.artist and self.title:
+            return f"{self.artist} — {self.title}"
+        return self.title
+
+
+PLAYBACK_STATES = {
+    1: "закрыто",
+    2: "открыто",
+    3: "меняется",
+    4: "пауза",
+    5: "играет",
+    6: "стоп",
+}
+
+
+def playback_state_name(raw: object) -> str:
+    """Map a MediaPlaybackStatus value to a Russian label."""
+    try:
+        value = int(raw)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return "неизвестно"
+    return PLAYBACK_STATES.get(value, "неизвестно")
+
+
+def _session_snapshot() -> MediaSession | None:
+    """Read the current session synchronously; None when winrt is missing."""
+    try:
+        import asyncio
+
+        from winrt.windows.media.control import (
+            GlobalSystemMediaTransportControlsSessionManager as Manager,
+        )
+    except ImportError:
+        return None
+
+    async def read() -> MediaSession | None:
+        manager = await Manager.request_async()
+        session = manager.get_current_session()
+        if session is None:
+            return None
+        app = str(session.source_app_user_model_id or "")
+        if "yandex" not in app.casefold():
+            return None
+        info = await session.try_get_media_properties_async()
+        status = playback_state_name(session.get_playback_info().playback_status)
+        artwork = b""
+        thumbnail = getattr(info, "thumbnail", None)
+        if thumbnail is not None:
+            try:
+                from winrt.windows.storage.streams import DataReader
+
+                stream = await thumbnail.open_read_async()
+                size = int(stream.size)
+                if 0 < size <= 8 * 1024 * 1024:
+                    reader = DataReader(stream)
+                    await reader.load_async(size)
+                    buffer = bytearray(size)
+                    reader.read_bytes(buffer)
+                    artwork = bytes(buffer)
+            except Exception:  # noqa: BLE001 - artwork is a nice-to-have
+                logging.debug("Artwork read failed", exc_info=True)
+        return MediaSession(
+            app=app,
+            title=str(info.title or ""),
+            artist=str(info.artist or ""),
+            album=str(info.album_title or ""),
+            status=status,
+            artwork=artwork,
+        )
+
+    try:
+        return asyncio.run(read())
+    except Exception:  # noqa: BLE001 - COM/WinRT failures must not break the card
+        logging.debug("Media session read failed", exc_info=True)
+        return None
+
+
+def media_session() -> MediaSession | None:
+    """Current Yandex Music media session, if the system exposes one."""
+    if os.name != "nt":
+        return None
+    return _session_snapshot()
