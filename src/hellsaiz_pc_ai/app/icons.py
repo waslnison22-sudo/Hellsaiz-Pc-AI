@@ -8,13 +8,24 @@ were a stopgap. These helpers load the vendored Lucide SVGs, replace
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from PySide6.QtCore import QRect, QRectF, QSize, Qt
 from PySide6.QtGui import QIcon, QIconEngine, QPainter, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 
-ICON_DIR = Path(__file__).resolve().parent.parent / "assets" / "icons"
+def _icon_root() -> Path:
+    """Assets live next to the package, or in the PyInstaller bundle root."""
+    frozen_root = getattr(sys, "_MEIPASS", None)
+    if frozen_root:
+        bundled = Path(frozen_root) / "assets" / "icons"
+        if bundled.is_dir():
+            return bundled
+    return Path(__file__).resolve().parent.parent / "assets" / "icons"
+
+
+ICON_DIR = _icon_root()
 DEFAULT_COLOR = "#F2EFEA"
 
 _CACHE: dict[tuple[str, str], QIcon] = {}

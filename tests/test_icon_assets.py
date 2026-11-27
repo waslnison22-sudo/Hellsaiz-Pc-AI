@@ -41,3 +41,32 @@ def test_every_vendored_icon_renders():
             if image.pixelColor(x, y).alpha() > 0
         )
         assert visible > 5, f"{name} rendered almost nothing"
+
+
+@_requires_qt
+def test_media_icons_load_from_the_vendored_set():
+    """The frozen build showed empty play/pause buttons: assets must resolve."""
+    QApplication.instance() or QApplication([])
+
+    for name in ("play", "pause", "skip-back", "skip-forward"):
+        icon = load_icon(name, "#F2EFEA")
+        assert icon.isNull() is False, name
+        assert icon.pixmap(16, 16).isNull() is False, name
+
+
+def test_build_bundles_the_icon_assets():
+    """PyInstaller must ship assets/, and the loader must find it when frozen."""
+    from pathlib import Path
+
+    pytest.importorskip("PySide6.QtSvg")
+    from hellsaiz_pc_ai.app import icons as icons_module
+
+    source = Path(icons_module.__file__).read_text(encoding="utf-8")
+    script = (
+        Path(__file__).resolve().parents[1] / "scripts" / "build_windows.ps1"
+    ).read_text(encoding="utf-8")
+
+    assert "_MEIPASS" in source
+    assert "--add-data" in script
+    assert "assets;assets" in script
+    assert icons_module.ICON_DIR.is_dir()
