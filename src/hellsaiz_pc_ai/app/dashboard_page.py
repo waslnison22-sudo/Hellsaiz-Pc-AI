@@ -47,7 +47,6 @@ from hellsaiz_pc_ai.app.theme import (
     GRID_BREAKPOINTS,
     GRID_GAP,
     TEXT_MUTED,
-    TEXT_PRIMARY,
 )
 from hellsaiz_pc_ai.app.ui_icons import (
     media_back_icon,
@@ -111,12 +110,21 @@ def _temperature_text(value: float | None) -> str:
     return f"{'+' if rounded > 0 else ''}{rounded}°"
 
 
-def _forecast_day_html(day: str, temperature: str) -> str:
+def _forecast_row(day: str, temperature: str) -> QWidget:
     """One forecast row: weekday muted, temperature bright — knice style."""
-    return (
-        f'<span style="color:{TEXT_MUTED}; font-size:12px;">{day}</span>'
-        f'&nbsp;&nbsp;<span style="color:{TEXT_PRIMARY}; font-size:14px; font-weight:600;">{temperature}</span>'
-    )
+    row = QWidget()
+    row.setObjectName("weatherForecastRow")
+    layout = QHBoxLayout(row)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(8)
+    day_label = QLabel(str(day))
+    day_label.setObjectName("weatherForecastDay")
+    temperature_label = QLabel(str(temperature))
+    temperature_label.setObjectName("weatherForecastTemp")
+    layout.addWidget(day_label, 0, Qt.AlignmentFlag.AlignLeft)
+    layout.addWidget(temperature_label, 0, Qt.AlignmentFlag.AlignLeft)
+    layout.addStretch(1)
+    return row
 
 
 class _ShadowCard(QFrame):
@@ -828,8 +836,7 @@ class DashboardPage(QWidget):
     def _rebuild_forecast(self, report: WeatherReport) -> None:
         self._clear_forecast()
         for day, temperature in report.forecast_items():
-            label = QLabel(_forecast_day_html(day, temperature))
-            self._weather_forecast_layout.addWidget(label)
+            self._weather_forecast_layout.addWidget(_forecast_row(day, temperature))
 
     def _weather_workers_clear(self, worker: WeatherWorker) -> None:
         if self._weather_worker is worker:

@@ -146,6 +146,18 @@ QLabel#mediaState {{
     color: {TEXT_MUTED};
     font-size: 13px;
 }}
+QWidget#weatherForecastRow {{
+    background: transparent;
+}}
+QLabel#weatherForecastDay {{
+    color: {TEXT_MUTED};
+    font-size: 12px;
+}}
+QLabel#weatherForecastTemp {{
+    color: {TEXT_PRIMARY};
+    font-size: 14px;
+    font-weight: 600;
+}}
 QLineEdit#weatherCityEdit {{
     background: {GLASS_BG_STRONG};
     color: #F2EFEA;
