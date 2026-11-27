@@ -16,7 +16,7 @@ def _show_error(message: str) -> None:
 def resolve_active_target(install_root: Path) -> Path:
     """Resolve the selected version while preventing path traversal outside versions/."""
     install_root = Path(install_root).resolve()
-    active = json.loads((install_root / "active.json").read_text(encoding="utf-8"))
+    active = json.loads((install_root / "active.json").read_text(encoding="utf-8-sig"))
     if not isinstance(active, dict) or active.get("schema_version") != 1:
         raise ValueError("Файл active.json имеет неподдерживаемую схему.")
     version = active.get("active_version")
