@@ -114,11 +114,16 @@ def _forecast_row(day: str, temperature: str) -> QWidget:
     """One forecast row: weekday muted, temperature bright — knice style."""
     row = QWidget()
     row.setObjectName("weatherForecastRow")
+    # Explicit height: labels alone can shrink to zero, and a squeezed card then
+    # stacks the forecast rows on top of each other.
+    row.setMinimumHeight(18)
+    row.setMaximumHeight(18)
     layout = QHBoxLayout(row)
     layout.setContentsMargins(0, 0, 0, 0)
     layout.setSpacing(8)
     day_label = QLabel(str(day))
     day_label.setObjectName("weatherForecastDay")
+    day_label.setMinimumHeight(16)
     temperature_label = QLabel(str(temperature))
     temperature_label.setObjectName("weatherForecastTemp")
     layout.addWidget(day_label, 0, Qt.AlignmentFlag.AlignLeft)
@@ -835,7 +840,8 @@ class DashboardPage(QWidget):
 
     def _rebuild_forecast(self, report: WeatherReport) -> None:
         self._clear_forecast()
-        for day, temperature in report.forecast_items():
+        # Three days keep the card inside its designed height on 720p windows.
+        for day, temperature in report.forecast_items()[:3]:
             self._weather_forecast_layout.addWidget(_forecast_row(day, temperature))
 
     def _weather_workers_clear(self, worker: WeatherWorker) -> None:
