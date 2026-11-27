@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QProgressBar,
+    QScrollArea,
     QPushButton,
     QStackedWidget,
     QToolButton,
@@ -229,7 +230,18 @@ class DashboardPage(QWidget):
         self._grid = QGridLayout()
         self._grid.setSpacing(GRID_GAP)
         self._grid.setContentsMargins(0, 0, 0, 0)
-        layout.addLayout(self._grid, 1)
+        grid_host = QWidget()
+        grid_host.setObjectName("dashboardGridHost")
+        grid_host.setLayout(self._grid)
+        scroll = QScrollArea()
+        scroll.setObjectName("dashboardScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setWidget(grid_host)
+        self._grid_scroll = scroll
+        self._grid_host = grid_host
+        layout.addWidget(scroll, 1)
         logging.info("DashboardPage ctor: header built.")
 
         self._build_weather_card()
@@ -394,7 +406,9 @@ class DashboardPage(QWidget):
         weather_value.setAlignment(
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
         )
-        weather_top_row.addWidget(weather_value, 0, Qt.AlignmentFlag.AlignTop)
+        # The number gets its own card row: inside the icon row a squeezed card
+        # overlapped the details line with the glyphs.
+        weather_card.layout().addWidget(weather_value)
         # The condition sits beside the number in the same row: a squeezed card
         # can never stack the caption on top of the temperature glyphs.
         self._weather_condition = QLabel(f"Загружаю погоду для {self._city}…")
@@ -421,7 +435,7 @@ class DashboardPage(QWidget):
         self._weather_temperature = weather_value
 
         self._weather_forecast_layout = QVBoxLayout()
-        self._weather_forecast_layout.setSpacing(4)
+        self._weather_forecast_layout.setSpacing(2)
         weather_card.layout().addLayout(self._weather_forecast_layout)
         logging.info("DashboardPage ctor: weather card done.")
 
