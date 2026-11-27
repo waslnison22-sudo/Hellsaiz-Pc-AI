@@ -49,7 +49,6 @@ from hellsaiz_pc_ai.app.chat_page import ChatInput, ChatTranscript, Toast
 from hellsaiz_pc_ai.app.icons import load_icon
 from hellsaiz_pc_ai.app.ui_fx import (
     ArrowRotator,
-    PulseDot,
     animate_height,
     install_button_fx,
 )
@@ -800,36 +799,16 @@ def main() -> int:
     home_layout.setContentsMargins(28, 22, 28, 20)
     home_layout.setSpacing(12)
 
-    chat_header_panel = QFrame()
-    chat_header_panel.setObjectName("glassPanel")
+    # The chat chrome is a single slim row: only the clear-history action stays.
+    chat_header_panel = QWidget()
+    chat_header_panel.setObjectName("chatHeaderBar")
     header_row = QHBoxLayout(chat_header_panel)
-    header_row.setContentsMargins(12, 10, 12, 10)
-    header_row.setSpacing(10)
-    chat_header_avatar = QLabel("H")
-    chat_header_avatar.setObjectName("chatHeaderAvatar")
-    chat_header_avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    chat_header_avatar.setFixedSize(28, 28)
-    header_row.addWidget(chat_header_avatar)
-    header_column = QVBoxLayout()
-    header_column.setContentsMargins(0, 0, 0, 0)
-    header_column.setSpacing(0)
-    chat_header_name = QLabel("Hellsaiz")
-    chat_header_name.setObjectName("chatHeaderName")
-    chat_header_status = QLabel("Готов")
-    chat_header_status.setObjectName("chatHeaderStatus")
-    chat_status_row = QHBoxLayout()
-    chat_status_row.setContentsMargins(0, 0, 0, 0)
-    chat_status_row.setSpacing(4)
-    chat_status_dot = QLabel("●")
-    chat_status_dot.setObjectName("chatStatusDot")
-    chat_status_row.addWidget(chat_status_dot, 0, Qt.AlignmentFlag.AlignVCenter)
-    chat_status_row.addWidget(chat_header_status)
-    chat_status_row.addStretch(1)
-    header_column.addWidget(chat_header_name)
-    header_column.addLayout(chat_status_row)
-    status_pulse = PulseDot(chat_status_dot)
-    header_row.addLayout(header_column)
+    header_row.setContentsMargins(0, 0, 0, 0)
+    header_row.setSpacing(8)
     header_row.addStretch(1)
+    # Kept off the layout so set_chat_status() keeps working for the tray/HUD.
+    chat_header_status = QLabel("Готов")
+    chat_header_status.hide()
     clear_button = QPushButton()
     clear_button.setIcon(trash_icon())
     clear_button.setObjectName("ghostButton")
@@ -841,13 +820,7 @@ def main() -> int:
 
     def set_chat_status(state: str) -> None:
         chat_header_status.setText(state)
-        status_pulse.set_fast(state == "думаю")
-        chat_status_dot.setStyleSheet(
-            "color: rgba(232, 194, 158, 255); font-size: 12px;"
-            if state in {"думаю", "слушаю"}
-            else "color: rgba(125, 212, 135, 255); font-size: 12px;"
-        )
-        status_pulse.start()
+
     capabilities_panel = QFrame()
     capabilities_panel.setObjectName("profilePanel")
     capabilities_layout = QVBoxLayout(capabilities_panel)
@@ -1134,15 +1107,11 @@ def main() -> int:
 
     mute_speech_button.clicked.connect(stop_speech_playback)
 
-    quick_scroll = QScrollArea()
-    quick_scroll.setObjectName("chatQuickCommands")
-    quick_scroll.setWidgetResizable(True)
-    quick_scroll.setFrameShape(QFrame.Shape.NoFrame)
-    quick_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-    quick_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-    quick_scroll.setFixedHeight(46)
+    # No scroll area: the four chips fit the chat width, and a scroll strip used
+    # to clip the last chip at the right edge.
     quick_container = QWidget()
     quick_container.setObjectName("chatQuickCommandsBody")
+    quick_container.setMinimumHeight(36)
     quick_commands_row = QHBoxLayout(quick_container)
     quick_commands_row.setContentsMargins(0, 0, 0, 0)
     quick_commands_row.setSpacing(6)
@@ -1166,8 +1135,7 @@ def main() -> int:
         )
         quick_commands_row.addWidget(quick_button)
     quick_commands_row.addStretch(1)
-    quick_scroll.setWidget(quick_container)
-    home_layout.addWidget(quick_scroll)
+    home_layout.addWidget(quick_container)
 
     endpoint_defaults = {
         "lm-studio": "http://127.0.0.1:1234/v1",

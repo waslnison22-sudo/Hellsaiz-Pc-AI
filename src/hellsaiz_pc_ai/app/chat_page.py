@@ -56,9 +56,9 @@ TEXT_OBJECT_NAMES = {
 
 # knice chat geometry: the messages live in a narrow centred column; bubbles
 # never exceed 85% of it (capped at 580 px for very wide windows).
-CHAT_COLUMN_WIDTH = 680
-BUBBLE_MAX_RATIO = 0.85
-BUBBLE_MAX_CAP = 580
+CHAT_COLUMN_WIDTH = 900
+BUBBLE_MAX_RATIO = 0.92
+BUBBLE_MAX_CAP = 640
 
 
 class GradientBrandLabel(QWidget):
@@ -101,8 +101,8 @@ class GradientBrandLabel(QWidget):
 class ChatGreeting(QWidget):
     """Empty-chat greeting: gradient brand wordmark plus a hand-written prompt."""
 
-    BRAND_TEXT = "Hellsaiz"
-    BRAND_FONT_SIZE = 48
+    BRAND_TEXT = "Хеллсайз"
+    BRAND_FONT_SIZE = 44
     PROMPT_TEXT = "пиши сюда — или просто скажи вслух"
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -500,7 +500,9 @@ class ChatTranscript(QScrollArea):
         overlay = self._greeting_overlay
         overlay.adjustSize()
         x = max(0, (self.viewport().width() - overlay.width()) // 2)
-        y = max(24, self.viewport().height() - overlay.height() - 120)
+        # The brand reads as a page heading: a bit above the middle, not at the bottom.
+        available = max(0, self.viewport().height() - overlay.height())
+        y = max(24, int(available * 0.32))
         overlay.move(x, y)
         overlay.raise_()
 

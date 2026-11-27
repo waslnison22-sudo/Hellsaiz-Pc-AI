@@ -249,7 +249,7 @@ class DashboardPage(QWidget):
         from hellsaiz_pc_ai.app.chat_page import GradientBrandLabel
 
         greeting_label = GradientBrandLabel(
-            greeting_for_hour(now.hour),
+            f"{greeting_for_hour(now.hour)}, Хеллсайз",
             40,
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
         )

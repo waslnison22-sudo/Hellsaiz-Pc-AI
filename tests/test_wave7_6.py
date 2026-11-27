@@ -21,15 +21,16 @@ requires_chat_module = pytest.mark.skipif(
 
 @requires_chat_module
 def test_knice_chat_geometry_constants():
-    assert chat_module.CHAT_COLUMN_WIDTH == 680
-    assert chat_module.BUBBLE_MAX_RATIO == 0.85
-    assert chat_module.BUBBLE_MAX_CAP == 580
+    # Owner pass 4: the chat fills the page, so the column and the bubble cap grew.
+    assert chat_module.CHAT_COLUMN_WIDTH == 900
+    assert chat_module.BUBBLE_MAX_RATIO == 0.92
+    assert chat_module.BUBBLE_MAX_CAP == 640
 
 
 @requires_chat_module
 def test_greeting_brand_and_prompt():
-    assert chat_module.ChatGreeting.BRAND_TEXT == "Hellsaiz"
-    assert chat_module.ChatGreeting.BRAND_FONT_SIZE == 48
+    assert chat_module.ChatGreeting.BRAND_TEXT == "Хеллсайз"
+    assert chat_module.ChatGreeting.BRAND_FONT_SIZE == 44
     assert chat_module.ChatGreeting.PROMPT_TEXT == "пиши сюда — или просто скажи вслух"
     source = inspect.getsource(chat_module)
     assert "GradientBrandLabel" in source
