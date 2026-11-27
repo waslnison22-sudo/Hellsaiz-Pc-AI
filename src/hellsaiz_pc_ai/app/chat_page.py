@@ -140,6 +140,7 @@ class MessageBubble(QWidget):
         self.role = role
         self._text = text
         self.setObjectName("chatMessageRow")
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
 
         row = QHBoxLayout(self)
         row.setContentsMargins(0, 0, 0, 0)
@@ -163,7 +164,10 @@ class MessageBubble(QWidget):
         self.text_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         if role == "recognized":
             self.text_label.setTextFormat(Qt.TextFormat.PlainText)
-            self.text_label.setText(f"Распознано: {text}")
+            clean = text.strip()
+            if clean.casefold().startswith("распознано:"):
+                clean = clean.split(":", 1)[1].strip()
+            self.text_label.setText(f"Распознано: {clean}")
         elif role == "assistant":
             self.text_label.setTextFormat(Qt.TextFormat.RichText)
             self.text_label.setText(render_assistant_text(text))
@@ -311,11 +315,17 @@ class ChatTranscript(QScrollArea):
         outer.setContentsMargins(0, 8, 0, 8)
         outer.setSpacing(0)
         outer.addStretch(1)
-        column = QVBoxLayout()
+        # A real column widget with the designed width: a bare layout shrank to
+        # its content, and the bubbles sat in a narrow strip in the middle.
+        column_widget = QWidget()
+        column_widget.setObjectName("chatTranscriptColumn")
+        column_widget.setFixedWidth(CHAT_COLUMN_WIDTH)
+        column = QVBoxLayout(column_widget)
         column.setContentsMargins(0, 0, 0, 0)
         column.setSpacing(16)
         self._column = column
-        outer.addLayout(column, 0)
+        self._column_widget = column_widget
+        outer.addWidget(column_widget, 0)
         outer.addStretch(1)
         self._layout = column  # legacy alias: the messages column
         self.setWidget(container)
@@ -344,6 +354,11 @@ class ChatTranscript(QScrollArea):
         self._new_messages_button.clicked.connect(self._jump_to_bottom)
         self.verticalScrollBar().rangeChanged.connect(self._on_range_changed)
         self.verticalScrollBar().valueChanged.connect(self._on_scrolled)
+
+    def _designed_column_width(self) -> int:
+        """min(CHAT_COLUMN_WIDTH, 85 % of the viewport), never below 280 px."""
+        available = int((self.viewport().width() or self.width()) * BUBBLE_MAX_RATIO)
+        return max(280, min(CHAT_COLUMN_WIDTH, available))
 
     def _on_range_changed(self, _minimum: int, maximum: int) -> None:
         if self._stick_to_bottom:
@@ -388,7 +403,7 @@ class ChatTranscript(QScrollArea):
         self._last_minute = timestamp
         bubble = MessageBubble(role, text, timestamp)
         bubble.copied.connect(self.copied)
-        bubble.setMaximumWidth(self._bubble_max_width())
+        bubble.bubble.setMaximumWidth(self._bubble_max_width())
         self._bubbles.append(bubble)
         self._last_bubble = bubble
         self._column.addWidget(bubble)
@@ -405,6 +420,16 @@ class ChatTranscript(QScrollArea):
             self._new_messages_button.show()
             self._reposition_new_messages_button()
         return bubble
+
+    @staticmethod
+    def _force_visible(bubble: MessageBubble) -> None:
+        """Drop a leftover opacity effect so the bubble paints at 100 %."""
+        if bubble.graphicsEffect() is None:
+            return
+        try:
+            bubble.setGraphicsEffect(None)
+        except RuntimeError:
+            return
 
     def _animate_appear(self, bubble: MessageBubble) -> None:
         """120 ms fade-in with an 8 px upward drift; skipped when motion is reduced."""
@@ -433,16 +458,16 @@ class ChatTranscript(QScrollArea):
         def finish_appear() -> None:
             # setGraphicsEffect(None) takes ownership back and deletes the effect;
             # calling effect.deleteLater() on top of it double-frees the object.
-            try:
-                bubble.setGraphicsEffect(None)
-            except RuntimeError:
-                return
+            ChatTranscript._force_visible(bubble)
 
         fade.finished.connect(finish_appear)
         bubble._appear_fade = fade
         bubble._appear_drift = drift
         fade.start()
         drift.start()
+        # Safety net: never leave a bubble invisible when the animation is cut
+        # short (page switch, clear, grab, reduced motion at runtime).
+        QTimer.singleShot(400, lambda: ChatTranscript._force_visible(bubble))
 
     def _smooth_scroll_to_bottom(self) -> None:
         bar = self.verticalScrollBar()
@@ -552,9 +577,8 @@ class ChatTranscript(QScrollArea):
         return bar.value() >= bar.maximum() - 48
 
     def _bubble_max_width(self) -> int:
-        width = self.viewport().width() or self.width()
-        column = min(width, CHAT_COLUMN_WIDTH)
-        return max(240, int(column * BUBBLE_MAX_RATIO))
+        column = self._designed_column_width()
+        return max(240, min(BUBBLE_MAX_CAP, int(column * BUBBLE_MAX_RATIO)))
 
     def showEvent(self, event: QEvent) -> None:  # noqa: N802 (Qt naming)
         super().showEvent(event)
@@ -574,10 +598,15 @@ class ChatTranscript(QScrollArea):
 
     def resizeEvent(self, event: QEvent) -> None:  # noqa: N802 (Qt naming)
         super().resizeEvent(event)
+        column_widget = getattr(self, "_column_widget", None)
+        if column_widget is not None:
+            width = self._designed_column_width()
+            if column_widget.width() != width:
+                column_widget.setFixedWidth(width)
         self._reposition_new_messages_button()
         limit = self._bubble_max_width()
         for bubble in self._bubbles:
-            bubble.setMaximumWidth(limit)
+            bubble.bubble.setMaximumWidth(limit)
         if self._greeting_overlay.isVisible():
             self._reposition_greeting_overlay()
 

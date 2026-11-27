@@ -765,7 +765,7 @@ QPushButton#chatClearButton:hover {
     color: #F2EFEA;
 }
 QTextEdit#chatComposer {
-    background: #171716;
+    background: transparent;
     color: #F2EFEA;
     border: 0;
     border-radius: 16px;
