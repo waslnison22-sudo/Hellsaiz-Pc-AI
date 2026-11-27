@@ -31,7 +31,7 @@ CARD_PADDING = 18
 DASHBOARD_MARGIN_TOP = 36
 DASHBOARD_MARGIN_SIDE = 28
 DASHBOARD_MARGIN_BOTTOM = 24
-GRID_BREAKPOINTS = ((900, 1), (1400, 2), (10**9, 3))
+GRID_BREAKPOINTS = ((900, 1), (1150, 2), (10**9, 3))
 TEXT_MUTED = "#A6A29C"
 TEXT_PRIMARY = "#F2EFEA"
 
@@ -148,6 +148,14 @@ QLabel#mediaState {{
 }}
 QWidget#weatherForecastRow {{
     background: transparent;
+}}
+QLabel#weatherForecastChip {{
+    background: {GLASS_BG_STRONG};
+    border: 1px solid {GLASS_BORDER};
+    border-radius: 10px;
+    color: {TEXT_PRIMARY};
+    font-size: 12px;
+    padding: 4px 10px;
 }}
 QLabel#weatherForecastDay {{
     color: {TEXT_MUTED};

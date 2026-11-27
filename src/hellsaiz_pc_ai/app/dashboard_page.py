@@ -23,9 +23,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QListWidget,
     QProgressBar,
-    QScrollArea,
     QPushButton,
     QStackedWidget,
     QToolButton,
@@ -68,11 +66,8 @@ from hellsaiz_pc_ai.app.dashboard_texts import (
     greeting_for_hour,
     greeting_note,
     last_reply_empty_note,
-    preview_reminders,
-    reminders_count_label,
     system_comment,
 )
-from hellsaiz_pc_ai.app.hud_components import EmptyState
 
 
 def columns_for_width(width: int) -> int:
@@ -110,26 +105,12 @@ def _temperature_text(value: float | None) -> str:
     return f"{'+' if rounded > 0 else ''}{rounded}°"
 
 
-def _forecast_row(day: str, temperature: str) -> QWidget:
-    """One forecast row: weekday muted, temperature bright — knice style."""
-    row = QWidget()
-    row.setObjectName("weatherForecastRow")
-    # Explicit height: labels alone can shrink to zero, and a squeezed card then
-    # stacks the forecast rows on top of each other.
-    row.setMinimumHeight(18)
-    row.setMaximumHeight(18)
-    layout = QHBoxLayout(row)
-    layout.setContentsMargins(0, 0, 0, 0)
-    layout.setSpacing(8)
-    day_label = QLabel(str(day))
-    day_label.setObjectName("weatherForecastDay")
-    day_label.setMinimumHeight(16)
-    temperature_label = QLabel(str(temperature))
-    temperature_label.setObjectName("weatherForecastTemp")
-    layout.addWidget(day_label, 0, Qt.AlignmentFlag.AlignLeft)
-    layout.addWidget(temperature_label, 0, Qt.AlignmentFlag.AlignLeft)
-    layout.addStretch(1)
-    return row
+def _forecast_chip(day: str, temperature: str) -> QLabel:
+    """One compact forecast chip: «Пт +5°» in a pill."""
+    chip = QLabel(f"{day}  {temperature}")
+    chip.setObjectName("weatherForecastChip")
+    chip.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    return chip
 
 
 class _ShadowCard(QFrame):
@@ -243,27 +224,11 @@ class DashboardPage(QWidget):
         self._grid = QGridLayout()
         self._grid.setSpacing(GRID_GAP)
         self._grid.setContentsMargins(0, 0, 0, 0)
-        grid_host = QWidget()
-        grid_host.setObjectName("dashboardGridHost")
-        grid_host.setLayout(self._grid)
-        scroll = QScrollArea()
-        scroll.setObjectName("dashboardScroll")
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setWidget(grid_host)
-        self._grid_scroll = scroll
-        self._grid_host = grid_host
-        # No focus stealing: Qt scrolls a scroll area to the focused child, which
-        # pushed the dashboard down and cut the first row of cards.
-        scroll.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        grid_host.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        layout.addWidget(scroll, 1)
+        layout.addLayout(self._grid, 1)
         logging.info("DashboardPage ctor: header built.")
 
         self._build_weather_card()
         self._build_media_card()
-        self._build_reminders_card()
         self._build_quick_commands_card()
         self._build_system_card()
         self._build_last_reply_card()
@@ -338,9 +303,19 @@ class DashboardPage(QWidget):
         for column in range(3):
             self._grid.setColumnStretch(column, 1 if column < columns else 0)
         card_rows = (len(self._cards) + columns - 1) // columns
-        for row in range(card_rows):
+        # Stretches from the previous column count must be cleared, otherwise the
+        # leftover stretched rows push the cards to the top of the page.
+        for row in range(12):
             self._grid.setRowStretch(row, 0)
-        self._grid.setRowStretch(card_rows, 1)
+        for row in range(card_rows):
+            self._grid.setRowStretch(row, 1)
+        # A short last row stretches its cards so the grid has no holes.
+        remainder = len(self._cards) % columns
+        if self._cards and 0 < remainder < columns:
+            extra = columns - remainder
+            self._grid.addWidget(
+                self._cards[-1], card_rows - 1, remainder - 1, 1, extra + 1
+            )
 
     def resizeEvent(self, event: Any) -> None:  # noqa: N802 (Qt naming)
         super().resizeEvent(event)
@@ -451,8 +426,8 @@ class DashboardPage(QWidget):
         self._weather_icon = weather_icon
         self._weather_temperature = weather_value
 
-        self._weather_forecast_layout = QVBoxLayout()
-        self._weather_forecast_layout.setSpacing(2)
+        self._weather_forecast_layout = QHBoxLayout()
+        self._weather_forecast_layout.setSpacing(8)
         weather_card.layout().addLayout(self._weather_forecast_layout)
         logging.info("DashboardPage ctor: weather card done.")
 
@@ -547,53 +522,9 @@ class DashboardPage(QWidget):
 
     # ------------------------------------------------------------------ reminders
 
-    def _build_reminders_card(self) -> None:
-        card = self._make_card_frame()
-        title_row = QHBoxLayout()
-        title_row.setSpacing(6)
-        title_row.addWidget(self._title_label("Напоминания"))
-        title_row.addStretch(1)
-        self._reminders_count = QLabel("")
-        self._reminders_count.setObjectName("remindersCount")
-        title_row.addWidget(self._reminders_count)
-        card.layout().addLayout(title_row)
-
-        logging.info("DashboardPage ctor: reminders card frame created.")
-        self._reminders_list = QListWidget()
-        self._reminders_list.setObjectName("dashboardRemindersList")
-        self._reminders_list.setMinimumHeight(120)
-        logging.info("DashboardPage ctor: reminders list created.")
-        self._reminders_empty = EmptyState(
-            "Активных напоминаний нет",
-            "Скажи: «напомни в 22:00 проверить чайник» — и я добавлю.",
-            glyph="",
-        )
-        logging.info("DashboardPage ctor: empty state created.")
-        self._reminders_stack = QStackedWidget()
-        logging.info("DashboardPage ctor: reminders stack created.")
-        self._reminders_stack.addWidget(self._reminders_list)
-        logging.info("DashboardPage ctor: list added to stack.")
-        self._reminders_stack.addWidget(self._reminders_empty)
-        logging.info("DashboardPage ctor: empty state added to stack.")
-        card.layout().addWidget(self._reminders_stack, 1)
-        logging.info("DashboardPage ctor: reminders stack mounted.")
-
     def refresh_reminders(self) -> None:
-        self._reminders_list.clear()
-        try:
-            entries = list(self._reminder_store.list_pending())
-        except (OSError, ValueError):
-            self._reminders_list.addItem("Не удалось загрузить напоминания.")
-            self._reminders_stack.setCurrentWidget(self._reminders_list)
-            return
-        self._reminders_count.setText(reminders_count_label(len(entries)))
-        lines = preview_reminders(entries)
-        if lines:
-            for line in lines:
-                self._reminders_list.addItem(line)
-            self._reminders_stack.setCurrentWidget(self._reminders_list)
-        else:
-            self._reminders_stack.setCurrentWidget(self._reminders_empty)
+        """Reminders now live on their own page; kept as a no-op for callers."""
+        return
 
     # ------------------------------------------------------------------ quick commands
 
@@ -762,7 +693,7 @@ class DashboardPage(QWidget):
             )
             self._weather_temperature.setText(_temperature_text(report.temperature))
             self._weather_note.setText(
-                ", ".join(self._weather_details(report))
+                " · ".join(self._weather_details(report))
             )
             self._rebuild_forecast(report)
             payload = {
@@ -844,9 +775,12 @@ class DashboardPage(QWidget):
 
     def _rebuild_forecast(self, report: WeatherReport) -> None:
         self._clear_forecast()
-        # Three days keep the card inside its designed height on 720p windows.
+        # Three compact chips in a row keep the card short on small screens.
         for day, temperature in report.forecast_items()[:3]:
-            self._weather_forecast_layout.addWidget(_forecast_row(day, temperature))
+            self._weather_forecast_layout.addWidget(
+                _forecast_chip(day, temperature)
+            )
+        self._weather_forecast_layout.addStretch(1)
 
     def _weather_workers_clear(self, worker: WeatherWorker) -> None:
         if self._weather_worker is worker:
@@ -901,11 +835,6 @@ class DashboardPage(QWidget):
         if minimum > card.minimumHeight():
             card.setMinimumHeight(minimum)
 
-    def _scroll_dashboard_to_top(self) -> None:
-        scroll = getattr(self, "_grid_scroll", None)
-        if scroll is not None:
-            scroll.verticalScrollBar().setValue(0)
-
     def _lock_card_minimums(self) -> None:
         """Cards never shrink below their content, so labels cannot overlap."""
         for card in self._cards:
@@ -914,11 +843,6 @@ class DashboardPage(QWidget):
     def showEvent(self, event: Any) -> None:  # noqa: N802 (Qt naming)
         super().showEvent(event)
         QTimer.singleShot(0, self._lock_card_minimums)
-        # The first card row was being cut: Qt scrolls the grid to whatever child
-        # takes focus while the page is being populated. Force the top a few times
-        # right after the page appears (the user cannot scroll that fast).
-        for delay in (0, 150, 400, 900):
-            QTimer.singleShot(delay, self._scroll_dashboard_to_top)
         if not self._weather_fetch_started:
             self._weather_fetch_started = True
             QTimer.singleShot(300, self._start_weather_fetch)

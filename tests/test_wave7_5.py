@@ -136,7 +136,6 @@ def test_system_comment_thresholds():
 def test_dashboard_hub_structure():
     source = inspect.getsource(dashboard_module)
     for needle in (
-        "Напоминания",
         "Музыка",
         "Быстрые команды",
         "Система",
@@ -147,7 +146,6 @@ def test_dashboard_hub_structure():
         "on_open_chat",
         "set_last_reply",
         "system_snapshot",
-        "reminders_count_label",
     ):
         assert needle in source, needle
 

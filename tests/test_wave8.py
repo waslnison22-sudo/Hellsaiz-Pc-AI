@@ -58,7 +58,8 @@ def test_grid_tokens_are_defined_and_sane():
 @requires_qt
 def test_columns_follow_the_window_width():
     assert columns_for_width(760) == 1
-    assert columns_for_width(1280) == 2
+    assert columns_for_width(1100) == 2
+    assert columns_for_width(1280) == 3
     assert columns_for_width(1920) == 3
 
 
@@ -72,7 +73,7 @@ def test_dashboard_relayouts_when_width_changes():
     app.processEvents()
     assert page._columns == 1
 
-    page.resize(1200, 700)
+    page.resize(1100, 700)
     app.processEvents()
     assert page._columns == 2
 
@@ -105,7 +106,7 @@ def test_dashboard_widget_contract_names():
     for expected in (
         "dashboardGreeting",
         "weatherTemperature",
-        "remindersCount",
+        "weatherCondition",
         "quickChip",
         "systemBarValue",
         "quickCommandInput",
