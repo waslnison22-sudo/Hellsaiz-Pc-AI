@@ -22,9 +22,9 @@ requires_chat_module = pytest.mark.skipif(
 @requires_chat_module
 def test_knice_chat_geometry_constants():
     # Owner pass 4: the chat fills the page, so the column and the bubble cap grew.
-    assert chat_module.CHAT_COLUMN_WIDTH == 900
+    assert chat_module.CHAT_COLUMN_WIDTH == 1040
     assert chat_module.BUBBLE_MAX_RATIO == 0.92
-    assert chat_module.BUBBLE_MAX_CAP == 640
+    assert chat_module.BUBBLE_MAX_CAP == 720
 
 
 @requires_chat_module

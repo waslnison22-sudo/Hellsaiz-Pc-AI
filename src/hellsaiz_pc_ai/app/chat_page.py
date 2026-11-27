@@ -56,9 +56,9 @@ TEXT_OBJECT_NAMES = {
 
 # knice chat geometry: the messages live in a narrow centred column; bubbles
 # never exceed 85% of it (capped at 580 px for very wide windows).
-CHAT_COLUMN_WIDTH = 900
+CHAT_COLUMN_WIDTH = 1040
 BUBBLE_MAX_RATIO = 0.92
-BUBBLE_MAX_CAP = 640
+BUBBLE_MAX_CAP = 720
 
 
 class GradientBrandLabel(QWidget):
@@ -356,8 +356,8 @@ class ChatTranscript(QScrollArea):
         self.verticalScrollBar().valueChanged.connect(self._on_scrolled)
 
     def _designed_column_width(self) -> int:
-        """min(CHAT_COLUMN_WIDTH, 85 % of the viewport), never below 280 px."""
-        available = int((self.viewport().width() or self.width()) * BUBBLE_MAX_RATIO)
+        """The page already insets the chat, so the column fills the viewport."""
+        available = self.viewport().width() or self.width()
         return max(280, min(CHAT_COLUMN_WIDTH, available))
 
     def _on_range_changed(self, _minimum: int, maximum: int) -> None:

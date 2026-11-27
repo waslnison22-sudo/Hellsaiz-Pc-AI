@@ -885,16 +885,8 @@ def main() -> int:
     capabilities_toggle.clicked.connect(toggle_capabilities)
     capabilities_toggle.setVisible(False)  # единственный вход в навыки — кнопка в топ-баре
 
-    # Everything below the header lives in one centred column: messages, the
-    # composer and the hint chips share the same width.
-    chat_column = QWidget()
-    chat_column.setObjectName("chatColumn")
-    chat_column.setMaximumWidth(CHAT_COLUMN_WIDTH)
-    chat_column_layout = QVBoxLayout(chat_column)
-    chat_column_layout.setContentsMargins(0, 0, 0, 0)
-    chat_column_layout.setSpacing(12)
     transcript = ChatTranscript()
-    chat_column_layout.addWidget(transcript, 1)
+    home_layout.addWidget(transcript, 1)
     toast = Toast(home_page)
 
     def show_chat_message(role: str, message: str) -> None:
@@ -1064,7 +1056,7 @@ def main() -> int:
     profile_footer.addWidget(profile_apply_button)
     profile_layout.addLayout(profile_footer)
 
-    chat_column_layout.addWidget(profile_panel)
+    home_layout.addWidget(profile_panel)
     profile_panel.setMaximumHeight(0)
     profile_toggle_open = {"state": False}
     profile_panel.setVisible(False)
@@ -1106,7 +1098,7 @@ def main() -> int:
     controls.addWidget(mute_speech_button)
     controls.addWidget(voice_button)
     controls.addWidget(send_button)
-    chat_column_layout.addLayout(controls)
+    home_layout.addLayout(controls)
 
     def stop_speech_playback() -> None:
         stopped = False
@@ -1148,9 +1140,24 @@ def main() -> int:
         )
         quick_commands_row.addWidget(quick_button)
     quick_commands_row.addStretch(1)
-    chat_column_layout.addWidget(quick_container)
-    home_layout.addWidget(chat_column, 1)
-    home_layout.setAlignment(chat_column, Qt.AlignmentFlag.AlignHCenter)
+    home_layout.addWidget(quick_container)
+
+    def sync_chat_margins() -> None:
+        """The chat content spans the column: side margins centre it."""
+        available = max(320, home_page.width())
+        column = min(CHAT_COLUMN_WIDTH, available - 32)
+        margin = max(16, (available - column) // 2)
+        home_layout.setContentsMargins(margin, 22, margin, 20)
+
+    class _ChatMarginSyncer(QObject):
+        def eventFilter(self, watched, event):  # noqa: N802 (Qt naming)
+            if event.type() == QEvent.Type.Resize:
+                sync_chat_margins()
+            return False
+
+    chat_margin_syncer = _ChatMarginSyncer(window)
+    window.installEventFilter(chat_margin_syncer)
+    QTimer.singleShot(0, sync_chat_margins)
 
 
     endpoint_defaults = {

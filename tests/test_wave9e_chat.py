@@ -9,7 +9,6 @@ try:  # PySide6 widgets are unavailable on headless Linux runners.
 
     from hellsaiz_pc_ai.app.chat_page import (
         BUBBLE_MAX_CAP,
-        BUBBLE_MAX_RATIO,
         CHAT_COLUMN_WIDTH,
         ChatTranscript,
         MessageBubble,
@@ -37,7 +36,7 @@ def test_chat_column_uses_the_designed_width():
     app = QApplication.instance() or QApplication([])
     transcript = _transcript(app, 1130)
 
-    expected = max(280, min(CHAT_COLUMN_WIDTH, int(transcript.viewport().width() * BUBBLE_MAX_RATIO)))
+    expected = max(280, min(CHAT_COLUMN_WIDTH, transcript.viewport().width()))
 
     assert transcript._column_widget.width() == expected
     assert transcript._column_widget.width() >= 660
