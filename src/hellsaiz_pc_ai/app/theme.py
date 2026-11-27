@@ -49,6 +49,26 @@ TAB_ACTIVE = "#E8C29E"
 RADIUS_CARD = "22px"
 RADIUS_INPUT = "16px"
 RADIUS_CHIP = "16px"
+SURFACE_RAISED = "#2A2B30"
+SURFACE_BUTTON = "#171716"
+STATE_HOVER = "#1F1F1D"
+STATE_PRESSED = "#121211"
+STATE_DISABLED = "#131312"
+STATUS_OK = "#7dd487"
+STATUS_WARN = "#f5c04a"
+STATUS_ERROR = "#ff7b72"
+TAB_BG = "#141413"
+TAB_ACTIVE = "#E8C29E"
+RADIUS_CARD = "22px"
+RADIUS_INPUT = "16px"
+RADIUS_CHIP = "16px"
+SPACING = (4, 8, 12, 16, 24)
+FONT_CAPTION = "12px"
+FONT_BODY = "13px"
+FONT_EMPHASIS = "15px"
+FONT_PAGE_TITLE = "19px"
+FONT_SCREEN_TITLE = "22px"
+
 CHAT_BUBBLE_RADIUS = "16px"
 ACCENT_SOLID = "#E8C29E"
 CHAT_BUBBLE_USER_BG = ACCENT_SOLID
@@ -665,6 +685,98 @@ QScrollArea#chatTranscript {
 QWidget#chatTranscriptBody {
     background: transparent;
 }
+/* ---------- Scenarios studio: cards instead of default form boxes ---------- */
+QLabel#pageTitle {
+    color: TEXT_PRIMARY;
+    font-size: 22px;
+    font-weight: 700;
+}
+QLabel#sectionTitle {
+    color: TEXT_PRIMARY;
+    font-size: 19px;
+    font-weight: 650;
+}
+QLabel#cardTitle {
+    color: TEXT_PRIMARY;
+    font-size: 15px;
+    font-weight: 600;
+}
+QLabel#sectionEyebrow {
+    color: TEXT_MUTED;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1px;
+}
+QLabel#scenarioStatus {
+    color: TEXT_MUTED;
+    font-size: 12px;
+}
+QLabel#secondaryText {
+    color: TEXT_MUTED;
+    font-size: 13px;
+}
+QLabel#warningText {
+    color: STATUS_WARN;
+    font-size: 12px;
+}
+QGroupBox#scenarioCard, QGroupBox#scenarioBranchCard {
+    background: DASHBOARD_SURFACE;
+    border: 1px solid CARD_EDGE;
+    border-radius: 16px;
+    margin-top: 22px;
+    padding: 16px 14px 14px 14px;
+    font-size: 13px;
+    color: TEXT_PRIMARY;
+}
+QGroupBox#scenarioCard::title, QGroupBox#scenarioBranchCard::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 14px;
+    padding: 0 6px;
+    color: TEXT_MUTED;
+    font-size: 12px;
+}
+QWidget#studioPanel {
+    background: DASHBOARD_BACKDROP;
+    border: 1px solid CARD_EDGE;
+    border-radius: 16px;
+}
+QWidget#scenarioActionCard {
+    background: GLASS_BG_STRONG;
+    border: 1px solid GLASS_BORDER;
+    border-radius: 12px;
+}
+QPushButton#toolbarButton {
+    background: GLASS_BG_STRONG;
+    border: 1px solid GLASS_BORDER;
+    border-radius: 10px;
+    color: TEXT_PRIMARY;
+    font-size: 12px;
+    padding: 4px 10px;
+    min-height: 0;
+}
+QPushButton#toolbarButton:hover {
+    background: STATE_HOVER;
+}
+QScrollBar:vertical {
+    background: transparent;
+    width: 8px;
+    margin: 4px 2px 4px 0;
+}
+QScrollBar::handle:vertical {
+    background: rgba(255, 255, 255, 40);
+    border-radius: 4px;
+    min-height: 24px;
+}
+QScrollBar::handle:vertical:hover {
+    background: rgba(255, 255, 255, 70);
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0;
+}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+    background: transparent;
+}
 QLabel#chatHeaderAvatar {
     background: #E8C29E;
     color: #1A140F;
@@ -897,6 +1009,23 @@ def build_dark_stylesheet() -> str:
         "CHAT_BUBBLE_SYSTEM_BG",
         "CHAT_BUBBLE_RADIUS",
         "SURFACE_INPUT",
+        "SURFACE_BUTTON",
+        "STATE_HOVER",
+        "STATE_PRESSED",
+        "STATE_DISABLED",
+        "ACCENT_SOLID",
+        "TAB_BG",
+        "TAB_ACTIVE",
+        "DASHBOARD_SURFACE",
+        "DASHBOARD_BACKDROP",
+        "CARD_EDGE",
+        "GLASS_BG_STRONG",
+        "GLASS_BORDER",
+        "TEXT_PRIMARY",
+        "TEXT_MUTED",
+        "STATUS_OK",
+        "STATUS_WARN",
+        "STATUS_ERROR",
     ):
         sheet = sheet.replace(name, str(globals()[name]))
     return sheet

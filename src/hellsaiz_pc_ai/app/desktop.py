@@ -45,7 +45,12 @@ from hellsaiz_pc_ai.tools.reminders import register_reminder_tools
 from hellsaiz_pc_ai.tools.system import register_system_tools
 from hellsaiz_pc_ai.tools.public_info import register_public_info_tools
 from hellsaiz_pc_ai.app.wallpaper import WallpaperError, WallpaperStore
-from hellsaiz_pc_ai.app.chat_page import ChatInput, ChatTranscript, Toast
+from hellsaiz_pc_ai.app.chat_page import (
+        CHAT_COLUMN_WIDTH,
+        ChatInput,
+        ChatTranscript,
+        Toast,
+    )
 from hellsaiz_pc_ai.app.icons import load_icon
 from hellsaiz_pc_ai.app.ui_fx import (
     ArrowRotator,
@@ -1093,7 +1098,18 @@ def main() -> int:
     controls.addWidget(mute_speech_button)
     controls.addWidget(voice_button)
     controls.addWidget(send_button)
-    home_layout.addLayout(controls)
+    # Композер живёт в той же 900-пиксельной колонке, что и сообщения.
+    controls_host = QWidget()
+    controls_host_layout = QHBoxLayout(controls_host)
+    controls_host_layout.setContentsMargins(0, 0, 0, 0)
+    controls_host_layout.setSpacing(0)
+    controls_host_layout.addStretch(1)
+    controls_core = QWidget()
+    controls_core.setMaximumWidth(CHAT_COLUMN_WIDTH)
+    controls_core.setLayout(controls)
+    controls_host_layout.addWidget(controls_core, 1)
+    controls_host_layout.addStretch(1)
+    home_layout.addWidget(controls_host)
 
     def stop_speech_playback() -> None:
         stopped = False
@@ -1135,7 +1151,31 @@ def main() -> int:
         )
         quick_commands_row.addWidget(quick_button)
     quick_commands_row.addStretch(1)
-    home_layout.addWidget(quick_container)
+    quick_host = QWidget()
+    quick_host_layout = QHBoxLayout(quick_host)
+    quick_host_layout.setContentsMargins(0, 0, 0, 0)
+    quick_host_layout.setSpacing(0)
+    quick_host_layout.addStretch(1)
+    quick_container.setMaximumWidth(CHAT_COLUMN_WIDTH)
+    quick_host_layout.addWidget(quick_container, 1)
+    quick_host_layout.addStretch(1)
+    home_layout.addWidget(quick_host)
+
+    def sync_chat_column() -> None:
+        """Composer and hint chips follow the message column width."""
+        width = max(320, min(CHAT_COLUMN_WIDTH, home_page.width() - 56))
+        controls_core.setFixedWidth(width)
+        quick_container.setFixedWidth(width)
+
+    class _ChatColumnSyncer(QObject):
+        def eventFilter(self, watched, event):  # noqa: N802 (Qt naming)
+            if event.type() == QEvent.Type.Resize:
+                sync_chat_column()
+            return False
+
+    chat_column_syncer = _ChatColumnSyncer(window)
+    window.installEventFilter(chat_column_syncer)
+    sync_chat_column()
 
     endpoint_defaults = {
         "lm-studio": "http://127.0.0.1:1234/v1",

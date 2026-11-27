@@ -654,8 +654,8 @@ class WorkflowStudioPage(QWidget):
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
-        root.setContentsMargins(12, 12, 12, 12)
-        root.setSpacing(12)
+        root.setContentsMargins(22, 18, 22, 18)
+        root.setSpacing(14)
 
         header = QHBoxLayout()
         header_text = QVBoxLayout()
@@ -689,7 +689,15 @@ class WorkflowStudioPage(QWidget):
         self.scenario_list.setAccessibleName("Сохранённые сценарии")
         self.scenario_list.setToolTip("Выбери сценарий, чтобы посмотреть или изменить его.")
         self.scenario_list.setWordWrap(True)
+        self.library_empty = QLabel(
+            "Сценариев пока нет.\nНажми «Новый сценарий» — соберём первый."
+        )
+        self.library_empty.setObjectName("secondaryText")
+        self.library_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.library_empty.setWordWrap(True)
+        self.library_empty.hide()
         library_layout.addWidget(self.scenario_list, 1)
+        library_layout.addWidget(self.library_empty, 1)
         self.delete_button = QPushButton("Удалить выбранный")
         library_layout.addWidget(self.delete_button)
         splitter.addWidget(library_panel)
@@ -1354,6 +1362,10 @@ class WorkflowStudioPage(QWidget):
         self.scenario_list.blockSignals(False)
         if target_row >= 0:
             self.scenario_list.setCurrentRow(target_row)
+        if hasattr(self, "library_empty"):
+            empty = shown == 0
+            self.library_empty.setVisible(empty)
+            self.scenario_list.setVisible(not empty)
         if shown == 0:
             if query:
                 self.status_label.setText("Ничего не найдено по запросу.")
