@@ -336,11 +336,27 @@ def _session_snapshot() -> MediaSession | None:
             artwork=artwork,
         )
 
+    # WinRT needs a COM apartment on *every* thread, not only the main one.
+    init = uninit = None
     try:
+        from winrt import init_apartment, uninit_apartment
+
+        init, uninit = init_apartment, uninit_apartment
+    except ImportError:  # pragma: no cover - older winrt builds
+        pass
+    try:
+        if init is not None:
+            init()
         return asyncio.run(read())
     except Exception:  # noqa: BLE001 - COM/WinRT failures must not break the card
         logging.debug("Media session read failed", exc_info=True)
         return None
+    finally:
+        if uninit is not None:
+            try:
+                uninit()
+            except Exception:  # noqa: BLE001 - best effort
+                pass
 
 
 def media_session() -> MediaSession | None:
