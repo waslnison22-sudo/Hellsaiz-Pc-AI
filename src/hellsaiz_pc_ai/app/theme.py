@@ -720,14 +720,87 @@ QPushButton#windowCloseButton:hover {
 QWidget#windowEdgeResizer {
     background: transparent;
 }
-QPushButton#aiToggle {
-    background: STATE_HOVER;
-    border: 1px solid GLASS_BORDER;
-    border-radius: 17px;
+/* ---------- Settings: pill tabs and airy sections ---------- */
+QTabWidget#settingsTabs::pane {
+    border: 0;
+    background: transparent;
+}
+QTabWidget#settingsTabs QTabBar::tab {
+    background: rgba(255, 255, 255, 10);
+    border: 1px solid rgba(255, 255, 255, 18);
+    border-radius: 14px;
     color: TEXT_MUTED;
     font-size: 12px;
     font-weight: 600;
-    padding: 0 10px;
+    padding: 7px 16px;
+    margin: 0 6px 8px 0;
+}
+QTabWidget#settingsTabs QTabBar::tab:selected {
+    background: ACCENT_SOLID;
+    border: 1px solid ACCENT_SOLID;
+    color: #1B1B19;
+}
+QTabWidget#settingsTabs QTabBar::tab:hover:!selected {
+    background: rgba(255, 255, 255, 22);
+    color: TEXT_PRIMARY;
+}
+QTabWidget#settingsTabs QWidget#glassPanel {
+    background: DASHBOARD_SURFACE;
+    border: 1px solid CARD_EDGE;
+    border-radius: 18px;
+}
+/* ---------- Chat micro-interactions ---------- */
+QTextEdit#chatComposer:focus {
+    border: 1px solid ACCENT_SOLID;
+    background: rgba(255, 255, 255, 16);
+}
+QPushButton#chatCopyButton {
+    background: rgba(255, 255, 255, 14);
+    border: 1px solid rgba(255, 255, 255, 18);
+    border-radius: 9px;
+    padding: 2px 4px;
+}
+QPushButton#chatCopyButton:hover {
+    background: rgba(255, 255, 255, 34);
+    border: 1px solid ACCENT_SOLID;
+}
+QPushButton#chatCopyButton:pressed {
+    background: rgba(232, 194, 158, 90);
+}
+QPushButton#sendButton:hover, QPushButton#voiceButton:hover {
+    background: rgba(232, 194, 158, 40);
+}
+QPushButton#sendButton:pressed, QPushButton#voiceButton:pressed {
+    background: rgba(232, 194, 158, 90);
+}
+QPushButton#newMessagesButton {
+    background: ACCENT_SOLID;
+    border: 0;
+    border-radius: 14px;
+    color: #1B1B19;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 12px;
+}
+QPushButton#newMessagesButton:hover {
+    background: #F0D2B4;
+}
+QFrame#chatBubbleAssistant:hover {
+    background: rgba(255, 255, 255, 26);
+}
+QFrame#chatBubbleUser:hover {
+    background: #F2D3B6;
+}
+QPushButton#aiToggle {
+    background: STATE_HOVER;
+    border: 1px solid GLASS_BORDER;
+    border-radius: 13px;
+    color: TEXT_MUTED;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 0 12px;
+    min-height: 0;
+    max-height: 26px;
 }
 QPushButton#aiToggle:checked {
     background: ACCENT_SOLID;

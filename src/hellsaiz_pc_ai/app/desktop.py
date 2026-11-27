@@ -833,8 +833,8 @@ def main() -> int:
     ai_button.setText("ИИ" if SWITCHES.ai_enabled else "Локально")
     ai_button.setToolTip("Использовать ИИ в ответах; выключено — отвечаю локально.")
     ai_button.setCursor(Qt.CursorShape.PointingHandCursor)
-    ai_button.setFixedHeight(30)
-    ai_button.setMinimumWidth(56)
+    ai_button.setFixedHeight(26)
+    ai_button.setMinimumWidth(64)
 
     def on_ai_toggled(checked: bool) -> None:
         from hellsaiz_pc_ai.config import (
@@ -2302,9 +2302,11 @@ def main() -> int:
 
     settings_page = QWidget()
     settings_layout = QVBoxLayout(settings_page)
-    settings_layout.setContentsMargins(22, 20, 22, 20)
-    settings_layout.setSpacing(12)
+    settings_layout.setContentsMargins(24, 20, 24, 20)
+    settings_layout.setSpacing(14)
     settings_tabs = QTabWidget()
+    settings_tabs.setObjectName("settingsTabs")
+    settings_tabs.setDocumentMode(True)
 
     def _settings_tab(name: str) -> tuple[QWidget, QVBoxLayout]:
         tab_page = QWidget()
