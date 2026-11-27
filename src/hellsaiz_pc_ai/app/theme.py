@@ -98,7 +98,8 @@ QPushButton#ghostButton:hover, QPushButton#navPill:hover {{
 
 /* --- knice main-page tokens ----------------------------------------- */
 QWidget#appShell, QWidget#contentFrame {{
-    background: {DASHBOARD_BACKDROP};
+    /* Transparent: the wallpaper layer sits behind the shell and must show. */
+    background: transparent;
 }}
 QFrame#dashboardCard {{
     background: transparent;
@@ -142,6 +143,11 @@ QLabel#weatherCityDot {{
     color: {TEXT_MUTED};
     font-size: 14px;
     padding: 6px 0 0 2px;
+}}
+QLabel#mediaCover {{
+    background: {GLASS_BG_STRONG};
+    border: 1px solid {GLASS_BORDER};
+    border-radius: 16px;
 }}
 QLabel#mediaTrack {{
     color: {TEXT_PRIMARY};
@@ -197,7 +203,7 @@ QPushButton#mediaButton:hover {{
 QToolButton#quickChip {{
     background: rgba(255, 255, 255, 12);
     border: 1px solid rgba(255, 255, 255, 26);
-    border-radius: 16px;
+    border-radius: 18px;
     color: #A6A29C;
     font-size: 12px;
     padding: 4px 12px;

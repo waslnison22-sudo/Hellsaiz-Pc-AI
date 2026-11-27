@@ -77,3 +77,37 @@ def test_player_card_shows_a_running_track(monkeypatch):
 
     assert page._media_track.text() == "Radiohead — Creep"
     assert page._media_next_button.isEnabled() is True
+
+
+def test_player_executable_is_none_off_windows(monkeypatch):
+    from hellsaiz_pc_ai.app import yandex_music
+
+    monkeypatch.setattr(yandex_music.os, "name", "posix")
+
+    assert yandex_music.player_executable() is None
+
+
+def test_player_executable_finds_the_local_install(tmp_path, monkeypatch):
+    from hellsaiz_pc_ai.app import yandex_music
+
+    local = tmp_path / "Local"
+    install = local / "Programs" / "YandexMusic"
+    install.mkdir(parents=True)
+    executable = install / "YandexMusic.exe"
+    executable.write_bytes(b"MZ")
+    monkeypatch.setattr(yandex_music.os, "name", "nt")
+    monkeypatch.setenv("LOCALAPPDATA", str(local))
+    monkeypatch.delenv("APPDATA", raising=False)
+    monkeypatch.delenv("ProgramFiles", raising=False)
+    monkeypatch.delenv("ProgramFiles(x86)", raising=False)
+
+    assert yandex_music.player_executable() == str(executable)
+
+
+def test_open_or_focus_reports_missing_app(monkeypatch):
+    from hellsaiz_pc_ai.app import yandex_music
+
+    monkeypatch.setattr(yandex_music, "focus_player", lambda: False)
+    monkeypatch.setattr(yandex_music, "player_executable", lambda: None)
+
+    assert yandex_music.open_or_focus_player() == "missing"

@@ -146,3 +146,41 @@ def focus_player() -> bool:
     except OSError:  # pragma: no cover - defensive
         logging.debug("Focusing Yandex Music failed", exc_info=True)
         return False
+
+
+def player_executable() -> str | None:
+    """Path to the desktop app: known install locations, newest first."""
+    if os.name != "nt":
+        return None
+    local = os.environ.get("LOCALAPPDATA") or ""
+    roaming = os.environ.get("APPDATA") or ""
+    program_files = os.environ.get("ProgramFiles") or ""
+    program_files_x86 = os.environ.get("ProgramFiles(x86)") or ""
+    candidates = [
+        os.path.join(local, "Programs", "YandexMusic", "YandexMusic.exe"),
+        os.path.join(local, "YandexMusic", "YandexMusic.exe"),
+        os.path.join(roaming, "YandexMusic", "YandexMusic.exe"),
+        os.path.join(program_files, "YandexMusic", "YandexMusic.exe"),
+        os.path.join(program_files_x86, "YandexMusic", "YandexMusic.exe"),
+    ]
+    for candidate in candidates:
+        if candidate and os.path.isfile(candidate):
+            return candidate
+    return None
+
+
+def open_or_focus_player() -> str:
+    """Focus a running player, or launch it; returns a short status word."""
+    if focus_player():
+        return "focused"
+    executable = player_executable()
+    if executable is None:
+        return "missing"
+    try:
+        import subprocess
+
+        subprocess.Popen([executable], close_fds=True)
+    except OSError:
+        logging.debug("Launching Yandex Music failed", exc_info=True)
+        return "missing"
+    return "launched"

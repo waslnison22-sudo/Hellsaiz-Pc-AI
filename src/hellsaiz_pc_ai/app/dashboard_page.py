@@ -63,7 +63,7 @@ from hellsaiz_pc_ai.app.weather_cache import (
     updated_label,
 )
 from hellsaiz_pc_ai.app.ui_fx import reduce_motion as _reduce_motion
-from hellsaiz_pc_ai.app.yandex_music import focus_player, now_playing
+from hellsaiz_pc_ai.app.yandex_music import open_or_focus_player, now_playing
 from hellsaiz_pc_ai.app.weather_icon import WeatherIconWidget, map_weather_icon
 from hellsaiz_pc_ai.app.dashboard_texts import (
     greeting_for_hour,
@@ -491,14 +491,29 @@ class DashboardPage(QWidget):
         title_row.addWidget(self._player_state)
         media_card.layout().addLayout(title_row)
 
+        # Cover plate between the title and the controls, as in the reference.
+        self._media_cover = QLabel()
+        self._media_cover.setObjectName("mediaCover")
+        self._media_cover.setFixedSize(64, 64)
+        self._media_cover.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._media_cover.setPixmap(media_play_icon().pixmap(28, 28))
+        cover_row = QHBoxLayout()
+        cover_row.setSpacing(12)
+        cover_row.addWidget(self._media_cover, 0, Qt.AlignmentFlag.AlignTop)
+        cover_column = QVBoxLayout()
+        cover_column.setSpacing(2)
         self._media_track = QLabel("Яндекс Музыка не запущена")
         self._media_track.setObjectName("mediaTrack")
         self._media_track.setWordWrap(True)
-        media_card.layout().addWidget(self._media_track)
-        self._media_artist = QLabel("Открой приложение — карточка покажет текущий трек")
+        cover_column.addWidget(self._media_track)
+        self._media_artist = QLabel("Нажми «Открыть» — карточка подхватит трек")
         self._media_artist.setObjectName("mediaArtist")
         self._media_artist.setWordWrap(True)
-        media_card.layout().addWidget(self._media_artist)
+        cover_column.addWidget(self._media_artist)
+        cover_column.addStretch(1)
+        cover_row.addLayout(cover_column, 1)
+        media_card.layout().addLayout(cover_row)
+        media_card.layout().addStretch(1)
 
         controls_row = QHBoxLayout()
         controls_row.setSpacing(8)
@@ -520,12 +535,11 @@ class DashboardPage(QWidget):
         controls_row.addStretch(1)
         self._media_open_button = QPushButton("Открыть")
         self._media_open_button.setObjectName("secondaryButton")
-        self._media_open_button.setToolTip("Показать окно Яндекс Музыки")
+        self._media_open_button.setToolTip("Открыть Яндекс Музыку и показать трек")
         self._media_open_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._media_open_button.clicked.connect(self._open_player)
         controls_row.addWidget(self._media_open_button)
         media_card.layout().addLayout(controls_row)
-        media_card.layout().addStretch(1)
 
         self._player_timer = QTimer(self)
         self._player_timer.setInterval(2000)
@@ -544,7 +558,7 @@ class DashboardPage(QWidget):
         if playing is None or not playing.has_track:
             self._media_track.setText("Яндекс Музыка не запущена")
             self._media_artist.setText(
-                "Открой приложение — карточка покажет текущий трек"
+                "Нажми «Открыть» — карточка подхватит трек"
             )
             self._player_state.setText("")
             self._media_open_button.setEnabled(True)
@@ -568,12 +582,19 @@ class DashboardPage(QWidget):
         )
 
     def _open_player(self) -> None:
-        if focus_player():
+        result = open_or_focus_player()
+        if result == "focused":
             self._player_state.setText("окно открыто")
+            return
+        if result == "launched":
+            self._player_state.setText("запускаю")
+            self._media_track.setText("Открываю Яндекс Музыку…")
+            self._media_artist.setText("Трек появится через секунду")
+            QTimer.singleShot(4000, self._refresh_now_playing)
             return
         self._media_track.setText("Яндекс Музыка не найдена")
         self._media_artist.setText(
-            "Запусти приложение «Яндекс Музыка» — карточка подхватит трек"
+            "Установи приложение «Яндекс Музыка» — карточка подхватит трек"
         )
 
     def _start_player_watch(self) -> None:
@@ -626,6 +647,7 @@ class DashboardPage(QWidget):
         capsule_row.addWidget(send_button)
         card.layout().addLayout(capsule_row)
 
+        card.layout().addStretch(1)
         chips_row = QHBoxLayout()
         chips_row.setSpacing(8)
         for label, command, icon_name in self.QUICK_COMMANDS:
@@ -643,7 +665,6 @@ class DashboardPage(QWidget):
         hint = QLabel("Enter — отправить, Esc — сбросить")
         hint.setObjectName("dashboardCardNote")
         card.layout().addWidget(hint)
-        card.layout().addStretch(1)
         logging.info("DashboardPage ctor: quick commands card done.")
 
     def _use_quick_chip(self, command: str) -> None:
