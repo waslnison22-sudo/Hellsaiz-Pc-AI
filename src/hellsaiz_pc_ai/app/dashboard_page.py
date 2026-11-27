@@ -254,6 +254,10 @@ class DashboardPage(QWidget):
         scroll.setWidget(grid_host)
         self._grid_scroll = scroll
         self._grid_host = grid_host
+        # No focus stealing: Qt scrolls a scroll area to the focused child, which
+        # pushed the dashboard down and cut the first row of cards.
+        scroll.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        grid_host.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         layout.addWidget(scroll, 1)
         logging.info("DashboardPage ctor: header built.")
 
@@ -897,6 +901,11 @@ class DashboardPage(QWidget):
         if minimum > card.minimumHeight():
             card.setMinimumHeight(minimum)
 
+    def _scroll_dashboard_to_top(self) -> None:
+        scroll = getattr(self, "_grid_scroll", None)
+        if scroll is not None:
+            scroll.verticalScrollBar().setValue(0)
+
     def _lock_card_minimums(self) -> None:
         """Cards never shrink below their content, so labels cannot overlap."""
         for card in self._cards:
@@ -905,6 +914,11 @@ class DashboardPage(QWidget):
     def showEvent(self, event: Any) -> None:  # noqa: N802 (Qt naming)
         super().showEvent(event)
         QTimer.singleShot(0, self._lock_card_minimums)
+        # The first card row was being cut: Qt scrolls the grid to whatever child
+        # takes focus while the page is being populated. Force the top a few times
+        # right after the page appears (the user cannot scroll that fast).
+        for delay in (0, 150, 400, 900):
+            QTimer.singleShot(delay, self._scroll_dashboard_to_top)
         if not self._weather_fetch_started:
             self._weather_fetch_started = True
             QTimer.singleShot(300, self._start_weather_fetch)
