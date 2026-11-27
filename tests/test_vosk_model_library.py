@@ -13,7 +13,8 @@ def _write_model_archive(path: Path, *, extra: tuple[str, bytes] | None = None) 
     entries = {
         f"{library.VOSK_MODEL_ID}/am/final.mdl": b"model",
         f"{library.VOSK_MODEL_ID}/conf/model.conf": b"sample-frequency=16000",
-        f"{library.VOSK_MODEL_ID}/graph/words.txt": b"<eps> 0\n",
+        f"{library.VOSK_MODEL_ID}/graph/HCLr.fst": b"hcl",
+        f"{library.VOSK_MODEL_ID}/graph/Gr.fst": b"gr",
     }
     if extra is not None:
         entries[extra[0]] = extra[1]

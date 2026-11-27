@@ -22,6 +22,8 @@ from hellsaiz_pc_ai.secure_store import SecureStoreError, load_secret, save_secr
 from hellsaiz_pc_ai.update_client import PreparedUpdate, UpdateInfo
 from hellsaiz_pc_ai.install_layout import installed_app_root, installed_version
 from hellsaiz_pc_ai import startup_task
+
+
 from hellsaiz_pc_ai.network import v2raytun
 from hellsaiz_pc_ai.version import APP_VERSION
 from hellsaiz_pc_ai.core.orchestrator import AssistantOrchestrator, llm_failure_message
@@ -235,6 +237,7 @@ def build_runtime(settings: Settings):
         profile_data.update(get_active_provider_profile(provider_profile_store))
 
     profile_enabled = bool(profile_data.get("enabled", settings.llm.enabled))
+    SWITCHES.ai_enabled = profile_enabled
     profile_base_url = str(profile_data.get("base_url") or settings.llm.base_url).rstrip("/")
     profile_model = str(profile_data.get("model") or settings.llm.model)
     assistant = None
@@ -303,6 +306,14 @@ def build_runtime(settings: Settings):
         vision_settings
     )
 
+
+class _Switches:
+    """Process-wide UI switches shared by the page builders."""
+
+    ai_enabled = False
+
+
+SWITCHES = _Switches()
 
 def main() -> int:
     try:
@@ -697,18 +708,16 @@ def main() -> int:
                         if routed is not None:
                             from_local_command = True
                             answer = routed
-                    if answer is None and assistant is not None:
+                    if answer is None and assistant is not None and SWITCHES.ai_enabled:
                         try:
                             answer = assistant.reply(prompt)
                         except (ProviderError, DeepSeekError) as exc:
                             logging.warning("AI provider failed: %s", exc)
                             answer = llm_failure_message(exc)
                     if answer is None:
-                        answer = (
-                            "Эта фраза пока не входит в список локальных команд. "
-                            "Введите «помощь», чтобы увидеть доступные команды. "
-                            "Генеративный ИИ выключен."
-                        )
+                        from hellsaiz_pc_ai.app import local_talk
+
+                        answer = local_talk.reply(prompt)
                 elif answer is None:
                     if self.workflow_trigger.workflow_id:
                         answer = (
@@ -814,6 +823,44 @@ def main() -> int:
     # Kept off the layout so set_chat_status() keeps working for the tray/HUD.
     chat_header_status = QLabel("Готов")
     chat_header_status.hide()
+    ai_button = QPushButton("ИИ")
+    ai_button.setObjectName("aiToggle")
+    ai_button.setCheckable(True)
+    ai_button.setChecked(SWITCHES.ai_enabled)
+    ai_button.setText("ИИ" if SWITCHES.ai_enabled else "Локально")
+    ai_button.setToolTip("Использовать ИИ в ответах; выключено — отвечаю локально.")
+    ai_button.setCursor(Qt.CursorShape.PointingHandCursor)
+    ai_button.setFixedHeight(30)
+    ai_button.setMinimumWidth(56)
+
+    def on_ai_toggled(checked: bool) -> None:
+        from hellsaiz_pc_ai.config import (
+            get_active_provider_profile,
+            load_profile_store,
+            save_profile_store,
+            user_data_dir,
+        )
+
+        SWITCHES.ai_enabled = checked
+        ai_button.setText("ИИ" if checked else "Локально")
+        try:
+            store_path = user_data_dir() / "provider_profiles.json"
+            store = load_profile_store(store_path, legacy_profile={})
+            active = get_active_provider_profile(store)
+            active["enabled"] = checked
+            save_profile_store(store_path, store)
+        except (OSError, ValueError, KeyError) as exc:  # pragma: no cover - disk issues
+            logging.warning("AI toggle could not be persisted: %s", exc)
+        if checked and assistant is None:
+            show_chat_message(
+                "assistant",
+                "ИИ включён, но провайдер не настроен. Открой «Настройки» → «Модель» "
+                "и укажи адрес и модель.",
+            )
+
+    ai_button.toggled.connect(on_ai_toggled)
+    header_row.addWidget(ai_button)
+
     clear_button = QPushButton()
     clear_button.setIcon(trash_icon())
     clear_button.setObjectName("ghostButton")

@@ -686,6 +686,23 @@ QWidget#chatTranscriptBody {
     background: transparent;
 }
 /* ---------- Scenarios studio: cards instead of default form boxes ---------- */
+QPushButton#aiToggle {
+    background: STATE_HOVER;
+    border: 1px solid GLASS_BORDER;
+    border-radius: 17px;
+    color: TEXT_MUTED;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 0 10px;
+}
+QPushButton#aiToggle:checked {
+    background: ACCENT_SOLID;
+    border: 1px solid ACCENT_SOLID;
+    color: #1B1B19;
+}
+QPushButton#aiToggle:hover {
+    border: 1px solid ACCENT_SOLID;
+}
 QLabel#pageTitle {
     color: TEXT_PRIMARY;
     font-size: 22px;
