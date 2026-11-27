@@ -885,8 +885,16 @@ def main() -> int:
     capabilities_toggle.clicked.connect(toggle_capabilities)
     capabilities_toggle.setVisible(False)  # единственный вход в навыки — кнопка в топ-баре
 
+    # Everything below the header lives in one centred column: messages, the
+    # composer and the hint chips share the same width.
+    chat_column = QWidget()
+    chat_column.setObjectName("chatColumn")
+    chat_column.setMaximumWidth(CHAT_COLUMN_WIDTH)
+    chat_column_layout = QVBoxLayout(chat_column)
+    chat_column_layout.setContentsMargins(0, 0, 0, 0)
+    chat_column_layout.setSpacing(12)
     transcript = ChatTranscript()
-    home_layout.addWidget(transcript, 1)
+    chat_column_layout.addWidget(transcript, 1)
     toast = Toast(home_page)
 
     def show_chat_message(role: str, message: str) -> None:
@@ -1056,7 +1064,7 @@ def main() -> int:
     profile_footer.addWidget(profile_apply_button)
     profile_layout.addLayout(profile_footer)
 
-    home_layout.addWidget(profile_panel)
+    chat_column_layout.addWidget(profile_panel)
     profile_panel.setMaximumHeight(0)
     profile_toggle_open = {"state": False}
     profile_panel.setVisible(False)
@@ -1098,18 +1106,7 @@ def main() -> int:
     controls.addWidget(mute_speech_button)
     controls.addWidget(voice_button)
     controls.addWidget(send_button)
-    # Композер живёт в той же 900-пиксельной колонке, что и сообщения.
-    controls_host = QWidget()
-    controls_host_layout = QHBoxLayout(controls_host)
-    controls_host_layout.setContentsMargins(0, 0, 0, 0)
-    controls_host_layout.setSpacing(0)
-    controls_host_layout.addStretch(1)
-    controls_core = QWidget()
-    controls_core.setMaximumWidth(CHAT_COLUMN_WIDTH)
-    controls_core.setLayout(controls)
-    controls_host_layout.addWidget(controls_core, 1)
-    controls_host_layout.addStretch(1)
-    home_layout.addWidget(controls_host)
+    chat_column_layout.addLayout(controls)
 
     def stop_speech_playback() -> None:
         stopped = False
@@ -1151,31 +1148,10 @@ def main() -> int:
         )
         quick_commands_row.addWidget(quick_button)
     quick_commands_row.addStretch(1)
-    quick_host = QWidget()
-    quick_host_layout = QHBoxLayout(quick_host)
-    quick_host_layout.setContentsMargins(0, 0, 0, 0)
-    quick_host_layout.setSpacing(0)
-    quick_host_layout.addStretch(1)
-    quick_container.setMaximumWidth(CHAT_COLUMN_WIDTH)
-    quick_host_layout.addWidget(quick_container, 1)
-    quick_host_layout.addStretch(1)
-    home_layout.addWidget(quick_host)
+    chat_column_layout.addWidget(quick_container)
+    home_layout.addWidget(chat_column, 1)
+    home_layout.setAlignment(chat_column, Qt.AlignmentFlag.AlignHCenter)
 
-    def sync_chat_column() -> None:
-        """Composer and hint chips follow the message column width."""
-        width = max(320, min(CHAT_COLUMN_WIDTH, home_page.width() - 56))
-        controls_core.setFixedWidth(width)
-        quick_container.setFixedWidth(width)
-
-    class _ChatColumnSyncer(QObject):
-        def eventFilter(self, watched, event):  # noqa: N802 (Qt naming)
-            if event.type() == QEvent.Type.Resize:
-                sync_chat_column()
-            return False
-
-    chat_column_syncer = _ChatColumnSyncer(window)
-    window.installEventFilter(chat_column_syncer)
-    sync_chat_column()
 
     endpoint_defaults = {
         "lm-studio": "http://127.0.0.1:1234/v1",
