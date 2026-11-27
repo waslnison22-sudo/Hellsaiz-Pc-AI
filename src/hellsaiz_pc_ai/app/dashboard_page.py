@@ -606,29 +606,8 @@ class DashboardPage(QWidget):
         self._media_cover.setPixmap(canvas)
 
     def _refresh_now_playing(self) -> None:
-        """Read the Windows media session; fall back to the player window title."""
+        """Cheap, non-blocking fallback: the Yandex Music window title."""
         if not hasattr(self, "_media_track"):
-            return
-        session = None
-        try:
-            session = media_session()
-        except Exception:  # noqa: BLE001 - the player probe must never break the page
-            logging.debug("Media session probe failed", exc_info=True)
-        if session is not None and session.has_track:
-            for button in (
-                self._media_back_button,
-                self._media_play_button,
-                self._media_next_button,
-            ):
-                button.setEnabled(True)
-            self._media_track.setText(session.display_line())
-            source = "Яндекс Музыка" if "yandex" in session.app.casefold() else session.app
-            self._media_artist.setText(f"{source} · {session.status}")
-            self._player_state.setText(session.status)
-            self._set_cover(session.artwork, True)
-            self._media_playing = session.status == "играет"
-            icon = media_pause_icon() if self._media_playing else media_play_icon()
-            self._media_play_button.setIcon(icon)
             return
         try:
             playing = now_playing()
@@ -637,9 +616,7 @@ class DashboardPage(QWidget):
             playing = None
         if playing is None or not playing.has_track:
             self._media_track.setText("Яндекс Музыка не запущена")
-            self._media_artist.setText(
-                "Нажми «Открыть» — карточка подхватит трек"
-            )
+            self._media_artist.setText("Нажми «Открыть» — карточка подхватит трек")
             self._player_state.setText("")
             self._set_cover(b"", False)
             self._media_open_button.setEnabled(True)
@@ -1080,7 +1057,7 @@ class DashboardPage(QWidget):
             self._refresh_metrics()
             self._metrics_timer.start()
         self._start_player_watch()
-        self._ensure_media_thread()
+        QTimer.singleShot(2500, self._ensure_media_thread)
 
     def hideEvent(self, event: Any) -> None:  # noqa: N802 (Qt naming)
         super().hideEvent(event)

@@ -83,8 +83,15 @@ def test_player_card_shows_a_running_track(monkeypatch):
         ),
     )
     page = DashboardPage(reminder_store=_FakeReminderStore())
+    session = MediaSession(
+        app="ru.yandex.desktop.music",
+        title="Creep",
+        artist="Radiohead",
+        album="Pablo Honey",
+        status="играет",
+    )
 
-    page._refresh_now_playing()
+    page._apply_media_session(session)
 
     assert page._media_track.text() == "Radiohead — Creep"
     assert page._media_next_button.isEnabled() is True
