@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import os
 import re
 import tomllib
@@ -92,8 +94,16 @@ def load_settings(path: Path | None = None) -> Settings:
     config_path = path or (user_data_dir() / "config.toml")
     data: dict[str, Any] = {}
     if config_path.is_file():
-        with config_path.open("rb") as stream:
-            data = tomllib.load(stream)
+        # A truncated or hand-edited config must not block startup: fall back to
+        # the built-in defaults and keep the reason in the log.
+        try:
+            with config_path.open("rb") as stream:
+                parsed = tomllib.load(stream)
+        except (OSError, tomllib.TOMLDecodeError) as exc:
+            logging.warning("config.toml could not be read (%s); using defaults", exc)
+            parsed = {}
+        if isinstance(parsed, dict):
+            data = parsed
 
     app = _table(data, "app")
     assistant_data = _table(data, "assistant")
