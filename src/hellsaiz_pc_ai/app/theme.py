@@ -686,6 +686,40 @@ QWidget#chatTranscriptBody {
     background: transparent;
 }
 /* ---------- Scenarios studio: cards instead of default form boxes ---------- */
+QWidget#windowTitleBar {
+    background: #101113;
+    border: 0;
+}
+QLabel#windowTitleBarLabel {
+    color: TEXT_MUTED;
+    font-size: 12px;
+    font-weight: 600;
+}
+QPushButton#windowMinButton, QPushButton#windowMaxButton {
+    background: transparent;
+    border: 0;
+    border-radius: 8px;
+    color: TEXT_MUTED;
+    font-size: 14px;
+}
+QPushButton#windowMinButton:hover, QPushButton#windowMaxButton:hover {
+    background: STATE_HOVER;
+    color: TEXT_PRIMARY;
+}
+QPushButton#windowCloseButton {
+    background: transparent;
+    border: 0;
+    border-radius: 8px;
+    color: TEXT_MUTED;
+    font-size: 13px;
+}
+QPushButton#windowCloseButton:hover {
+    background: #C0392B;
+    color: #FFFFFF;
+}
+QWidget#windowEdgeResizer {
+    background: transparent;
+}
 QPushButton#aiToggle {
     background: STATE_HOVER;
     border: 1px solid GLASS_BORDER;

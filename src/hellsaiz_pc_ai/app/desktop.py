@@ -553,6 +553,9 @@ def main() -> int:
 
     window = QMainWindow()
     window.setWindowTitle(settings.app_name)
+    from hellsaiz_pc_ai.app.window_chrome import install_frameless
+
+    window_title_bar = install_frameless(window)
     window.setWindowIcon(window_icon)
 
     # Companion (phase 1): one controller, one translucent overlay, one bridge.
@@ -3997,6 +4000,7 @@ def main() -> int:
     clock_timer.timeout.connect(refresh_clock)
     clock_timer.start(30000)
 
+    shell_layout.addWidget(window_title_bar)
     shell_layout.addWidget(top_bar)
 
     content_frame = QFrame()
