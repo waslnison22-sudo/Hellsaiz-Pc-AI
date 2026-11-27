@@ -58,8 +58,10 @@ def test_build_bundles_the_icon_assets():
     """PyInstaller must ship assets/, and the loader must find it when frozen."""
     from pathlib import Path
 
-    pytest.importorskip("PySide6.QtSvg")
-    from hellsaiz_pc_ai.app import icons as icons_module
+    try:  # Qt is present in the wheel but may fail to load without libEGL.
+        from hellsaiz_pc_ai.app import icons as icons_module
+    except ImportError as exc:  # pragma: no cover - runner-specific
+        pytest.skip(f"PySide6 native libraries unavailable: {exc}")
 
     source = Path(icons_module.__file__).read_text(encoding="utf-8")
     script = (
