@@ -61,10 +61,11 @@ def test_theme_carries_knice_chat_tokens():
     assistant_text = stylesheet.rsplit("QLabel#chatTextAssistant {", 1)[1].split("}", 1)[0]
 
     assert "border-radius: 16px" in user_block
-    assert "border-bottom-right-radius: 8px" in user_block
+    assert "border-bottom-right-radius" not in user_block
     assert "border-radius: 16px" in assistant_block
-    assert "border-top-left-radius: 8px" in assistant_block
-    assert "border-top: 1px solid rgba(255, 255, 255, 14)" in assistant_block
+    assert "border-top-left-radius" not in assistant_block
+    # Wave 9E: the assistant bubble has no hand-made hairline border.
+    assert "border-top:" not in assistant_block
     assert "border-radius: 16px" in composer_block
     assert "padding: 10px 16px" in composer_block
     assert "font-size: 16px" in user_text

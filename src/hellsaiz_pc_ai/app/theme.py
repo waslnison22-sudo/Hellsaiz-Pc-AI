@@ -35,6 +35,31 @@ GRID_BREAKPOINTS = ((900, 1), (1400, 2), (10**9, 3))
 TEXT_MUTED = "#A6A29C"
 TEXT_PRIMARY = "#F2EFEA"
 
+# Wave 9E tokens: surfaces, states, radii and the chat bubble contract.
+SURFACE_RAISED = "#2A2B30"
+SURFACE_INPUT = "#1C1C1A"
+STATE_HOVER = "#1F1F1D"
+STATE_PRESSED = "#121211"
+STATE_DISABLED = "#131312"
+STATUS_OK = "#7dd487"
+STATUS_WARN = "#f5c04a"
+STATUS_ERROR = "#ff7b72"
+TAB_BG = "#141413"
+TAB_ACTIVE = "#E8C29E"
+RADIUS_CARD = "22px"
+RADIUS_INPUT = "16px"
+RADIUS_CHIP = "16px"
+CHAT_BUBBLE_RADIUS = "16px"
+CHAT_BUBBLE_USER_BG = "#E8C29E"
+CHAT_BUBBLE_ASSISTANT_BG = DASHBOARD_SURFACE
+CHAT_BUBBLE_SYSTEM_BG = DASHBOARD_BACKDROP
+SPACING = (4, 8, 12, 16, 24)
+FONT_CAPTION = "12px"
+FONT_BODY = "13px"
+FONT_EMPHASIS = "15px"
+FONT_PAGE_TITLE = "19px"
+FONT_SCREEN_TITLE = "22px"
+
 GLASS_QSS = f"""
 /* --- frosted glass surfaces (wave 7) ------------------------------- */
 QFrame#glassPanel, QWidget#glassPanel,
@@ -203,8 +228,13 @@ QLabel#lastReplyTime {{
 """
 
 DARK_STYLESHEET = """
-QMainWindow, QWidget {
+QMainWindow {
     background: #0B0B0B;
+}
+/* Containers must not paint their own near-black fill: the window owns the
+   backdrop, rounded cards and panels own their surfaces. */
+QWidget {
+    background: transparent;
     color: #F2EFEA;
     font-family: "Segoe UI";
 }
@@ -584,7 +614,7 @@ QLabel#weatherForecast {
     font-size: 13px;
 }
 QLineEdit#weatherCityEdit {
-    background: #171716;
+    background: SURFACE_INPUT;
     color: #F2EFEA;
     border: 0;
     border-radius: 10px;
@@ -641,20 +671,17 @@ QWidget#chatQuickCommandsBody {
     background: transparent;
 }
 QFrame#chatBubbleUser {
-    background: #E8C29E;
+    background: CHAT_BUBBLE_USER_BG;
     border: 0;
-    border-radius: 16px;
-    border-bottom-right-radius: 8px;
+    border-radius: CHAT_BUBBLE_RADIUS;
 }
 QFrame#chatBubbleAssistant {
-    background: #171716;
+    background: CHAT_BUBBLE_ASSISTANT_BG;
     border: 0;
-    border-top: 1px solid rgba(255, 255, 255, 14);
-    border-radius: 16px;
-    border-top-left-radius: 8px;
+    border-radius: CHAT_BUBBLE_RADIUS;
 }
 QFrame#chatBubbleSystem {
-    background: #101010;
+    background: CHAT_BUBBLE_SYSTEM_BG;
     border: 0;
     border-radius: 12px;
 }
@@ -826,4 +853,14 @@ QPushButton#cardIconButton:hover {
 
 def build_dark_stylesheet() -> str:
     """Return the dark accent-glass theme with visible keyboard focus states."""
-    return DARK_STYLESHEET + GLASS_QSS
+    sheet = DARK_STYLESHEET + GLASS_QSS
+    # DARK_STYLESHEET is a plain (non f-) string: resolve the design tokens here.
+    for name in (
+        "CHAT_BUBBLE_USER_BG",
+        "CHAT_BUBBLE_ASSISTANT_BG",
+        "CHAT_BUBBLE_SYSTEM_BG",
+        "CHAT_BUBBLE_RADIUS",
+        "SURFACE_INPUT",
+    ):
+        sheet = sheet.replace(name, str(globals()[name]))
+    return sheet

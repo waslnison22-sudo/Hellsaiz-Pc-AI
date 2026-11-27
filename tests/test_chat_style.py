@@ -79,8 +79,9 @@ def test_theme_defines_chat_tokens_and_colours():
 
     assert "font-size: 16px" in stylesheet
     assert "font-size: 12px" in stylesheet
-    assert "border-bottom-right-radius: 8px" in stylesheet
-    assert "border-top-left-radius: 8px" in stylesheet
+    # Wave 9E: uniform 16 px radius on every bubble corner (tail removed).
+    assert "border-bottom-right-radius" not in stylesheet
+    assert "border-top-left-radius" not in stylesheet
     assert "#E8C29E" in stylesheet
 
 
