@@ -38,6 +38,7 @@ from hellsaiz_pc_ai.tools.public_info import (
 )
 
 from hellsaiz_pc_ai.app.theme import (
+    ACCENT_SOLID,
     CARD_PADDING,
     DASHBOARD_MARGIN_BOTTOM,
     DASHBOARD_MARGIN_SIDE,
@@ -46,6 +47,7 @@ from hellsaiz_pc_ai.app.theme import (
     GRID_GAP,
     TEXT_MUTED,
 )
+from hellsaiz_pc_ai.app.icons import load_icon
 from hellsaiz_pc_ai.app.ui_icons import (
     media_back_icon,
     media_next_icon,
@@ -61,6 +63,7 @@ from hellsaiz_pc_ai.app.weather_cache import (
     updated_label,
 )
 from hellsaiz_pc_ai.app.ui_fx import reduce_motion as _reduce_motion
+from hellsaiz_pc_ai.app.yandex_music import focus_player, now_playing
 from hellsaiz_pc_ai.app.weather_icon import WeatherIconWidget, map_weather_icon
 from hellsaiz_pc_ai.app.dashboard_texts import (
     greeting_for_hour,
@@ -166,10 +169,10 @@ class DashboardPage(QWidget):
     """Astra-style home hub: weather, media, reminders, quick commands, system."""
 
     QUICK_COMMANDS = (
-        ("Что я умею", "что я умею"),
-        ("Погода", "погода"),
-        ("Открой блокнот", "открой блокнот"),
-        ("Напомни", "напомни в "),
+        ("Что я умею", "что я умею", "sparkles"),
+        ("Погода", "погода", "globe"),
+        ("Открой блокнот", "открой блокнот", "house"),
+        ("Напомни", "напомни в ", "bell"),
     )
     MEDIA_COMMANDS = {
         "back": "музыка назад",
@@ -378,10 +381,7 @@ class DashboardPage(QWidget):
         # «Погода · Ставрополь»: the city lives on its own line, never glued to
         # the card title.
         city_row = QHBoxLayout()
-        city_row.setSpacing(6)
-        city_dot = QLabel("·")
-        city_dot.setObjectName("weatherCityDot")
-        city_row.addWidget(city_dot)
+        city_row.setSpacing(0)
         city_row.addWidget(city_stack)
         city_row.addStretch(1)
         weather_card.layout().addLayout(city_row)
@@ -432,7 +432,14 @@ class DashboardPage(QWidget):
         logging.info("DashboardPage ctor: weather card done.")
 
     def eventFilter(self, watched: Any, event: Any) -> bool:  # noqa: N802
-        """Hide the inline city editor on Escape or losing focus."""
+        """Hide the inline city editor on Escape, clear the quick input on Escape."""
+        if watched is getattr(self, "_quick_input", None):
+            if (
+                event.type() == QEvent.Type.KeyPress
+                and event.key() == Qt.Key_Escape
+            ):
+                self._quick_input.clear()
+                return True
         if watched is self._city_edit:
             event_type = event.type()
             if event_type == QEvent.Type.KeyPress and event.key() == Qt.Key_Escape:
@@ -479,34 +486,104 @@ class DashboardPage(QWidget):
         title_row.setSpacing(6)
         title_row.addWidget(self._title_label("Музыка"))
         title_row.addStretch(1)
+        self._player_state = QLabel("")
+        self._player_state.setObjectName("mediaState")
+        title_row.addWidget(self._player_state)
         media_card.layout().addLayout(title_row)
 
-        note = QLabel("Медиа-клавиши Windows: играет или пауза")
-        note.setObjectName("dashboardCardNote")
-        note.setWordWrap(True)
-        media_card.layout().addWidget(note)
-
-        self._media_state = QLabel("Состояние: пауза")
-        self._media_state.setObjectName("mediaState")
-        media_card.layout().addWidget(self._media_state)
+        self._media_track = QLabel("Яндекс Музыка не запущена")
+        self._media_track.setObjectName("mediaTrack")
+        self._media_track.setWordWrap(True)
+        media_card.layout().addWidget(self._media_track)
+        self._media_artist = QLabel("Открой приложение — карточка покажет текущий трек")
+        self._media_artist.setObjectName("mediaArtist")
+        self._media_artist.setWordWrap(True)
+        media_card.layout().addWidget(self._media_artist)
 
         controls_row = QHBoxLayout()
-        controls_row.setSpacing(10)
-        back_button = self._icon_button("mediaButton", media_back_icon(), "Предыдущий трек")
-        back_button.clicked.connect(lambda: self._send_media_command("back"))
-        controls_row.addWidget(back_button)
+        controls_row.setSpacing(8)
+        self._media_back_button = self._icon_button(
+            "mediaButton", media_back_icon(), "Предыдущий трек"
+        )
+        self._media_back_button.clicked.connect(lambda: self._send_media_command("back"))
+        controls_row.addWidget(self._media_back_button)
         self._media_play_button = self._icon_button(
-            "mediaButton", media_play_icon(), "Воспроизвести или поставить на паузу"
+            "mediaButton", media_play_icon(), "Играть или пауза"
         )
         self._media_play_button.clicked.connect(self._toggle_media)
         controls_row.addWidget(self._media_play_button)
-        next_button = self._icon_button("mediaButton", media_next_icon(), "Следующий трек")
-        next_button.clicked.connect(lambda: self._send_media_command("next"))
-        controls_row.addWidget(next_button)
+        self._media_next_button = self._icon_button(
+            "mediaButton", media_next_icon(), "Следующий трек"
+        )
+        self._media_next_button.clicked.connect(lambda: self._send_media_command("next"))
+        controls_row.addWidget(self._media_next_button)
         controls_row.addStretch(1)
+        self._media_open_button = QPushButton("Открыть")
+        self._media_open_button.setObjectName("secondaryButton")
+        self._media_open_button.setToolTip("Показать окно Яндекс Музыки")
+        self._media_open_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._media_open_button.clicked.connect(self._open_player)
+        controls_row.addWidget(self._media_open_button)
         media_card.layout().addLayout(controls_row)
         media_card.layout().addStretch(1)
+
+        self._player_timer = QTimer(self)
+        self._player_timer.setInterval(2000)
+        self._player_timer.timeout.connect(self._refresh_now_playing)
         logging.info("DashboardPage ctor: media card done.")
+
+    def _refresh_now_playing(self) -> None:
+        """Read the Yandex Music window title and update the player card."""
+        if not hasattr(self, "_media_track"):
+            return
+        try:
+            playing = now_playing()
+        except Exception:  # noqa: BLE001 - the player probe must never break the page
+            logging.debug("Now playing probe failed", exc_info=True)
+            playing = None
+        if playing is None or not playing.has_track:
+            self._media_track.setText("Яндекс Музыка не запущена")
+            self._media_artist.setText(
+                "Открой приложение — карточка покажет текущий трек"
+            )
+            self._player_state.setText("")
+            self._media_open_button.setEnabled(True)
+            for button in (
+                self._media_back_button,
+                self._media_play_button,
+                self._media_next_button,
+            ):
+                button.setEnabled(False)
+            return
+        for button in (
+            self._media_back_button,
+            self._media_play_button,
+            self._media_next_button,
+        ):
+            button.setEnabled(True)
+        self._media_track.setText(playing.display_line())
+        self._media_artist.setText("Яндекс Музыка · системные медиа-клавиши")
+        self._player_state.setText(
+            "играет" if getattr(self, "_media_playing", False) else "пауза"
+        )
+
+    def _open_player(self) -> None:
+        if focus_player():
+            self._player_state.setText("окно открыто")
+            return
+        self._media_track.setText("Яндекс Музыка не найдена")
+        self._media_artist.setText(
+            "Запусти приложение «Яндекс Музыка» — карточка подхватит трек"
+        )
+
+    def _start_player_watch(self) -> None:
+        self._refresh_now_playing()
+        if not self._player_timer.isActive():
+            self._player_timer.start()
+
+    def _stop_player_watch(self) -> None:
+        if getattr(self, "_player_timer", None) is not None and self._player_timer.isActive():
+            self._player_timer.stop()
 
     def _send_media_command(self, action: str) -> None:
         self._on_send(self.MEDIA_COMMANDS.get(action, self.MEDIA_COMMANDS["toggle"]))
@@ -542,6 +619,7 @@ class DashboardPage(QWidget):
         self._quick_input.setObjectName("quickCommandInput")
         self._quick_input.setPlaceholderText("Спросить Hellsaiz…")
         self._quick_input.returnPressed.connect(self._send_quick_command)
+        self._quick_input.installEventFilter(self)
         capsule_row.addWidget(self._quick_input, 1)
         send_button = self._icon_button("mediaButton", send_light_icon(), "Отправить в чат")
         send_button.clicked.connect(self._send_quick_command)
@@ -550,16 +628,21 @@ class DashboardPage(QWidget):
 
         chips_row = QHBoxLayout()
         chips_row.setSpacing(8)
-        for label, command in self.QUICK_COMMANDS:
+        for label, command, icon_name in self.QUICK_COMMANDS:
             chip = QToolButton()
             chip.setObjectName("quickChip")
             chip.setText(label)
+            chip.setIcon(load_icon(icon_name, ACCENT_SOLID))
+            chip.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
             chip.setFocusPolicy(Qt.FocusPolicy.NoFocus)
             chip.setCursor(Qt.CursorShape.PointingHandCursor)
             chip.clicked.connect(lambda _checked=False, cmd=command: self._use_quick_chip(cmd))
             chips_row.addWidget(chip)
         chips_row.addStretch(1)
         card.layout().addLayout(chips_row)
+        hint = QLabel("Enter — отправить, Esc — сбросить")
+        hint.setObjectName("dashboardCardNote")
+        card.layout().addWidget(hint)
         card.layout().addStretch(1)
         logging.info("DashboardPage ctor: quick commands card done.")
 
@@ -849,8 +932,10 @@ class DashboardPage(QWidget):
         if not self._metrics_timer.isActive():
             self._refresh_metrics()
             self._metrics_timer.start()
+        self._start_player_watch()
 
     def hideEvent(self, event: Any) -> None:  # noqa: N802 (Qt naming)
         super().hideEvent(event)
         if self._metrics_timer.isActive():
             self._metrics_timer.stop()
+        self._stop_player_watch()

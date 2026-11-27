@@ -26,7 +26,7 @@ CARD_SHADOW_ALPHA = 120
 
 # Wave-8 dashboard geometry: one gap for the grid, one padding for cards and
 # margins that leave room for the card shadow (it must not be clipped).
-GRID_GAP = 14
+GRID_GAP = 20
 CARD_PADDING = 18
 DASHBOARD_MARGIN_TOP = 36
 DASHBOARD_MARGIN_SIDE = 28
@@ -50,7 +50,8 @@ RADIUS_CARD = "22px"
 RADIUS_INPUT = "16px"
 RADIUS_CHIP = "16px"
 CHAT_BUBBLE_RADIUS = "16px"
-CHAT_BUBBLE_USER_BG = "#E8C29E"
+ACCENT_SOLID = "#E8C29E"
+CHAT_BUBBLE_USER_BG = ACCENT_SOLID
 CHAT_BUBBLE_ASSISTANT_BG = DASHBOARD_SURFACE
 CHAT_BUBBLE_SYSTEM_BG = DASHBOARD_BACKDROP
 SPACING = (4, 8, 12, 16, 24)
@@ -141,6 +142,15 @@ QLabel#weatherCityDot {{
     color: {TEXT_MUTED};
     font-size: 14px;
     padding: 6px 0 0 2px;
+}}
+QLabel#mediaTrack {{
+    color: {TEXT_PRIMARY};
+    font-size: 15px;
+    font-weight: 600;
+}}
+QLabel#mediaArtist {{
+    color: {TEXT_MUTED};
+    font-size: 12px;
 }}
 QLabel#mediaState {{
     color: {TEXT_MUTED};
