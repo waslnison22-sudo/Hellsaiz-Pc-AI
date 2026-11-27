@@ -106,7 +106,7 @@ QFrame#dashboardCard {{
 }}
 QLabel#weatherTemperature {{
     font-family: "Consolas", "Courier New", monospace;
-    font-size: 38px;
+    font-size: 34px;
     font-weight: 800;
     padding: 2px 0;
 }}

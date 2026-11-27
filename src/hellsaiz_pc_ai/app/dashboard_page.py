@@ -386,11 +386,11 @@ class DashboardPage(QWidget):
         weather_top_row.setSpacing(12)
         weather_icon = WeatherIconWidget(size=52)
         weather_icon.setObjectName("weatherIcon")
-        weather_top_row.addWidget(weather_icon, 0, Qt.AlignmentFlag.AlignTop)
+        weather_top_row.addWidget(weather_icon, 0, Qt.AlignmentFlag.AlignVCenter)
         weather_value = QLabel("—")
         weather_value.setObjectName("weatherTemperature")
         weather_value.setMinimumWidth(120)
-        weather_value.setFixedHeight(64)
+        weather_value.setFixedHeight(56)
         weather_value.setAlignment(
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
         )
@@ -409,6 +409,7 @@ class DashboardPage(QWidget):
         weather_note = QLabel("")
         weather_note.setObjectName("dashboardCardNote")
         weather_note.setWordWrap(True)
+        weather_note.setMinimumHeight(20)
         weather_card.layout().addWidget(weather_note)
         self._weather_note = weather_note
         self._weather_card = weather_card
