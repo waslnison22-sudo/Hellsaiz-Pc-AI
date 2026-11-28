@@ -731,7 +731,7 @@ class DashboardPage(QWidget):
             self._media_artist.setText("Нажми «Открыть» — карточка подхватит трек")
             self._player_state.setText("")
             self._set_cover(b"", False)
-                for button in (
+            for button in (
                 self._media_back_button,
                 self._media_play_button,
                 self._media_next_button,
@@ -781,6 +781,16 @@ class DashboardPage(QWidget):
         thread.stop()
         thread.wait(3000)
         self._media_thread = None
+
+    GENERIC_TITLES = ("яндекс музыка", "собираю музыку", "yandex music", "реклама")
+
+    @classmethod
+    def _is_meaningful(cls, session: object) -> bool:
+        """Ignore service titles (app name, radio ads) so the track never flickers."""
+        title = str(getattr(session, "title", "") or "").strip().casefold()
+        if not title or title in cls.GENERIC_TITLES:
+            return False
+        return getattr(session, "has_track", False)
 
     def _apply_media_session(self, session: object) -> None:
         """Update the player card from a session snapshot (no blocking IO).
