@@ -98,11 +98,11 @@ def inspect_package(archive_path: Path) -> PackagePlan:
                         f"В архиве есть недопустимый файл: {path.name}. "
                         "Разрешены только PNG и необязательный model.json."
                     )
-                if len(path.parts) > 1:
-                    roots.add(path.parts[0])
-                else:
-                    roots.add("")
                 target = path.name.casefold()
+                if suffix == ".png" or target == "model.json":
+                    # Only payload files define the package root; a stray
+                    # README next to the folder must not reject the pack.
+                    roots.add(path.parts[0] if len(path.parts) > 1 else "")
                 if suffix == ".png":
                     if target in FRAME_NAMES:
                         frames[target] = path.as_posix()

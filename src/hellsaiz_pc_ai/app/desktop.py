@@ -68,6 +68,8 @@ from hellsaiz_pc_ai.app.ui_icons import (
     trash_icon,
 )
 from hellsaiz_pc_ai.app.theme import build_dark_stylesheet
+from hellsaiz_pc_ai.app import persona as _persona_module
+from hellsaiz_pc_ai.app import persona_runtime
 from hellsaiz_pc_ai.app.file_access import (
     FileAccessSettings,
     load_file_access_settings,
@@ -263,7 +265,7 @@ def build_runtime(settings: Settings):
                         timeout_seconds=settings.llm.timeout_seconds,
                     )
                     assistant = AssistantOrchestrator(
-                        provider, registry, settings.llm.system_prompt, settings.llm.max_tool_rounds
+                        provider, registry, persona_runtime.current_system_prompt(settings), settings.llm.max_tool_rounds
                     )
             elif provider_type == "deepseek":
                 profile_name = str(profile_data.get("name") or "DeepSeek")
@@ -279,7 +281,7 @@ def build_runtime(settings: Settings):
                     profile_model,
                 )
                 assistant = AssistantOrchestrator(
-                    provider, registry, settings.llm.system_prompt, settings.llm.max_tool_rounds
+                    provider, registry, persona_runtime.current_system_prompt(settings), settings.llm.max_tool_rounds
                 )
             else:
                 provider = OpenAICompatibleProvider(
@@ -290,7 +292,7 @@ def build_runtime(settings: Settings):
                     settings.allow_remote_llm,
                 )
                 assistant = AssistantOrchestrator(
-                    provider, registry, settings.llm.system_prompt, settings.llm.max_tool_rounds
+                    provider, registry, persona_runtime.current_system_prompt(settings), settings.llm.max_tool_rounds
                 )
         except (ProviderError, DeepSeekError, SecureStoreError, ValueError) as exc:
             logging.warning("The active AI profile could not be initialized: %s", exc)
@@ -1522,7 +1524,7 @@ def main() -> int:
                         settings.allow_remote_llm,
                     )
                 new_assistant = AssistantOrchestrator(
-                    provider, registry, settings.llm.system_prompt, settings.llm.max_tool_rounds
+                    provider, registry, persona_runtime.current_system_prompt(settings), settings.llm.max_tool_rounds
                 )
                 new_assistant.history = store.recent_messages()
             except Exception as exc:
@@ -2485,6 +2487,36 @@ def main() -> int:
 
     companion_toggle.toggled.connect(on_companion_toggled)
     appearance_tab_layout.addWidget(companion_toggle)
+
+    persona_button = QPushButton("Персона ассистента")
+    persona_button.setObjectName("secondaryButton")
+    persona_button.setToolTip("Имя, характер, стиль ответов, голос и модель компаньона")
+
+    def open_persona_dialog() -> None:
+        from hellsaiz_pc_ai.app.persona_dialog import PersonaDialog
+        from hellsaiz_pc_ai.companion.pngtuber import list_installed_models
+
+        store_path = persona_runtime.persona_path(settings)
+        personas, active_id = _persona_module.load_personas(store_path)
+        current = next(
+            (item for item in personas if item.persona_id == active_id),
+            personas[0] if personas else _persona_module.default_persona(),
+        )
+        dialog = PersonaDialog(
+            window,
+            persona=current,
+            personas=personas,
+            models=list_installed_models(persona_runtime.companion_models_dir(settings)),
+            voices=[],
+        )
+        if dialog.exec():
+            saved = dialog.save(store_path)
+            _write_active_model(saved.model_slug)
+            _load_companion_model(saved.model_slug)
+            show_chat_message("assistant", f"Персона «{saved.name}» сохранена.")
+
+    persona_button.clicked.connect(open_persona_dialog)
+    appearance_tab_layout.addWidget(persona_button)
     appearance_tab_layout.addWidget(companion_model_combo)
     appearance_tab_layout.addWidget(import_button)
 
