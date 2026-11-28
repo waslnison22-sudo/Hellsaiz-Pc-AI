@@ -341,6 +341,7 @@ def main() -> int:
             QPixmap,
         )
         from PySide6.QtWidgets import (
+    QSlider,
             QApplication,
             QButtonGroup,
             QCheckBox,
@@ -2487,6 +2488,26 @@ def main() -> int:
 
     companion_toggle.toggled.connect(on_companion_toggled)
     appearance_tab_layout.addWidget(companion_toggle)
+
+    companion_scale_label = QLabel("Размер компаньона: 100%")
+    companion_scale_label.setObjectName("secondaryText")
+    companion_scale = QSlider(Qt.Orientation.Horizontal)
+    companion_scale.setObjectName("companionScale")
+    companion_scale.setMinimum(60)
+    companion_scale.setMaximum(200)
+    companion_scale.setSingleStep(10)
+    companion_scale.setPageStep(20)
+    companion_scale.setValue(int(round(companion_overlay._scale * 100)))
+    companion_scale.setToolTip("Масштаб персонажа на рабочем столе (60–200%)")
+
+    def on_companion_scale(value: int) -> None:
+        companion_scale_label.setText(f"Размер компаньона: {value}%")
+        companion_overlay.set_scale_pct(value)
+        profile_data["companion_scale_pct"] = value
+
+    companion_scale.valueChanged.connect(on_companion_scale)
+    appearance_tab_layout.addWidget(companion_scale_label)
+    appearance_tab_layout.addWidget(companion_scale)
 
     persona_button = QPushButton("Персона ассистента")
     persona_button.setObjectName("secondaryButton")

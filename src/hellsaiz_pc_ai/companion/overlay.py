@@ -302,6 +302,12 @@ class CompanionOverlay(QWidget):
         menu.exec(event.globalPos())
         event.accept()
 
+    def set_scale_pct(self, percent: float) -> None:
+        """Public: resize the companion from settings and persist the scale."""
+        scale = max(self.MIN_SCALE, min(self.MAX_SCALE, float(percent) / 100.0))
+        self._apply_scale(scale)
+        self.save_state()
+
     def _apply_scale(self, scale: float) -> None:
         clamped = min(self.MAX_SCALE, max(self.MIN_SCALE, scale))
         if clamped == self._scale:

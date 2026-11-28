@@ -366,3 +366,83 @@ def media_session() -> MediaSession | None:
     if os.name != "nt":
         return None
     return _session_snapshot()
+
+
+# ---------------------------------------------------------------- controls
+
+CONTROL_METHODS = {
+    "toggle": "try_toggle_play_pause_async",
+    "back": "try_skip_previous_async",
+    "next": "try_skip_next_async",
+}
+
+
+def _control_sync(action: str) -> bool:
+    try:
+        import asyncio
+
+        from winrt.windows.media.control import (
+            GlobalSystemMediaTransportControlsSessionManager as Manager,
+        )
+    except ImportError:
+        return False
+
+    async def run() -> bool:
+        manager = await Manager.request_async()
+        session = manager.get_current_session()
+        if session is None:
+            return False
+        method_name = CONTROL_METHODS.get(action)
+        if method_name is None:
+            return False
+        method = getattr(session, method_name, None)
+        if method is None:
+            return False
+        return bool(await method())
+
+    init = uninit = None
+    try:
+        from winrt import init_apartment, uninit_apartment
+
+        init, uninit = init_apartment, uninit_apartment
+    except ImportError:
+        pass
+    try:
+        if init is not None:
+            init()
+        return asyncio.run(run())
+    except Exception:  # noqa: BLE001 - controls must never raise into the UI
+        logging.debug("Media control failed", exc_info=True)
+        return False
+    finally:
+        if uninit is not None:
+            try:
+                uninit()
+            except Exception:  # noqa: BLE001
+                pass
+
+
+def control_playback(action: str) -> bool:
+    """Toggle/skip through the system media session; False when unsupported."""
+    if os.name != "nt":
+        return False
+    if _control_sync(action):
+        return True
+    return _send_media_key(action)
+
+
+MEDIA_KEYS = {"toggle": 0xB3, "next": 0xB0, "back": 0xB1}
+
+
+def _send_media_key(action: str) -> bool:
+    """Fallback: press the Windows media key (any player reacts)."""
+    key = MEDIA_KEYS.get(action)
+    if key is None:
+        return False
+    try:
+        user32 = ctypes.windll.user32
+        user32.keybd_event(key, 0, 0, 0)
+        user32.keybd_event(key, 0, 2, 0)
+        return True
+    except OSError:  # pragma: no cover - defensive
+        return False

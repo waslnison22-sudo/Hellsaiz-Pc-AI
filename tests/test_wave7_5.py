@@ -140,14 +140,18 @@ def test_dashboard_hub_structure():
         "Быстрые команды",
         "Система",
         "Последний ответ",
-        "музыка назад",
-        "музыка пауза",
-        "музыка дальше",
+        "control_playback",
         "on_open_chat",
         "set_last_reply",
         "system_snapshot",
     ):
         assert needle in source, needle
+
+
+@requires_dashboard_module
+def test_media_keys_are_not_sent_as_chat_text():
+    # Media buttons must reach the player, not the chat transcript.
+    assert "музыка пауза" not in inspect.getsource(dashboard_module)
 
 
 @requires_dashboard_module

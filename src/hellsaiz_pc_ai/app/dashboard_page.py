@@ -71,6 +71,7 @@ from hellsaiz_pc_ai.app.weather_cache import (
 )
 from hellsaiz_pc_ai.app.ui_fx import reduce_motion as _reduce_motion
 from hellsaiz_pc_ai.app.yandex_music import (
+    control_playback,
     media_session,
     now_playing,
     open_or_focus_player,
@@ -348,11 +349,6 @@ class DashboardPage(QWidget):
         ("Открой блокнот", "открой блокнот", "house"),
         ("Напомни", "напомни в ", "bell"),
     )
-    MEDIA_COMMANDS = {
-        "back": "музыка назад",
-        "toggle": "музыка пауза",
-        "next": "музыка дальше",
-    }
     LAST_REPLY_LIMIT = 220
 
     def __init__(
@@ -810,8 +806,10 @@ class DashboardPage(QWidget):
             cover.set_artwork(b"")
 
     def _refresh_now_playing(self) -> None:
-        """Cheap, non-blocking fallback: the Yandex Music window title."""
+        """Cheap fallback probe; never overrides a live media session."""
         if not hasattr(self, "_media_track"):
+            return
+        if getattr(self, "_media_sticky", False):
             return
         try:
             playing = now_playing()
@@ -900,6 +898,7 @@ class DashboardPage(QWidget):
         """
         if session is not None and self._is_meaningful(session):
             self._media_misses = 0
+            self._media_sticky = True
             for button in (
                 self._media_back_button,
                 self._media_play_button,
@@ -929,6 +928,7 @@ class DashboardPage(QWidget):
             if getattr(session, "status", "") in {"пауза", "играет"}:
                 self._player_state.setText(session.status)
             return
+        self._media_sticky = False
         self._media_track.setText("Яндекс Музыка не запущена")
         self._media_artist.setText("Нажми на обложку — открою плеер")
         self._player_state.setText("")
@@ -952,12 +952,16 @@ class DashboardPage(QWidget):
             self._player_timer.stop()
 
     def _send_media_command(self, action: str) -> None:
-        self._on_send(self.MEDIA_COMMANDS.get(action, self.MEDIA_COMMANDS["toggle"]))
+        """Control the player for real: SMTC first, media key as a fallback."""
+        if not control_playback(action):
+            self._player_state.setText("плеер не отвечает")
 
     def _toggle_media(self) -> None:
         self._media_playing = not self._media_playing
         icon = media_pause_icon() if self._media_playing else media_play_icon()
         self._media_play_button.setIcon(icon)
+        self._send_media_command("toggle")
+        return
         self._media_state.setText(
             "Состояние: играет" if self._media_playing else "Состояние: пауза"
         )
