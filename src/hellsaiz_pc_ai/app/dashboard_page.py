@@ -1,6 +1,7 @@
 from __future__ import annotations
 import logging
 import math
+import re
 
 from datetime import datetime
 from typing import Any, Callable
@@ -784,11 +785,15 @@ class DashboardPage(QWidget):
 
     GENERIC_TITLES = ("яндекс музыка", "собираю музыку", "yandex music", "реклама")
 
+    SERVICE_TITLE_RE = re.compile(r"собира\w*\s+музыку|яндекс\s*музык|yandex\s*music|реклама")
+
     @classmethod
     def _is_meaningful(cls, session: object) -> bool:
-        """Ignore service titles (app name, radio ads) so the track never flickers."""
+        """Ignore service titles (app name, radio promos) so the track never flickers."""
         title = str(getattr(session, "title", "") or "").strip().casefold()
         if not title or title in cls.GENERIC_TITLES:
+            return False
+        if cls.SERVICE_TITLE_RE.search(title):
             return False
         return getattr(session, "has_track", False)
 
