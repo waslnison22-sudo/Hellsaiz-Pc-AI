@@ -260,6 +260,8 @@ class MediaSession:
     album: str
     status: str
     artwork: bytes = b""
+    position_seconds: float = 0.0
+    duration_seconds: float = 0.0
 
     @property
     def has_track(self) -> bool:
@@ -311,6 +313,20 @@ def _session_snapshot() -> MediaSession | None:
             return None
         info = await session.try_get_media_properties_async()
         status = playback_state_name(session.get_playback_info().playback_status)
+        position_seconds = 0.0
+        duration_seconds = 0.0
+        try:
+            timeline = session.get_timeline_properties()
+            position_seconds = float(timeline.position.total_seconds())
+            duration_seconds = float(timeline.end_time.total_seconds())
+            if duration_seconds <= 0:
+                duration_seconds = float(timeline.max_seek_time.total_seconds())
+            if duration_seconds <= 0:
+                duration_seconds = float(
+                    getattr(timeline, "min_seek_time", timeline.position).total_seconds()
+                )
+        except Exception:  # noqa: BLE001 - timeline is optional
+            logging.debug("Timeline read failed", exc_info=True)
         artwork = b""
         thumbnail = getattr(info, "thumbnail", None)
         if thumbnail is not None:
@@ -334,6 +350,8 @@ def _session_snapshot() -> MediaSession | None:
             album=str(info.album_title or ""),
             status=status,
             artwork=artwork,
+            position_seconds=max(0.0, position_seconds),
+            duration_seconds=max(0.0, duration_seconds),
         )
 
     try:

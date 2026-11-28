@@ -1,6 +1,7 @@
 from __future__ import annotations
 import logging
 import math
+import time
 import re
 
 from datetime import datetime
@@ -20,6 +21,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
+    QSizePolicy,
     QFrame,
     QGraphicsOpacityEffect,
     QGridLayout,
@@ -42,6 +44,7 @@ from hellsaiz_pc_ai.tools.public_info import (
 
 from hellsaiz_pc_ai.app.theme import (
     ACCENT_SOLID,
+    GLASS_BORDER,
     DASHBOARD_SURFACE,
     CARD_PADDING,
     DASHBOARD_MARGIN_BOTTOM,
@@ -196,6 +199,34 @@ class MediaPollThread(QThread):
                 break
             self.session_ready.emit(session)
             self.msleep(2500)
+
+
+class MediaProgressBar(QWidget):
+    """Thin rounded progress line for the player card."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("mediaProgress")
+        self.setFixedHeight(6)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self._progress = 0.0
+
+    def set_progress(self, value: float) -> None:
+        self._progress = max(0.0, min(1.0, float(value)))
+        self.update()
+
+    def paintEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setPen(Qt.PenStyle.NoPen)
+        radius = self.height() / 2
+        painter.setBrush(QColor(GLASS_BORDER))
+        painter.drawRoundedRect(QRectF(0, 0, self.width(), self.height()), radius, radius)
+        filled = self.width() * self._progress
+        if filled > 0:
+            painter.setBrush(QColor(ACCENT_SOLID))
+            painter.drawRoundedRect(QRectF(0, 0, filled, self.height()), radius, radius)
+        painter.end()
 
 
 class PulseCover(QWidget):
@@ -637,12 +668,12 @@ class DashboardPage(QWidget):
         media_card.layout().addLayout(title_row)
 
         cover_row = QHBoxLayout()
-        cover_row.setSpacing(14)
+        cover_row.setSpacing(12)
         self._media_cover = PulseCover()
         self._media_cover.clicked.connect(self._open_player)
         cover_row.addWidget(self._media_cover, 0, Qt.AlignmentFlag.AlignVCenter)
         cover_column = QVBoxLayout()
-        cover_column.setSpacing(3)
+        cover_column.setSpacing(2)
         self._media_track = QLabel("Яндекс Музыка не запущена")
         self._media_track.setObjectName("mediaTrack")
         self._media_track.setWordWrap(True)
@@ -656,16 +687,34 @@ class DashboardPage(QWidget):
         media_card.layout().addLayout(cover_row)
         media_card.layout().addStretch(1)
 
+        self._media_progress = MediaProgressBar()
+        media_card.layout().addWidget(self._media_progress)
+
+        time_row = QHBoxLayout()
+        time_row.setSpacing(6)
+        self._media_elapsed = QLabel("0:00")
+        self._media_elapsed.setObjectName("mediaTime")
+        self._media_duration = QLabel("0:00")
+        self._media_duration.setObjectName("mediaTime")
+        time_row.addWidget(self._media_elapsed)
+        time_row.addStretch(1)
+        time_row.addWidget(self._media_duration)
+        media_card.layout().addLayout(time_row)
+
         controls_row = QHBoxLayout()
-        controls_row.setSpacing(10)
+        controls_row.setSpacing(12)
+        controls_row.addStretch(1)
         self._media_back_button = self._icon_button(
             "mediaButton", media_back_icon(), "Предыдущий трек"
         )
         self._media_back_button.clicked.connect(lambda: self._send_media_command("back"))
         controls_row.addWidget(self._media_back_button)
-        self._media_play_button = self._icon_button(
-            "mediaButton", media_play_icon(), "Играть или пауза"
-        )
+        self._media_play_button = QPushButton()
+        self._media_play_button.setObjectName("mediaPlayButton")
+        self._media_play_button.setIcon(media_play_icon())
+        self._media_play_button.setToolTip("Играть или пауза")
+        self._media_play_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._media_play_button.setFixedSize(54, 54)
         self._media_play_button.clicked.connect(self._toggle_media)
         controls_row.addWidget(self._media_play_button)
         self._media_next_button = self._icon_button(
@@ -674,29 +723,71 @@ class DashboardPage(QWidget):
         self._media_next_button.clicked.connect(lambda: self._send_media_command("next"))
         controls_row.addWidget(self._media_next_button)
         controls_row.addStretch(1)
-        for button in (
-            self._media_back_button,
-            self._media_play_button,
-            self._media_next_button,
-        ):
-            button.setFixedSize(46, 46)
+        for button in (self._media_back_button, self._media_next_button):
+            button.setFixedSize(40, 40)
         media_card.layout().addLayout(controls_row)
 
         self._pulse_timer = QTimer(self)
         self._pulse_timer.setInterval(60)
         self._pulse_timer.timeout.connect(self._advance_pulse)
 
+        self._media_position_seconds = 0.0
+        self._media_duration_seconds = 0.0
+        self._media_position_stamp = 0.0
+        self._media_tick = QTimer(self)
+        self._media_tick.setInterval(1000)
+        self._media_tick.timeout.connect(self._advance_media_progress)
+
         self._player_timer = QTimer(self)
         self._player_timer.setInterval(2000)
         self._player_timer.timeout.connect(self._refresh_now_playing)
         logging.info("DashboardPage ctor: media card done.")
+
+    @staticmethod
+    def format_clock(seconds: float) -> str:
+        total = max(0, int(seconds))
+        return f"{total // 60}:{total % 60:02d}"
+
+    def _set_media_timeline(self, position: float, duration: float) -> None:
+        self._media_position_seconds = max(0.0, position)
+        self._media_duration_seconds = max(0.0, duration)
+        self._media_position_stamp = time.monotonic()
+        self._render_media_progress()
+
+    def _render_media_progress(self) -> None:
+        duration = max(0.0, self._media_duration_seconds)
+        position = min(self._media_position_seconds, duration if duration else self._media_position_seconds)
+        self._media_elapsed.setText(self.format_clock(position))
+        self._media_duration.setText(self.format_clock(duration))
+        self._media_progress.set_progress(
+            (position / duration) if duration > 0 else 0.0
+        )
+
+    def _advance_media_progress(self) -> None:
+        if not getattr(self, "_media_playing", False) or self._media_duration_seconds <= 0:
+            return
+        elapsed = time.monotonic() - self._media_position_stamp
+        self._media_position_seconds = min(self._media_duration_seconds, self._media_position_seconds + elapsed)
+        self._media_position_stamp = time.monotonic()
+        self._render_media_progress()
 
     def _advance_pulse(self) -> None:
         cover = getattr(self, "_media_cover", None)
         if cover is not None:
             cover.advance()
 
+    def _sync_media_tick(self, playing: bool) -> None:
+        tick = getattr(self, "_media_tick", None)
+        if tick is None:
+            return
+        if playing and not tick.isActive():
+            self._media_position_stamp = time.monotonic()
+            tick.start()
+        elif not playing and tick.isActive():
+            tick.stop()
+
     def _set_pulse_playing(self, playing: bool) -> None:
+        self._sync_media_tick(playing)
         cover = getattr(self, "_media_cover", None)
         if cover is not None:
             cover.set_playing(playing)
@@ -727,6 +818,10 @@ class DashboardPage(QWidget):
         except Exception:  # noqa: BLE001 - the player probe must never break the page
             logging.debug("Now playing probe failed", exc_info=True)
             playing = None
+        if playing is not None and playing.has_track:
+            lowered = playing.display_line().casefold()
+            if self.SERVICE_TITLE_RE.search(lowered):
+                playing = None
         if playing is None or not playing.has_track:
             self._media_track.setText("Яндекс Музыка не запущена")
             self._media_artist.setText("Нажми «Открыть» — карточка подхватит трек")
@@ -818,6 +913,10 @@ class DashboardPage(QWidget):
             artwork = getattr(session, "artwork", b"")
             if artwork:
                 self._media_cover.set_artwork(artwork)
+            self._set_media_timeline(
+                float(getattr(session, "position_seconds", 0.0) or 0.0),
+                float(getattr(session, "duration_seconds", 0.0) or 0.0),
+            )
             self._media_playing = session.status == "играет"
             self._set_pulse_playing(self._media_playing)
             icon = media_pause_icon() if self._media_playing else media_play_icon()
@@ -834,6 +933,7 @@ class DashboardPage(QWidget):
         self._media_artist.setText("Нажми на обложку — открою плеер")
         self._player_state.setText("")
         self._set_pulse_playing(False)
+        self._set_media_timeline(0.0, 0.0)
         self._media_cover.set_artwork(b"")
         for button in (
             self._media_back_button,

@@ -95,6 +95,7 @@ def test_player_card_shows_a_running_track(monkeypatch):
 
     assert page._media_track.text() == "Radiohead — Creep"
     assert page._media_next_button.isEnabled() is True
+    assert page.format_clock(93) == "1:33"
 
 
 def test_player_executable_is_none_off_windows(monkeypatch):

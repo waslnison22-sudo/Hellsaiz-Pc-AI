@@ -918,6 +918,31 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
     background: transparent;
 }
+/* ---------- Music card: reference layout ---------- */
+QPushButton#mediaPlayButton {
+    background: TEXT_PRIMARY;
+    border: 0;
+    border-radius: 27px;
+}
+QPushButton#mediaPlayButton:hover {
+    background: #FFFFFF;
+}
+QPushButton#mediaPlayButton:pressed {
+    background: ACCENT_SOLID;
+}
+QPushButton#mediaButton {
+    background: rgba(255, 255, 255, 12);
+    border: 1px solid rgba(255, 255, 255, 22);
+    border-radius: 20px;
+}
+QPushButton#mediaButton:hover {
+    background: rgba(255, 255, 255, 26);
+}
+QLabel#mediaTime {
+    color: TEXT_MUTED;
+    font-size: 11px;
+    font-weight: 600;
+}
 QLabel#chatHeaderAvatar {
     background: #E8C29E;
     color: #1A140F;
