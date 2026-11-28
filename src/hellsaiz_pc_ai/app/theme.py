@@ -213,7 +213,7 @@ QLineEdit#weatherCityEdit {{
 QPushButton#mediaButton {{
     background: rgba(255, 255, 255, 12);
     border: 0;
-    border-radius: 18px;
+    border-radius: 21px;
     padding: 0;
     min-height: 0;
 }}
@@ -785,6 +785,28 @@ QPushButton#newMessagesButton {
 }
 QPushButton#newMessagesButton:hover {
     background: #F0D2B4;
+}
+QWidget#chatModeBar {
+    background: transparent;
+}
+QPushButton#modePill {
+    background: rgba(255, 255, 255, 10);
+    border: 1px solid rgba(255, 255, 255, 20);
+    border-radius: 15px;
+    color: TEXT_MUTED;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 0 14px;
+    min-height: 0;
+}
+QPushButton#modePill:hover {
+    border: 1px solid ACCENT_SOLID;
+    color: TEXT_PRIMARY;
+}
+QPushButton#modePill:checked {
+    background: rgba(232, 194, 158, 36);
+    border: 1px solid ACCENT_SOLID;
+    color: TEXT_PRIMARY;
 }
 QPushButton#aiToggle {
     background: STATE_HOVER;

@@ -1,5 +1,6 @@
 from __future__ import annotations
 import logging
+import math
 
 from datetime import datetime
 from typing import Any, Callable
@@ -40,6 +41,7 @@ from hellsaiz_pc_ai.tools.public_info import (
 
 from hellsaiz_pc_ai.app.theme import (
     ACCENT_SOLID,
+    DASHBOARD_SURFACE,
     CARD_PADDING,
     DASHBOARD_MARGIN_BOTTOM,
     DASHBOARD_MARGIN_SIDE,
@@ -193,6 +195,116 @@ class MediaPollThread(QThread):
                 break
             self.session_ready.emit(session)
             self.msleep(2500)
+
+
+class PulseCover(QWidget):
+    """Album art with a soft beat pulse in the cover's dominant colour.
+
+    The halo is painted inside the widget margins, so the card background never
+    changes: only the plate around the artwork pulses.
+    """
+
+    SIZE = 104
+    ART = 76
+
+    clicked = Signal()
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("mediaCoverPulse")
+        self.setFixedSize(self.SIZE, self.SIZE)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip("Открыть Яндекс Музыку")
+        self._art = QPixmap()
+        self._color = QColor(ACCENT_SOLID)
+        self._phase = 0.0
+        self._playing = False
+
+    # -- data ---------------------------------------------------------------
+    def set_artwork(self, artwork: bytes) -> None:
+        pixmap = QPixmap()
+        if not artwork or not pixmap.loadFromData(artwork):
+            self._art = QPixmap()
+            self._color = QColor(ACCENT_SOLID)
+            self.update()
+            return
+        scaled = pixmap.scaled(
+            self.ART,
+            self.ART,
+            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        canvas = QPixmap(self.ART, self.ART)
+        canvas.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(canvas)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        path = QPainterPath()
+        path.addRoundedRect(0, 0, self.ART, self.ART, 18, 18)
+        painter.setClipPath(path)
+        painter.drawPixmap(
+            (self.ART - scaled.width()) // 2,
+            (self.ART - scaled.height()) // 2,
+            scaled,
+        )
+        painter.end()
+        self._art = canvas
+        self._color = self._dominant_colour(pixmap)
+        self.update()
+
+    @staticmethod
+    def _dominant_colour(pixmap: QPixmap) -> QColor:
+        image = pixmap.toImage().scaled(
+            1, 1, Qt.AspectRatioMode.IgnoreAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        return QColor(image.pixel(0, 0))
+
+    def set_playing(self, playing: bool) -> None:
+        self._playing = playing
+        if not playing:
+            self._phase = 0.0
+        self.update()
+
+    def advance(self) -> None:
+        if not self._playing:
+            return
+        self._phase = (self._phase + 0.16) % 6.28318
+        self.update()
+
+    # -- painting -----------------------------------------------------------
+    def paintEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        offset = (self.SIZE - self.ART) // 2
+        if self._playing:
+            pulse = (math.sin(self._phase) + 1.0) / 2.0
+            for index, alpha in ((0, 70), (1, 40), (2, 22)):
+                inset = offset - 6 - index * 5 - pulse * 4
+                halo = QColor(self._color)
+                halo.setAlpha(int(alpha * (0.55 + 0.45 * pulse)))
+                painter.setBrush(halo)
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.drawRoundedRect(
+                    int(inset), int(inset),
+                    int(self.SIZE - inset * 2), int(self.SIZE - inset * 2),
+                    22, 22,
+                )
+        if not self._art.isNull():
+            painter.drawPixmap(offset, offset, self._art)
+        else:
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(DASHBOARD_SURFACE))
+            painter.drawRoundedRect(offset, offset, self.ART, self.ART, 18, 18)
+            icon = media_play_icon().pixmap(30, 30)
+            painter.drawPixmap(
+                offset + (self.ART - 30) // 2, offset + (self.ART - 30) // 2, icon
+            )
+        painter.end()
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
 
 
 class DashboardPage(QWidget):
@@ -523,22 +635,18 @@ class DashboardPage(QWidget):
         title_row.addWidget(self._player_state)
         media_card.layout().addLayout(title_row)
 
-        # Cover plate between the title and the controls, as in the reference.
-        self._media_cover = QLabel()
-        self._media_cover.setObjectName("mediaCover")
-        self._media_cover.setFixedSize(64, 64)
-        self._media_cover.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._media_cover.setPixmap(media_play_icon().pixmap(28, 28))
         cover_row = QHBoxLayout()
-        cover_row.setSpacing(12)
-        cover_row.addWidget(self._media_cover, 0, Qt.AlignmentFlag.AlignTop)
+        cover_row.setSpacing(14)
+        self._media_cover = PulseCover()
+        self._media_cover.clicked.connect(self._open_player)
+        cover_row.addWidget(self._media_cover, 0, Qt.AlignmentFlag.AlignVCenter)
         cover_column = QVBoxLayout()
-        cover_column.setSpacing(2)
+        cover_column.setSpacing(3)
         self._media_track = QLabel("Яндекс Музыка не запущена")
         self._media_track.setObjectName("mediaTrack")
         self._media_track.setWordWrap(True)
         cover_column.addWidget(self._media_track)
-        self._media_artist = QLabel("Нажми «Открыть» — карточка подхватит трек")
+        self._media_artist = QLabel("Нажми на обложку — открою плеер")
         self._media_artist.setObjectName("mediaArtist")
         self._media_artist.setWordWrap(True)
         cover_column.addWidget(self._media_artist)
@@ -548,7 +656,7 @@ class DashboardPage(QWidget):
         media_card.layout().addStretch(1)
 
         controls_row = QHBoxLayout()
-        controls_row.setSpacing(8)
+        controls_row.setSpacing(10)
         self._media_back_button = self._icon_button(
             "mediaButton", media_back_icon(), "Предыдущий трек"
         )
@@ -565,47 +673,49 @@ class DashboardPage(QWidget):
         self._media_next_button.clicked.connect(lambda: self._send_media_command("next"))
         controls_row.addWidget(self._media_next_button)
         controls_row.addStretch(1)
-        self._media_open_button = QPushButton("Открыть")
-        self._media_open_button.setObjectName("secondaryButton")
-        self._media_open_button.setToolTip("Открыть Яндекс Музыку и показать трек")
-        self._media_open_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._media_open_button.clicked.connect(self._open_player)
-        controls_row.addWidget(self._media_open_button)
+        for button in (
+            self._media_back_button,
+            self._media_play_button,
+            self._media_next_button,
+        ):
+            button.setFixedSize(46, 46)
         media_card.layout().addLayout(controls_row)
+
+        self._pulse_timer = QTimer(self)
+        self._pulse_timer.setInterval(60)
+        self._pulse_timer.timeout.connect(self._advance_pulse)
 
         self._player_timer = QTimer(self)
         self._player_timer.setInterval(2000)
         self._player_timer.timeout.connect(self._refresh_now_playing)
         logging.info("DashboardPage ctor: media card done.")
 
+    def _advance_pulse(self) -> None:
+        cover = getattr(self, "_media_cover", None)
+        if cover is not None:
+            cover.advance()
+
+    def _set_pulse_playing(self, playing: bool) -> None:
+        cover = getattr(self, "_media_cover", None)
+        if cover is not None:
+            cover.set_playing(playing)
+        timer = getattr(self, "_pulse_timer", None)
+        if timer is None:
+            return
+        if playing and not timer.isActive():
+            timer.start()
+        elif not playing and timer.isActive():
+            timer.stop()
+
     def _set_cover(self, artwork: bytes, has_track: bool) -> None:
-        """Paint the album art (or the placeholder icon) in the rounded cover."""
-        if not artwork:
-            if not has_track:
-                self._media_cover.setPixmap(media_play_icon().pixmap(28, 28))
+        """Compatibility shim: the pulse plate owns the artwork now."""
+        cover = getattr(self, "_media_cover", None)
+        if cover is None:
             return
-        pixmap = QPixmap()
-        if not pixmap.loadFromData(artwork):
-            return
-        size = self._media_cover.width() or 64
-        scaled = pixmap.scaled(
-            size,
-            size,
-            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-            Qt.TransformationMode.SmoothTransformation,
-        )
-        canvas = QPixmap(size, size)
-        canvas.fill(Qt.GlobalColor.transparent)
-        painter = QPainter(canvas)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        path = QPainterPath()
-        path.addRoundedRect(0, 0, size, size, 16, 16)
-        painter.setClipPath(path)
-        painter.drawPixmap(
-            (size - scaled.width()) // 2, (size - scaled.height()) // 2, scaled
-        )
-        painter.end()
-        self._media_cover.setPixmap(canvas)
+        if artwork:
+            cover.set_artwork(artwork)
+        elif not has_track:
+            cover.set_artwork(b"")
 
     def _refresh_now_playing(self) -> None:
         """Cheap, non-blocking fallback: the Yandex Music window title."""
@@ -621,8 +731,7 @@ class DashboardPage(QWidget):
             self._media_artist.setText("Нажми «Открыть» — карточка подхватит трек")
             self._player_state.setText("")
             self._set_cover(b"", False)
-            self._media_open_button.setEnabled(True)
-            for button in (
+                for button in (
                 self._media_back_button,
                 self._media_play_button,
                 self._media_next_button,
@@ -679,7 +788,7 @@ class DashboardPage(QWidget):
         A single empty probe (pause, app switch, COM hiccup) must not wipe the
         card: the last track stays until several consecutive misses.
         """
-        if session is not None and getattr(session, "has_track", False):
+        if session is not None and self._is_meaningful(session):
             self._media_misses = 0
             for button in (
                 self._media_back_button,
@@ -691,8 +800,11 @@ class DashboardPage(QWidget):
             source = "Яндекс Музыка" if "yandex" in session.app.casefold() else session.app
             self._media_artist.setText(f"{source} · {session.status}")
             self._player_state.setText(session.status)
-            self._set_cover(getattr(session, "artwork", b""), True)
+            artwork = getattr(session, "artwork", b"")
+            if artwork:
+                self._media_cover.set_artwork(artwork)
             self._media_playing = session.status == "играет"
+            self._set_pulse_playing(self._media_playing)
             icon = media_pause_icon() if self._media_playing else media_play_icon()
             self._media_play_button.setIcon(icon)
             return
@@ -704,9 +816,10 @@ class DashboardPage(QWidget):
                 self._player_state.setText(session.status)
             return
         self._media_track.setText("Яндекс Музыка не запущена")
-        self._media_artist.setText("Нажми «Открыть» — карточка подхватит трек")
+        self._media_artist.setText("Нажми на обложку — открою плеер")
         self._player_state.setText("")
-        self._set_cover(b"", False)
+        self._set_pulse_playing(False)
+        self._media_cover.set_artwork(b"")
         for button in (
             self._media_back_button,
             self._media_play_button,
@@ -1078,4 +1191,5 @@ class DashboardPage(QWidget):
         if self._metrics_timer.isActive():
             self._metrics_timer.stop()
         self._stop_player_watch()
+        self._set_pulse_playing(False)
         self._stop_media_thread()

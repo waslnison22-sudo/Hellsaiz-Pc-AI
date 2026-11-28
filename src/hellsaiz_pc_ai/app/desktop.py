@@ -867,7 +867,6 @@ def main() -> int:
             )
 
     ai_button.toggled.connect(on_ai_toggled)
-    header_row.addWidget(ai_button)
 
     clear_button = QPushButton()
     clear_button.setIcon(trash_icon())
@@ -1196,6 +1195,37 @@ def main() -> int:
         quick_commands_row.addWidget(quick_button)
     quick_commands_row.addStretch(1)
     home_layout.addWidget(quick_container)
+
+    mode_bar = QWidget()
+    mode_bar.setObjectName("chatModeBar")
+    mode_layout = QHBoxLayout(mode_bar)
+    mode_layout.setContentsMargins(0, 0, 0, 0)
+    mode_layout.setSpacing(8)
+    mode_layout.addStretch(1)
+
+    def _mode_pill(label: str, tooltip: str) -> QPushButton:
+        pill = QPushButton(label)
+        pill.setObjectName("modePill")
+        pill.setToolTip(tooltip)
+        pill.setCursor(Qt.CursorShape.PointingHandCursor)
+        pill.setCheckable(True)
+        pill.setChecked(True)
+        pill.setFixedHeight(30)
+        return pill
+
+    stt_pill = _mode_pill("STT", "Распознавание речи: настройки в «Настройки» → «Речь»")
+    tts_pill = _mode_pill("TTS", "Озвучка ответов: настройки в «Настройки» → «Речь»")
+
+    def open_speech_settings() -> None:
+        page_stack.setCurrentIndex(5)
+
+    stt_pill.clicked.connect(open_speech_settings)
+    tts_pill.clicked.connect(open_speech_settings)
+    mode_layout.addWidget(ai_button)
+    mode_layout.addWidget(stt_pill)
+    mode_layout.addWidget(tts_pill)
+    mode_layout.addStretch(1)
+    home_layout.addWidget(mode_bar)
 
     def sync_chat_margins() -> None:
         """The chat content spans the column: side margins centre it."""

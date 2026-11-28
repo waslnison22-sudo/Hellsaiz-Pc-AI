@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QEvent, QPoint, Qt
-from PySide6.QtGui import QColor, QPalette
+from PySide6.QtGui import QColor, QPainterPath, QPalette, QRegion
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -22,7 +22,7 @@ class WindowTitleBar(QWidget):
         self._window = window
         self._drag_origin: QPoint | None = None
         self.setObjectName("windowTitleBar")
-        self.setFixedHeight(32)
+        self.setFixedHeight(36)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setAutoFillBackground(True)
         palette = self.palette()
@@ -44,7 +44,7 @@ class WindowTitleBar(QWidget):
                 background: transparent;
                 border: 0;
                 color: #A6A29C;
-                font-size: 15px;
+                font-size: 17px;
                 font-weight: 700;
                 padding: 0;
                 min-height: 0;
@@ -59,7 +59,7 @@ class WindowTitleBar(QWidget):
                 background: transparent;
                 border: 0;
                 color: #A6A29C;
-                font-size: 13px;
+                font-size: 15px;
                 font-weight: 700;
                 padding: 0;
                 min-height: 0;
@@ -100,7 +100,7 @@ class WindowTitleBar(QWidget):
         button.setObjectName(name)
         button.setToolTip(tooltip)
         button.setCursor(Qt.CursorShape.PointingHandCursor)
-        button.setFixedSize(30, 24)
+        button.setFixedSize(40, 30)
         button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         return button
 
@@ -195,11 +195,36 @@ def _install_edges(window: QMainWindow) -> list[_EdgeGrip]:
     return grips
 
 
+class _RoundedMask:
+    """Keeps the frameless window corners rounded like the top bar."""
+
+    RADIUS = 18
+
+    def __init__(self, window: QMainWindow) -> None:
+        self._window = window
+        window.installEventFilter(self)
+        self._apply()
+
+    def _apply(self) -> None:
+        window = self._window
+        if window is None or window.width() <= 0:
+            return
+        path = QPainterPath()
+        path.addRoundedRect(0, 0, window.width(), window.height(), self.RADIUS, self.RADIUS)
+        window.setMask(QRegion(path.toFillPolygon().toPolygon()))
+
+    def eventFilter(self, watched, event):  # noqa: N802 - Qt naming
+        if watched is self._window and event.type() == QEvent.Type.Resize:
+            self._apply()
+        return False
+
+
 def install_frameless(window: QMainWindow) -> WindowTitleBar:
     """Strip the system frame; the returned title bar is placed by the caller."""
     window.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
     title_bar = WindowTitleBar(window)
     _install_edges(window)
+    _RoundedMask(window)
     grip = QSizeGrip(window)
     grip.setObjectName("windowSizeGrip")
     grip.resize(16, 16)
