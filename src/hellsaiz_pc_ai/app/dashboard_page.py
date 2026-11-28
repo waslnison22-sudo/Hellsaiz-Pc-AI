@@ -186,8 +186,8 @@ class MediaPollThread(QThread):
         while not self._stopped:
             try:
                 session = media_session()
-            except Exception as exc:  # noqa: BLE001 - polling must never kill the thread
-                logging.warning("Media poll failed: %s", exc)
+            except Exception:  # noqa: BLE001 - polling must never kill the thread
+                logging.debug("Media poll failed", exc_info=True)
                 session = None
             if self._stopped:
                 break
@@ -655,16 +655,6 @@ class DashboardPage(QWidget):
             "Установи приложение «Яндекс Музыка» — карточка подхватит трек"
         )
 
-    def _poll_media_once(self) -> None:
-        """One main-thread attempt: works even when a worker thread cannot."""
-        try:
-            session = media_session()
-        except Exception as exc:  # noqa: BLE001 - never break the page
-            logging.warning("Media session fallback failed: %s", exc)
-            return
-        if session is not None:
-            self._apply_media_session(session)
-
     def _ensure_media_thread(self) -> None:
         thread = getattr(self, "_media_thread", None)
         if thread is not None and thread.isRunning():
@@ -1068,7 +1058,6 @@ class DashboardPage(QWidget):
             self._metrics_timer.start()
         self._start_player_watch()
         QTimer.singleShot(2500, self._ensure_media_thread)
-        QTimer.singleShot(4000, self._poll_media_once)
 
     def hideEvent(self, event: Any) -> None:  # noqa: N802 (Qt naming)
         super().hideEvent(event)
