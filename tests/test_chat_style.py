@@ -108,3 +108,10 @@ def test_timestamp_is_shown_once_per_minute():
     assert minute_changed(None, "21:03") is True
     assert minute_changed("21:03", "21:03") is False
     assert minute_changed("21:03", "21:04") is True
+
+
+def test_bubbles_have_no_hover_repaint_rule():
+    """Hover rules on bubbles made messages disappear; keep the paint stable."""
+    sheet = build_dark_stylesheet()
+    assert "chatBubbleUser:hover" not in sheet
+    assert "chatBubbleAssistant:hover" not in sheet

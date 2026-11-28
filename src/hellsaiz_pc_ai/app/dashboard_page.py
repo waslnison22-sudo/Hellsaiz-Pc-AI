@@ -418,7 +418,9 @@ class DashboardPage(QWidget):
 
         weather_top_row = QHBoxLayout()
         weather_top_row.setSpacing(12)
-        weather_icon = WeatherIconWidget(size=52)
+        weather_icon = WeatherIconWidget(size=58)
+        # Pin the glyph size: the card layout used to squeeze it to half.
+        weather_icon.setFixedSize(58, 58)
         weather_icon.setObjectName("weatherIcon")
         weather_top_row.addWidget(weather_icon, 0, Qt.AlignmentFlag.AlignVCenter)
         weather_value = QLabel("—")
@@ -672,8 +674,13 @@ class DashboardPage(QWidget):
         self._media_thread = None
 
     def _apply_media_session(self, session: object) -> None:
-        """Update the player card from a session snapshot (no blocking IO)."""
+        """Update the player card from a session snapshot (no blocking IO).
+
+        A single empty probe (pause, app switch, COM hiccup) must not wipe the
+        card: the last track stays until several consecutive misses.
+        """
         if session is not None and getattr(session, "has_track", False):
+            self._media_misses = 0
             for button in (
                 self._media_back_button,
                 self._media_play_button,
@@ -688,6 +695,13 @@ class DashboardPage(QWidget):
             self._media_playing = session.status == "играет"
             icon = media_pause_icon() if self._media_playing else media_play_icon()
             self._media_play_button.setIcon(icon)
+            return
+        misses = getattr(self, "_media_misses", 0) + 1
+        self._media_misses = misses
+        if misses < 8 and getattr(self, "_media_track", None) is not None:
+            # Keep the last known track on screen; only update pause/play state.
+            if getattr(session, "status", "") in {"пауза", "играет"}:
+                self._player_state.setText(session.status)
             return
         self._media_track.setText("Яндекс Музыка не запущена")
         self._media_artist.setText("Нажми «Открыть» — карточка подхватит трек")

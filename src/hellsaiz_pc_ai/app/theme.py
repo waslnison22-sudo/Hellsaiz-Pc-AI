@@ -662,8 +662,9 @@ QLabel#weatherIcon {
 }
 QLabel#weatherCondition {
     color: #F2EFEA;
-    font-size: 15px;
+    font-size: 17px;
     font-weight: 600;
+    padding-bottom: 6px;
 }
 QLabel#weatherForecast {
     color: #A6A29C;
@@ -784,12 +785,6 @@ QPushButton#newMessagesButton {
 }
 QPushButton#newMessagesButton:hover {
     background: #F0D2B4;
-}
-QFrame#chatBubbleAssistant:hover {
-    background: rgba(255, 255, 255, 26);
-}
-QFrame#chatBubbleUser:hover {
-    background: #F2D3B6;
 }
 QPushButton#aiToggle {
     background: STATE_HOVER;
