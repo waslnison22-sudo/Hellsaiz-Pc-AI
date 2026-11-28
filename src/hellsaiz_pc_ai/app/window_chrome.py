@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QPoint, Qt
+from PySide6.QtCore import QEvent, QObject, QPoint, Qt
 from PySide6.QtGui import QColor, QPainterPath, QPalette, QRegion
 from PySide6.QtWidgets import (
     QHBoxLayout,
@@ -195,12 +195,13 @@ def _install_edges(window: QMainWindow) -> list[_EdgeGrip]:
     return grips
 
 
-class _RoundedMask:
+class _RoundedMask(QObject):
     """Keeps the frameless window corners rounded like the top bar."""
 
     RADIUS = 18
 
     def __init__(self, window: QMainWindow) -> None:
+        super().__init__(window)
         self._window = window
         window.installEventFilter(self)
         self._apply()
