@@ -10,7 +10,8 @@ def test_socket_name_is_user_scoped(monkeypatch):
     assert "arseniy" in instance_focus.socket_name()
 
 
-def test_ask_to_raise_is_false_without_a_listener():
+def test_ask_to_raise_is_false_without_a_listener(monkeypatch):
+    monkeypatch.setattr(instance_focus, "socket_name", lambda: "HellsaizPC_AI.test.none")
     assert instance_focus.ask_to_raise(timeout_ms=50) is False
 
 

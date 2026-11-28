@@ -2372,8 +2372,101 @@ def main() -> int:
         except OSError:
             logging.exception("Could not persist the companion setting")
 
+    companion_models_dir = settings.workflows_path.parent / "companion_models"
+    companion_active_path = settings.workflows_path.parent / "companion_active.json"
+
+    def _read_active_model() -> str:
+        try:
+            data = json.loads(companion_active_path.read_text(encoding="utf-8"))
+            return str(data.get("model_id") or "")
+        except (OSError, ValueError):
+            return ""
+
+    def _write_active_model(model_id: str) -> None:
+        try:
+            companion_active_path.write_text(
+                json.dumps({"model_id": model_id}, ensure_ascii=False), encoding="utf-8"
+            )
+        except OSError:
+            logging.warning("Could not persist the active companion model", exc_info=True)
+
+    def _load_companion_model(model_id: str) -> None:
+        from hellsaiz_pc_ai.companion.pngtuber import PngTuberRenderer, list_installed_models
+
+        if not model_id:
+            from hellsaiz_pc_ai.companion.sprite_renderer import PainterSpriteRenderer
+
+            companion_overlay.set_renderer(PainterSpriteRenderer())
+            return
+        for item in list_installed_models(companion_models_dir):
+            if item.get("model_id") == model_id:
+                renderer = PngTuberRenderer()
+                companion_overlay.set_renderer(
+                    renderer, str(item.get("path")), str(item.get("entrypoint") or "idle.png")
+                )
+                return
+
+    companion_model_combo = QComboBox()
+    companion_model_combo.setToolTip("Модель компаньона: PNGTuber-пак из ZIP")
+
+    def refresh_companion_models(selected: str | None = None) -> None:
+        from hellsaiz_pc_ai.companion.pngtuber import list_installed_models
+
+        active = selected if selected is not None else _read_active_model()
+        companion_model_combo.blockSignals(True)
+        companion_model_combo.clear()
+        companion_model_combo.addItem("Встроенная (рисованная)", "")
+        for item in list_installed_models(companion_models_dir):
+            companion_model_combo.addItem(str(item.get("display_name") or item.get("model_id")), item.get("model_id"))
+        index = companion_model_combo.findData(active)
+        companion_model_combo.setCurrentIndex(index if index >= 0 else 0)
+        companion_model_combo.blockSignals(False)
+
+    def switch_companion_model() -> None:
+        model_id = str(companion_model_combo.currentData() or "")
+        _write_active_model(model_id)
+        _load_companion_model(model_id)
+
+    def import_companion_model() -> None:
+        from PySide6.QtWidgets import QFileDialog, QMessageBox
+
+        from hellsaiz_pc_ai.companion.pngtuber import (
+            ModelImportError,
+            import_pngtuber_zip,
+            list_installed_models,
+        )
+
+        picked, _ = QFileDialog.getOpenFileName(
+            window, "Импорт модели компаньона", "", "Модели PNGTuber (*.zip)"
+        )
+        if not picked:
+            return
+        try:
+            folder = import_pngtuber_zip(Path(picked), companion_models_dir)
+        except (ModelImportError, OSError) as exc:
+            QMessageBox.warning(window, "Модель не импортирована", str(exc))
+            return
+        models = list_installed_models(companion_models_dir)
+        model_id = next(
+            (item.get("model_id") for item in models if Path(str(item.get("path"))) == folder),
+            folder.name,
+        )
+        refresh_companion_models(str(model_id))
+        _write_active_model(str(model_id))
+        _load_companion_model(str(model_id))
+        QMessageBox.information(window, "Модель импортирована", f"Активна модель «{folder.name}».")
+
+    import_button = QPushButton("Импорт модели (ZIP)")
+    import_button.setObjectName("secondaryButton")
+    import_button.clicked.connect(import_companion_model)
+    companion_model_combo.currentIndexChanged.connect(lambda _index: switch_companion_model())
+    refresh_companion_models()
+    if _read_active_model():
+        _load_companion_model(_read_active_model())
+
     companion_toggle = QCheckBox("Компаньон на рабочем столе")
     companion_toggle.setChecked(companion_enabled)
+
     companion_toggle.setToolTip(
         "Показывать персонажа поверх окон. Состояние позиции хранится в companion.json."
     )
@@ -2392,6 +2485,8 @@ def main() -> int:
 
     companion_toggle.toggled.connect(on_companion_toggled)
     appearance_tab_layout.addWidget(companion_toggle)
+    appearance_tab_layout.addWidget(companion_model_combo)
+    appearance_tab_layout.addWidget(import_button)
 
     privacy_toggle = QCheckBox("Приватный режим: персонаж не следит взглядом")
     privacy_toggle.setChecked(bool(profile_data.get("companion_privacy", False)))

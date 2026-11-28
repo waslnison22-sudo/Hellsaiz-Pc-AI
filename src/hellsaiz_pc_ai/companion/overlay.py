@@ -70,6 +70,23 @@ class CompanionOverlay(QWidget):
 
     # -- State persistence -----------------------------------------------------
 
+    def set_renderer(self, renderer: object, model_directory: str = "", entrypoint: str = "") -> None:
+        """Swap the sprite renderer live; the tick timer keeps painting."""
+        old = self._renderer
+        try:
+            if model_directory and hasattr(renderer, "load_model"):
+                renderer.load_model(model_directory, entrypoint)
+            self._renderer = renderer
+            if old is not None and old is not renderer and hasattr(old, "close"):
+                old.close()
+            snapshot = self.snapshot()
+            if hasattr(renderer, "apply_snapshot"):
+                renderer.apply_snapshot(snapshot)
+            self.update()
+        except Exception:  # noqa: BLE001 - a broken pack must not kill the overlay
+            logging.exception("Companion renderer swap failed")
+            self._renderer = old
+
     def _place_in_default_corner(self) -> None:
         """Default spot: the bottom-right corner, clear of the interface."""
         from PySide6.QtGui import QGuiApplication
