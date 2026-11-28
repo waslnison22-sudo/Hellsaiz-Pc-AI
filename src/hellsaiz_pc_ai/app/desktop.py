@@ -463,6 +463,11 @@ def main() -> int:
 
     instance_lock = SingleInstanceLock(settings.workflows_path.parent / "assistant.lock")
     if not instance_lock.acquire():
+        from hellsaiz_pc_ai.app.instance_focus import ask_to_raise
+
+        if ask_to_raise():
+            logging.info("Second launch asked the running instance to come forward.")
+            return 0
         QMessageBox.information(
             None,
             "Hellsaiz PC AI",
@@ -4490,6 +4495,17 @@ def main() -> int:
 
     # Restore overdue reminders and startup workflows after the main window enters the event loop.
     window.show()
+
+    from hellsaiz_pc_ai.app.instance_focus import RaiseServer
+
+    raise_server = RaiseServer(
+        lambda: (
+            window.showNormal(),
+            window.raise_(),
+            window.activateWindow(),
+        )
+    )
+    raise_server.start()
     companion_overlay.set_visible(companion_enabled)
     from hellsaiz_pc_ai.companion.contracts import CompanionMode as _CompanionMode
 
